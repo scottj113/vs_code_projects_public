@@ -11,8 +11,6 @@ to install.*
 
 **Every other Markdown viewer renders the file. This one lets you read it.**
 
-- **Odd formatting, and you just need to read it?** Tables, footnotes, definition
-  lists, front matter, code, Mermaid — rendered cleanly, not dumped as raw symbols.
 - **Type too small?** Scale the document 65–260%. The layout doesn't break.
 - **Eyes tired?** Twelve contrast-validated palettes. Bold-all. Dark mode dims images.
 - **Need it as HTML or PDF?** One self-contained file. No toolchain, no upload.
