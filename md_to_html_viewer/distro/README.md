@@ -1,8 +1,80 @@
 # Markdown Viewer
 
-A single HTML file that renders Markdown in your browser. No install, no web server,
-no build step, no toolchain. Download the folder, double-click the HTML file, drop a
-`.md` on it.
+*The lightest genuinely powerful Markdown reader you can run without installing
+anything. One HTML file, ~92 KB.*
+
+**Every other Markdown viewer is built to render the file. This one is built so you
+can read it.**
+
+None of them seem concerned with your eyes — whether the type is a size you can
+comfortably take in, whether the contrast suits the room you're sitting in, whether
+you can shape the page the way *you* want. They render correctly and consider the job
+done.
+
+And you're stuck with whichever one you've got: the preview pane bolted into your
+editor, the renderer on a website, the viewer inside your notes app. Each hands you
+one fixed appearance, a fraction of the capabilities you actually want, and no say in
+either.
+
+## Made for reading
+
+**Text that scales without the page falling apart.** Most viewers give you one size
+and a zoom that enlarges the entire interface — the toolbar grows along with the text,
+the layout reflows, tables break, and you end up with *fewer* words on screen than you
+started with. This scales the **document**, 65% to 260%, and leaves the furniture
+alone. More words, same layout, nothing rearranged.
+
+**Contrast you choose.** Twelve palettes across light and dark, every one
+contrast-validated rather than eyeballed: body text holds 12:1 or better in all
+twelve. **Bold all** thickens the body text for glare and low-contrast screens. Dark
+mode dims images, so a white-background screenshot stops being a flashbulb.
+
+**It remembers.** Size, palette and layout persist between sessions, and the page
+opens already themed instead of flashing white and correcting itself.
+
+## Made for working
+
+**Keep your editor — use this as the preview.** Turn on **Watch** and the viewer
+re-reads the file every time you save. Write wherever you like, on one half of the
+screen, and see the formatting land in a reader set up for your eyes: no preview pane
+fighting you for space, no second rendering engine disagreeing with the first. Or
+leave it off and hit `↻` when you want it. *(Chromium browsers — elsewhere the buttons
+simply aren't there and everything else works.)*
+
+**Read it as a web page, then take it with you.** **Export** writes a standalone HTML
+file — fully styled, opens in any browser, nothing else needed — or `Ctrl+P` gives you
+a clean PDF. Exports keep the text size you chose; printing reverts to 11pt on white
+so it reads properly on paper. Useful when whoever you're sending it to has no
+Markdown viewer at all.
+
+## Nothing to install, nothing to approve
+
+No install. No server. No build step, no toolchain, no `node_modules`. **Nothing in
+the package is executable** — no installer, no script, no launcher — so there is
+nothing for a mail gateway to strip, SmartScreen to warn about, or policy to block,
+and nothing to raise a ticket for. The people who most need a readable Markdown viewer
+are often exactly the people who can't get one approved.
+
+Download the folder, double-click the HTML file, drop a `.md` on it. Bookmark it to
+your toolbar and it behaves like a browser add-on.
+
+## Why one file can do this
+
+It feels like a real application because, in every way that matters, it is one. Your
+browser stopped being a document viewer a long time ago — it's an application platform
+now, with a rendering engine, a fast JavaScript runtime, storage that remembers your
+settings between visits, and, in Chrome and Edge, permission to re-read a file once
+you've pointed it at one. That is everything an app needs, and it is already installed.
+
+Software with this feature set normally arrives as a 150 MB Electron bundle: an
+installer, an auto-updater, and a private copy of Chromium. Nearly all of that weight
+is the engine. You already have the engine — so this is only the part that would have
+been wrapped inside it.
+
+The trade is real but narrow. A page can't reach into your filesystem unprompted, run
+in the background, or add itself to your right-click menu. For a document reader those
+cost nothing: you hand it a file, it shows you the file. That's why the approach fits
+*this* problem and would be the wrong one for, say, a file manager.
 
 ## Use it
 
