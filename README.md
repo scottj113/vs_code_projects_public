@@ -10,6 +10,9 @@ README and license.
 *The lightest, most powerful Markdown reader in the world. One HTML file, ~92 KB, and
 nothing to install.*
 
+*(That claim is measured to the same exacting standard as a foot-long hot dog. Bigger
+than the regular one — that part we'll stand behind.)*
+
 **Every other Markdown viewer is built to render the file. This one is built so you
 can read it.**
 
