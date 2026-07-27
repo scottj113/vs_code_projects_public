@@ -1,0 +1,9 @@
+# Local tooling config -- machine-specific absolute paths.
+.claude/
+
+# Windows / OS cruft
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Per-project ignores live in each project's own .gitignore.

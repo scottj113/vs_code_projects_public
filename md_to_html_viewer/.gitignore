@@ -1,0 +1,3 @@
+# Built by tools/Build-Distro.ps1 from distro/, which is committed. Scoped to
+# this project only -- sibling projects in the monorepo are unaffected.
+md_to_html_viewer.zip

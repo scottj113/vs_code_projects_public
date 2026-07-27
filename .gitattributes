@@ -1,0 +1,10 @@
+# Normalize text to LF in the repository. Working-tree endings stay per-platform.
+* text=auto
+
+# Batch files are parsed line-by-line by cmd.exe and want CRLF on disk.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Vendored third-party dists ship verbatim. Never touch their bytes, so the file
+# stays identical to what upstream published.
+md_to_html_viewer/distro/vendor/** -text
