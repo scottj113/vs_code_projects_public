@@ -37,12 +37,22 @@ your notes app, each with one fixed appearance and no say in it.
 - **Keep your editor — use this as the preview.** Turn on **Watch** and the viewer
   re-reads the file every time you save. No preview pane fighting you for space, no
   second rendering engine disagreeing with the first. *(Chromium browsers.)*
-- **Read it as a web page, then take it with you.** **Export** writes a standalone
-  HTML file — fully styled, opens anywhere, nothing else needed — or `Ctrl+P` for a
-  clean PDF. Useful when whoever you're sending it to has no Markdown viewer at all.
 - **Renders properly** — GitHub-Flavored Markdown with footnotes, definition lists and
   front matter; Mermaid diagrams offline; syntax highlighting across ten language
   families; a contents sidebar with scroll-spy.
+
+**Markdown in, HTML out**
+
+Reading is half of it. **Export** writes a single self-contained `.html` file with
+every style inlined — your palette, your text size — so it opens looking exactly like
+it did on screen, in any browser, with nothing to fetch. Mermaid diagrams travel as
+already-rendered SVG. There are **no `<script>` tags in the output at all**, so it can
+be emailed, dropped in a wiki, or opened on a locked-down machine and still render the
+same. `Ctrl+P` gives you a clean PDF instead, reverting to 11pt on white for paper.
+
+Converting Markdown to HTML normally means installing a toolchain or pasting your
+document into somebody's website — a non-starter the moment the content is
+confidential. Nothing here leaves the browser.
 
 **Nothing to install, nothing to approve**
 

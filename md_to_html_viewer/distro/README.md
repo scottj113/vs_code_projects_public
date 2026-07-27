@@ -41,11 +41,29 @@ fighting you for space, no second rendering engine disagreeing with the first. O
 leave it off and hit `↻` when you want it. *(Chromium browsers — elsewhere the buttons
 simply aren't there and everything else works.)*
 
-**Read it as a web page, then take it with you.** **Export** writes a standalone HTML
-file — fully styled, opens in any browser, nothing else needed — or `Ctrl+P` gives you
-a clean PDF. Exports keep the text size you chose; printing reverts to 11pt on white
-so it reads properly on paper. Useful when whoever you're sending it to has no
-Markdown viewer at all.
+## Markdown in, HTML out
+
+Reading is half of it. The other half is turning the document into something you can
+send to anyone.
+
+**Export** writes a single self-contained `.html` file. Every style is inlined — the
+palette you picked, your text size, bold-all, image dimming — so it opens looking
+exactly like what was on your screen, in any browser, with no stylesheet, no font and
+no script to fetch. Mermaid diagrams travel as already-rendered SVG, so they appear
+for someone who has never heard of Mermaid. The copy buttons are stripped.
+
+**There are no `<script>` tags in the output at all.** That matters more than it
+sounds: the result can be emailed, dropped into a wiki or SharePoint, or opened on a
+machine with scripting locked down, and it still renders exactly the same.
+
+`Ctrl+P` gives you a PDF instead. Printing reverts to 11pt on white whatever theme you
+were reading in, so the page reads properly on paper rather than emerging as a dark
+rectangle.
+
+And all of it happens on your machine. Converting Markdown to HTML normally means
+installing a toolchain or pasting your document into somebody's website — which stops
+being an option the moment the content is confidential. Nothing here leaves the
+browser.
 
 ## Nothing to install, nothing to approve
 
