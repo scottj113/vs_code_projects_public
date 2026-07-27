@@ -1,7 +1,6 @@
 # vs_code_projects_public
 
-Public projects, one folder each. Each is self-contained and carries its own
-README and license.
+Public projects, one folder each. Each carries its own README and license.
 
 ---
 
@@ -10,71 +9,15 @@ README and license.
 *The most powerful light Markdown viewer in the world. One HTML file, ~92 KB, nothing
 to install.*
 
-**Every other Markdown viewer is built to render the file. This one is built so you
-can read it.**
+**Every other Markdown viewer renders the file. This one lets you read it.**
 
-None of them seem concerned with your eyes — whether the type is a size you can
-comfortably take in, whether the contrast suits the room you're in, whether you can
-shape the page the way *you* want. And you're stuck with whichever one you've got: the
-preview pane bolted into your editor, the renderer on a website, the viewer inside
-your notes app, each with one fixed appearance and no say in it.
+- **Type too small?** Scale the document 65–260%. The layout doesn't break.
+- **Eyes tired?** Twelve contrast-validated palettes. Bold-all. Dark mode dims images.
+- **Need it as HTML or PDF?** One self-contained file. No toolchain, no upload.
+- **Stuck with your editor's preview?** Keep the editor. **Watch** follows every save.
+- **Can't install anything?** Nothing here is executable. No ticket required.
 
-**Made for reading**
+Double-click it. Drop a `.md` on it. Bookmark it.
 
-- **Text that scales without the page falling apart.** Most viewers offer one size and
-  a zoom that enlarges the whole interface — the toolbar grows with the text, the
-  layout reflows, tables break, and you end up with *fewer* words on screen. This
-  scales the **document**, 65% to 260%, and leaves the furniture alone.
-- **Contrast you choose.** Twelve palettes across light and dark, every one
-  contrast-validated rather than eyeballed: body text holds 12:1 or better in all
-  twelve. **Bold all** for glare and low-contrast screens; dark mode dims images so
-  screenshots stop glaring.
-- **It remembers.** Size, palette and layout persist between sessions, and the page
-  opens already themed instead of flashing white first.
-
-**Made for working**
-
-- **Keep your editor — use this as the preview.** Turn on **Watch** and the viewer
-  re-reads the file every time you save. No preview pane fighting you for space, no
-  second rendering engine disagreeing with the first. *(Chromium browsers.)*
-- **Renders properly** — GitHub-Flavored Markdown with footnotes, definition lists and
-  front matter; Mermaid diagrams offline; syntax highlighting across ten language
-  families; a contents sidebar with scroll-spy.
-
-**Markdown in, HTML out**
-
-Reading is half of it. **Export** writes a single self-contained `.html` file with
-every style inlined — your palette, your text size — so it opens looking exactly like
-it did on screen, in any browser, with nothing to fetch. Mermaid diagrams travel as
-already-rendered SVG. There are **no `<script>` tags in the output at all**, so it can
-be emailed, dropped in a wiki, or opened on a locked-down machine and still render the
-same. `Ctrl+P` gives you a clean PDF instead, reverting to 11pt on white for paper.
-
-Converting Markdown to HTML normally means installing a toolchain or pasting your
-document into somebody's website — a non-starter the moment the content is
-confidential. Nothing here leaves the browser.
-
-**Nothing to install, nothing to approve**
-
-No install, no server, no build step, no `node_modules`. **Nothing in the package is
-executable** — no installer, no script, no launcher — so there's nothing for a mail
-gateway to strip, SmartScreen to warn about, or policy to block, and nothing to raise
-a ticket for. The people who most need a readable Markdown viewer are often exactly
-the people who can't get one approved.
-
-Raw HTML is escaped by default; opting in still filters everything through a tag and
-attribute allow-list.
-
-**Why one file can do this**
-
-It feels like a real application because in every way that matters it is one. Your
-browser stopped being a document viewer long ago — it's an application platform with a
-rendering engine, a fast JavaScript runtime, storage that remembers your settings, and
-permission to re-read a file you've pointed it at. Software like this normally ships as
-a 150 MB Electron bundle, nearly all of which is a private copy of Chromium. You
-already have Chromium. This is only the part that would have been wrapped inside it.
-
-Double-click it, drop a `.md` on it, bookmark it to your toolbar.
-
-[Full documentation →](md_to_html_viewer/distro/README.md) ·
-[Download the package](md_to_html_viewer/md_to_html_viewer.zip)
+[Full docs →](md_to_html_viewer/distro/README.md) ·
+[Download →](md_to_html_viewer/md_to_html_viewer.zip)
