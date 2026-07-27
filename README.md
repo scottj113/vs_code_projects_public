@@ -7,8 +7,8 @@ README and license.
 
 ## [md_to_html_viewer](md_to_html_viewer/)
 
-*The lightest, most powerful Markdown reader in the world. One HTML file, ~92 KB, and
-nothing to install.*
+*The most powerful light Markdown viewer in the world. One HTML file, ~92 KB, nothing
+to install.*
 
 **Every other Markdown viewer is built to render the file. This one is built so you
 can read it.**
