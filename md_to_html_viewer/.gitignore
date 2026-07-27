@@ -1,3 +1,20 @@
-# Built by tools/Build-Distro.ps1 from distro/, which is committed. Scoped to
-# this project only -- sibling projects in the monorepo are unaffected.
-# md_to_html_viewer.zip
+# Scoped to this project only -- sibling projects in the monorepo are unaffected.
+
+# The zip built by tools/Build-Distro.ps1 IS published, from this folder, so it
+# is deliberately not ignored here.
+#
+# It must never sit in distro/, for two reasons:
+#
+#   1. Build-Distro.ps1 verifies the package against a strict allowlist of the
+#      four files that ship. Anything else there is reported as "unexpected
+#      file" and the build exits non-zero -- for every fresh clone, not just on
+#      the machine that put it there.
+#   2. distro/ is the input the zip is built FROM, so a zip parked there is
+#      packed into the next one, nesting a copy of itself and adding a megabyte
+#      each time.
+#
+# This rule cannot live in a distro/.gitignore: that file would itself trip the
+# allowlist in reason 1 and then ship inside the package. Hence the scoped path.
+distro/*.zip
+
+summary.md
