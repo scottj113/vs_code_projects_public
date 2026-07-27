@@ -12,8 +12,8 @@ Everything from the 2026-07-26 list is done:
 - ~~Auto / system theme~~ — added back as a **Match system** checkbox.
 - ~~`blue-3` near-black~~ — the whole blue ramp was re-spaced to mirror slate
   (L\* 19.5 → 14.0 → 8.9 against slate's 20.6 → 15.0 → 9.7).
-- ~~No subfolder notes file~~ — written; it now carries the constraints and
-  gotchas that used to live in this file.
+- ~~No subfolder notes file~~ — written, and kept local rather than committed;
+  it now carries the constraints and gotchas that used to live in this file.
 
 ---
 
