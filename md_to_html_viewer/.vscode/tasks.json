@@ -1,0 +1,48 @@
+{
+  // Opens the file in the active editor tab in md_to_html_viewer.
+  //
+  // Bound in the user keybindings.json to the chord Ctrl+M then Down:
+  //   { "key": "ctrl+m down", "command": "workbench.action.tasks.runTask",
+  //     "args": "Open in MD Viewer" }
+  // A chord because only Ctrl/Shift/Alt can combine with a key in one press,
+  // so "m" and "down" cannot both be part of a single stroke.
+  //
+  // The viewer is located by probing, not by a fixed relative path, because
+  // either folder is a reasonable thing to open: the project itself, or the
+  // monorepo root with the project as a child. A hardcoded path silently
+  // resolves to a doubled directory in one of those two cases and the task
+  // just does nothing.
+  //
+  // The PowerShell is inline rather than in a .cmd or .ps1 file on purpose.
+  // Locked-down environments block downloaded scripts once Mark-of-the-Web is
+  // on them, and email gateways strip .cmd outright -- so the distributed
+  // package contains nothing executable at all. A command VS Code types into
+  // its own terminal has no file and no MOTW. tools/open-md.cmd still exists
+  // for anyone unrestricted, and documents the same sidecar format.
+  //
+  // "process" rather than "shell": args are passed straight through without a
+  // second round of shell quoting, which a script this long does not survive.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Open in MD Viewer",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command",
+        "$src='${file}'; $ws='${workspaceFolder}'; $c1=Join-Path $ws 'distro/md_to_html_viewer.html'; $c2=Join-Path $ws 'md_to_html_viewer/distro/md_to_html_viewer.html'; $viewer=@($c1,$c2)|Where-Object{Test-Path $_}|Select-Object -First 1; if(-not $viewer){Write-Error 'Open in MD Viewer: no distro/md_to_html_viewer.html under the open folder.'; exit 1}; $vendor=Join-Path (Split-Path $viewer -Parent) 'vendor'; $stage=Join-Path $env:TEMP 'md_to_html_viewer'; $null=New-Item -ItemType Directory -Force $stage; $dest=Join-Path $stage 'view.html'; if(-not(Test-Path $dest) -or (Get-Item $viewer).LastWriteTimeUtc -gt (Get-Item $dest).LastWriteTimeUtc){Copy-Item $viewer $dest -Force}; $vd=Join-Path $stage 'vendor'; $null=New-Item -ItemType Directory -Force $vd; foreach($f in Get-ChildItem $vendor -File){$t=Join-Path $vd $f.Name; if(-not(Test-Path $t) -or $f.LastWriteTimeUtc -gt (Get-Item $t).LastWriteTimeUtc){Copy-Item $f.FullName $t -Force}}; $utf8=New-Object Text.UTF8Encoding($false); $text=[IO.File]::ReadAllText($src,$utf8); $json=ConvertTo-Json -InputObject @{name=(Split-Path $src -Leaf);path=$src;text=$text} -Compress -Depth 3; [IO.File]::WriteAllText((Join-Path $stage 'md-bootstrap.js'),('window.__MD_BOOTSTRAP__='+$json+';'),$utf8); Start-Process $dest"
+      ],
+      "presentation": {
+        // "silent" keeps the panel shut on success but still surfaces a
+        // failure, which "never" would hide.
+        "reveal": "silent",
+        "panel": "dedicated",
+        "clear": true,
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
+    }
+  ]
+}
