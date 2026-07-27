@@ -17,8 +17,8 @@
   // Locked-down environments block downloaded scripts once Mark-of-the-Web is
   // on them, and email gateways strip .cmd outright -- so the distributed
   // package contains nothing executable at all. A command VS Code types into
-  // its own terminal has no file and no MOTW. tools/open-md.cmd still exists
-  // for anyone unrestricted, and documents the same sidecar format.
+  // its own terminal has no file and no MOTW. This task is now the only
+  // producer of the sidecar format the viewer reads on boot.
   //
   // "process" rather than "shell": args are passed straight through without a
   // second round of shell quoting, which a script this long does not survive.

@@ -876,7 +876,7 @@ body.dragging #drop { display: flex; }
             <li><b>Drag &amp; drop</b> &mdash; drop the <code>.md</code> plus any local images together and the images resolve.</li>
             <li><b>Paste</b> &mdash; <kbd>Ctrl</kbd>+<kbd>V</kbd> markdown text straight onto the page.</li>
             <li><b>Open</b> &mdash; <kbd>Ctrl</kbd>+<kbd>O</kbd>. In Chrome/Edge this also unlocks <b>Reload</b> and <b>Watch</b>.</li>
-            <li><b>Right-click an .md in Explorer</b> &mdash; use the bundled <code>open-md.cmd</code> as the "open with" target.</li>
+            <li><b>From VS Code</b> &mdash; the <b>Open in MD Viewer</b> task in the project repo (<kbd>Ctrl</kbd>+<kbd>M</kbd> then <kbd>&darr;</kbd>). The only route that can supply the file's full path.</li>
           </ul>
         </div>
       </div>
@@ -889,7 +889,7 @@ body.dragging #drop { display: flex; }
 <div id="toast"></div>
 <input type="file" id="file-input" accept=".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain" multiple>
 
-<!-- Optional sidecar written by open-md.cmd; absent in normal use. -->
+<!-- Optional sidecar written by the VS Code task; absent in normal use. -->
 <script src="md-bootstrap.js" onerror="window.__MD_BOOTSTRAP_MISSING__=1"></script>
 
 <script>
@@ -1549,7 +1549,7 @@ function sanitize(root) {
 
 const state = {
   name: "",
-  path: "",           // full source path; only open-md.cmd can supply it
+  path: "",           // full source path; only the VS Code task can supply it
   text: "",
   handle: null,      // FileSystemFileHandle when opened via the File System Access API
   dirAnchor: null,   // last handle this session, kept only to seed the picker's startIn
@@ -1701,7 +1701,7 @@ function setAppearance(patch) {
 
 /**
  * Fills the source-file panel. The full path is only ever known when the
- * document arrived through open-md.cmd, which passes it in the sidecar --
+ * document arrived through the VS Code task, which passes it in the sidecar --
  * browsers withhold it from both dropped files and the file picker, so for
  * every other route the best available answer is the bare filename.
  */
@@ -1714,7 +1714,7 @@ function updatePathPanel() {
     ? ""
     : state.name
       ? "Filename only — browsers don't reveal full paths to a web page. " +
-        "Open via open-md.cmd to get the path."
+        "Open from VS Code to get the path."
       : "Pasted text has no source file.";
   $("#btn-copy-path").disabled = !field.value;
   els.name.disabled = !state.text;
@@ -2346,10 +2346,10 @@ $("#chk-raw").checked = state.rawHtml;
 updateSync();
 
 (function boot() {
-  // 1. Sidecar written by open-md.cmd.
+  // 1. Sidecar written by the VS Code task.
   const bs = window.__MD_BOOTSTRAP__;
   if (bs && typeof bs.text === "string") {
-    // The only route that knows the source path: open-md.cmd has it and
+    // The only route that knows the source path: the task has it and
     // passes it through, where drop and picker cannot.
     loadText(bs.text, bs.name || "", bs.path || "");
     return;

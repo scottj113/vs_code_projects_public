@@ -65,7 +65,7 @@ foreach ($r in ($rel | Sort-Object)) {
 $html = [IO.File]::ReadAllText((Join-Path $distro 'md_to_html_viewer.html'))
 $markup = [regex]::Replace($html, '(?s)(<script\b[^>]*>).*?(</script>)', '$1$2')
 
-# Written by open-md.cmd or the VS Code task at run time, into a staging copy.
+# Written by the VS Code task at run time, into a staging copy.
 # Its absence here is intentional -- the tag carries an onerror guard.
 $optional = @('md-bootstrap.js')
 

@@ -4,7 +4,7 @@
 #
 # Runs three passes in headless Edge: the main suite (parsing, sanitizing,
 # palettes, controls, chrome), the drag & drop handle path, and the sidecar
-# bootstrap used by open-md.cmd. Exits non-zero if anything fails.
+# bootstrap used by the VS Code task. Exits non-zero if anything fails.
 #
 # PowerShell + Edge only. No node, no npm.
 
@@ -385,7 +385,7 @@ $dropHarness = $preamble + @'
 '@
 
 # ---------------------------------------------------------------- pass 3
-# The sidecar path open-md.cmd uses, with characters that would break a URL
+# The sidecar path the VS Code task uses, with characters that would break a URL
 # payload and a body far past any URL length limit.
 $sidecarHarness = $preamble + @'
 (async () => {
