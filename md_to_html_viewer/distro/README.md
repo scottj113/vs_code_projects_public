@@ -1,7 +1,7 @@
 # Markdown Viewer
 
-*The lightest genuinely powerful Markdown reader you can run without installing
-anything. One HTML file, ~92 KB.*
+*The lightest, most powerful Markdown reader in the world. One HTML file, ~92 KB, and
+nothing to install.*
 
 **Every other Markdown viewer is built to render the file. This one is built so you
 can read it.**
