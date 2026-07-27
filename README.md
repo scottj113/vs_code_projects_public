@@ -4,7 +4,7 @@ Public projects, one folder each. Each carries its own README and license.
 
 ---
 
-## [Markdown Viewer](md_to_html_viewer/)
+## [Eye Love Markdown Viewer](md_to_html_viewer/)
 
 *The most powerful light Markdown viewer in the world. One HTML file, ~92 KB, nothing
 to install.*

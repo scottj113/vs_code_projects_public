@@ -1,4 +1,4 @@
-# Markdown Viewer
+# Eye Love Markdown Viewer
 
 *The most powerful light Markdown viewer in the world. One HTML file, ~92 KB, nothing
 to install.*
