@@ -13,6 +13,8 @@ to install.*
 
 - **Type too small?** Scale the document 65–260%. The layout doesn't break.
 - **Eyes tired?** Twelve contrast-validated palettes. Bold-all. Dark mode dims images.
+- **Diagrams that only render on GitHub?** Mermaid works here too — offline, no
+  server, no plugin. They survive into the export as SVG.
 - **Need it as HTML or PDF?** One self-contained file. No toolchain, no upload.
 - **Stuck with your editor's preview?** Keep the editor. **Watch** follows every save.
 - **Can't install anything?** Nothing here is executable. No ticket required.
