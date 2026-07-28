@@ -385,6 +385,105 @@ $dropHarness = $preamble + @'
 '@
 
 # ---------------------------------------------------------------- pass 3
+# Reading a set of documents rather than one file: a multi-file drop, and a
+# dropped folder. The directory handle is faked to the shape Chromium returns --
+# an async values() yielding nested handles -- because a headless run cannot
+# perform a real OS folder drag.
+$libraryHarness = $preamble + @'
+(async () => {
+  const P = document.getElementById("probe");
+  const el = (id) => document.getElementById(id);
+  let pass = 0, fail = 0;
+  const check = (n, cond, note) => {
+    if (cond) { pass++; } else { fail++; P.textContent += "  FAIL  " + n + (note ? "  -- " + note : "") + "\n"; }
+  };
+  const fire = (files, items) => {
+    const ev = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, "dataTransfer", { value: { files: files, items: items, types: ["Files"] } });
+    window.dispatchEvent(ev);
+  };
+  await waitFor(() => document.getElementById("btn-display"));
+
+  check("document list hidden with nothing loaded", el("docs").hidden);
+
+  // --- multi-file drop -------------------------------------------------
+  // Two headings apiece: buildToc reports "No headings" for anything less, so a
+  // single-heading fixture could not tell a rebuilt sidebar from an empty one.
+  const md = (name, body) =>
+    new File(["# " + body + "\n\n## " + body + " Detail\n\ntext of " + body], name,
+             { type: "text/markdown" });
+  fire([md("zeta.md", "Zeta"), md("readme.md", "Readme"), md("alpha.md", "Alpha")],
+       [{ kind: "file", getAsFileSystemHandle: async () => { throw new Error("none"); } }]);
+
+  check("multi-drop shows the document list",
+    await waitFor(() => !el("docs").hidden));
+  check("counts every document", el("docs-count").textContent === "(3)",
+    el("docs-count").textContent);
+  check("README sorts first",
+    el("docs-list").querySelector("a").textContent.indexOf("readme.md") === 0,
+    el("docs-list").querySelector("a").textContent);
+  check("opens the first document",
+    await waitFor(() => el("doc").textContent.includes("Readme")));
+  check("first entry marked active",
+    el("docs-list").querySelectorAll("a")[0].classList.contains("active"));
+
+  // --- switching -------------------------------------------------------
+  const links = el("docs-list").querySelectorAll("a");
+  links[links.length - 1].click();
+  check("clicking a document switches to it",
+    await waitFor(() => el("doc").textContent.includes("Zeta")));
+  check("active marker follows the selection",
+    await waitFor(() => el("docs-list").querySelectorAll("a")[links.length - 1].classList.contains("active")));
+  check("headings rebuild for the new document",
+    el("toc-list").textContent.includes("Zeta"), el("toc-list").textContent.slice(0, 40));
+
+  // --- dropped folder --------------------------------------------------
+  const fileEntry = (name, body) => ({
+    kind: "file", name: name,
+    getFile: async () => ({ lastModified: 0, name: name, text: async () => "# " + body }),
+  });
+  const dirEntry = (name, kids) => ({
+    kind: "directory", name: name,
+    values: async function* () { for (const k of kids) yield k; },
+  });
+  const tree = dirEntry("project", [
+    fileEntry("readme.md", "Root Readme"),
+    fileEntry("notes.txt", "Notes"),
+    fileEntry("logo.png", "NotMarkdown"),
+    dirEntry("docs", [fileEntry("guide.md", "Guide"), fileEntry("api.md", "Api")]),
+    dirEntry("node_modules", [fileEntry("junk.md", "Junk")]),
+    dirEntry(".git", [fileEntry("hidden.md", "Hidden")]),
+  ]);
+  fire([], [{ kind: "file", getAsFileSystemHandle: async () => tree }]);
+
+  check("folder drop loads its documents",
+    await waitFor(() => el("doc").textContent.includes("Root Readme")));
+  // readme.md, notes.txt, docs/guide.md, docs/api.md -- .txt counts, images do not.
+  check("walks nested folders", el("docs-count").textContent === "(4)",
+    el("docs-count").textContent);
+  const names = Array.from(el("docs-list").querySelectorAll("a")).map(a => a.textContent);
+  check("skips node_modules", !names.some(n => n.includes("junk")), names.join("|"));
+  check("skips dot directories", !names.some(n => n.includes("hidden")), names.join("|"));
+  check("ignores non-markdown files", !names.some(n => n.includes("logo")), names.join("|"));
+  check("shows the folder a document came from",
+    names.some(n => n.includes("docs")), names.join("|"));
+  check("root documents sort above nested ones",
+    names[0].indexOf("readme.md") === 0, names[0]);
+
+  // --- a single document replaces the set ------------------------------
+  fire([md("solo.md", "Solo")],
+       [{ kind: "file", getAsFileSystemHandle: async () => { throw new Error("none"); } }]);
+  check("single document renders",
+    await waitFor(() => el("doc").textContent.includes("Solo")));
+  check("single document clears the list",
+    await waitFor(() => el("docs").hidden));
+
+  P.textContent += "\n" + pass + " passed, " + fail + " failed\n";
+})();
+</script>
+'@
+
+# ---------------------------------------------------------------- pass 4
 # The sidecar path the VS Code task uses, with characters that would break a URL
 # payload and a body far past any URL length limit.
 $sidecarHarness = $preamble + @'
@@ -430,6 +529,7 @@ function Show-Pass([string] $label, [string] $output) {
 
 Show-Pass 'main suite' (& $run -Harness $mainHarness -Markdown $torture -Name 'suite' -BudgetMs 45000)
 Show-Pass 'drag and drop' (& $run -Harness $dropHarness -Name 'drop' -BudgetMs 40000)
+Show-Pass 'document set'  (& $run -Harness $libraryHarness -Name 'library' -BudgetMs 40000)
 
 # Build the sidecar fixture, then stage md-bootstrap.js beside the page.
 $lines = @('# Sidecar Test', '',

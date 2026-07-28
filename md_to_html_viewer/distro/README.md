@@ -102,8 +102,35 @@ cost nothing: you hand it a file, it shows you the file. That's why the approach
 3. Get a document in by any of:
    - **Drag & drop** a `.md` anywhere on the window. Drop the Markdown *and* its
      images together and relative image links resolve.
+   - **Drop a folder** — every `.md` inside becomes a list in the sidebar. See
+     [Reading a whole project](#reading-a-whole-project) below.
    - **Open** button (`Ctrl+O`).
    - **Paste** Markdown text straight onto the page (`Ctrl+V`).
+
+## Reading a whole project
+
+A project's Markdown is rarely one file. There's a README, a CHANGELOG, notes,
+half-finished specs, and whatever the AI wrote last week — and reading them means
+opening each one and losing your place in between.
+
+**Drop the folder on the window.** Every `.md` inside it is collected into a
+**Documents** list at the top of the sidebar, sorted with root files first and each
+`README` at the head of its folder. Click any of them to read it; the contents
+sidebar rebuilds for whatever you're on. Nested folders are shown under the filename,
+so two files both called `README.md` stay tellable apart.
+
+Nothing is written anywhere. There's no manifest to maintain, no config file, no
+index to regenerate when you add a document. The set lives for the life of the tab —
+close it and nothing is left behind.
+
+`node_modules`, `dist`, `build`, `target`, `vendor` and dotted directories like
+`.git` are skipped; walking a project root without that takes long enough to look
+like a hang. The walk stops at 8 levels deep or 500 documents, whichever comes first.
+
+> Dropping a folder needs the File System Access API, so it's Chromium-only
+> (Chrome, Edge) — as is the **Open a folder…** item in the **⋮** menu. Everywhere
+> else, selecting several `.md` files and dropping them together builds the same
+> list.
 
 
 ### From VS Code
@@ -180,6 +207,8 @@ restriction, not a bug — see below.
 - **Syntax highlighting** for JS/TS, Python, HTML/XML, CSS, JSON, Bash, SQL, YAML,
   TOML/INI, and diffs.
 - **Contents sidebar** with scroll-spy, and per-block copy buttons.
+- **Document set** — drop a folder (or several `.md` files) and the sidebar lists
+  every document, click to move between them. No manifest, nothing written to disk.
 - **Source path** — click the filename in the toolbar for a selectable field and a
   **Copy** button. Opening via the VS Code task shows the full
   path; drag & drop, the file picker and paste can only show the filename, because

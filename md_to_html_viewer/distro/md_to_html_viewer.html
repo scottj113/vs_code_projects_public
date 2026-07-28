@@ -456,6 +456,17 @@ body.no-toc #toc { display: none; }
 #toc a.lv5, #toc a.lv6 { padding-left: 56px; font-size: 12.5px; }
 #toc .empty { color: var(--fg-faint); font-size: 12.5px; padding-left: 9px; }
 
+/* ---------- document list (a dropped folder or multi-file drop) ---------- */
+#docs { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+#docs-count { font-weight: 400; letter-spacing: 0; text-transform: none; opacity: .8; }
+#docs-list a {
+  /* The heading list indents by level; documents are a flat set, and the
+     folder prefix is what disambiguates two files both called README.md. */
+  padding-left: 9px; white-space: normal; overflow-wrap: anywhere;
+}
+#docs-list a .doc-dir { display: block; font-size: 11px; color: var(--fg-faint); }
+#docs-list a.active .doc-dir { color: var(--accent); opacity: .85; }
+
 #scroller { flex: 1; overflow: auto; scroll-behavior: smooth; }
 #page { max-width: 860px; margin: 0 auto; padding: 34px 40px 55vh; }
 
@@ -857,6 +868,7 @@ body.dragging #drop { display: flex; }
     <div class="pop pop-menu" id="pop-more" hidden>
       <label class="pop-check"><input type="checkbox" id="chk-raw"> Allow raw HTML <span class="hint">sanitized</span></label>
       <hr>
+      <button type="button" class="mi" id="mi-open-folder" hidden>Open a folder&hellip;</button>
       <button type="button" class="mi" id="mi-export" disabled>Export standalone HTML&hellip;</button>
       <button type="button" class="mi" id="mi-print" disabled>Print / Save as PDF <kbd>Ctrl+P</kbd></button>
     </div>
@@ -864,7 +876,13 @@ body.dragging #drop { display: flex; }
 </div>
 
 <div id="shell">
-  <nav id="toc"><p class="toc-head">Contents</p><div id="toc-list"></div></nav>
+  <nav id="toc">
+    <div id="docs" hidden>
+      <p class="toc-head">Documents <span id="docs-count"></span></p>
+      <div id="docs-list"></div>
+    </div>
+    <p class="toc-head">Contents</p><div id="toc-list"></div>
+  </nav>
   <div id="scroller">
     <div id="page">
       <div id="empty">
@@ -872,8 +890,10 @@ body.dragging #drop { display: flex; }
           <h1>Eye Love Markdown Viewer</h1>
           <p class="sub">Drop a <code>.md</code> file anywhere on this window.</p>
           <button type="button" class="btn" id="btn-open2">Choose a file&hellip;</button>
+          <button type="button" class="btn" id="btn-open-folder" hidden>Open a folder&hellip;</button>
           <ul>
             <li><b>Drag &amp; drop</b> &mdash; drop the <code>.md</code> plus any local images together and the images resolve.</li>
+            <li><b>Drop a whole folder</b> &mdash; every <code>.md</code> inside it becomes a list in the sidebar, so you can read straight through a project. Several <code>.md</code> files dropped together work the same way.</li>
             <li><b>Paste</b> &mdash; <kbd>Ctrl</kbd>+<kbd>V</kbd> markdown text straight onto the page.</li>
             <li><b>Open</b> &mdash; <kbd>Ctrl</kbd>+<kbd>O</kbd>. In Chrome/Edge this also unlocks <b>Reload</b> and <b>Watch</b>.</li>
             <li><b>From VS Code</b> &mdash; the <b>Open in MD Viewer</b> task in the project repo (<kbd>Ctrl</kbd>+<kbd>M</kbd> then <kbd>&darr;</kbd>). The only route that can supply the file's full path.</li>
@@ -1555,6 +1575,11 @@ const state = {
   dirAnchor: null,   // last handle this session, kept only to seed the picker's startIn
   lastModified: 0,
   assets: null,      // Map<lowercased filename, objectURL>
+  // A set of documents to read through, from a dropped folder or a multi-file
+  // drop. Entries are { name, dir, file?, handle? }; whichever of file/handle
+  // is present is what the text is read from.
+  library: [],
+  libraryIndex: -1,
   watchTimer: null,
   mermaidSources: [],
   rawHtml: localStorage.getItem("mdv:rawHtml") === "1",
@@ -1633,6 +1658,7 @@ function nudgeFont(delta) {
 const els = {
   doc: $("#doc"), tocList: $("#toc-list"), name: $("#doc-name"), meta: $("#doc-meta"),
   toast: $("#toast"), fileInput: $("#file-input"), scroller: $("#scroller"),
+  docs: $("#docs"), docsList: $("#docs-list"), docsCount: $("#docs-count"),
 };
 
 let toastTimer = null;
@@ -1859,6 +1885,121 @@ function releaseAssets() {
   state.assets = null;
 }
 
+/* ---------------------------------------------------------------- library --
+   A set of documents to read through rather than a single file. Two ways in:
+   drop a folder (a directory handle, Chromium), or drop several .md files at
+   once (works everywhere). Nothing is written to disk and no manifest is
+   required -- the set lives for the life of the tab.
+   -------------------------------------------------------------------------- */
+
+// Directories that are never worth walking. A dropped project root routinely
+// contains a node_modules with tens of thousands of entries, and enumerating
+// it would hang the page long before it found anything readable.
+const SKIP_DIR = /^(?:\.|node_modules$|bower_components$|dist$|build$|out$|target$|vendor$|__pycache__$|\.git$)/i;
+const LIB_MAX = 500;
+const LIB_DEPTH = 8;
+
+async function collectMarkdown(dirHandle, dir, out, depth) {
+  if (out.length >= LIB_MAX || depth > LIB_DEPTH) return out;
+  for await (const entry of dirHandle.values()) {
+    if (out.length >= LIB_MAX) break;
+    if (entry.kind === "directory") {
+      if (SKIP_DIR.test(entry.name)) continue;
+      await collectMarkdown(entry, dir ? dir + "/" + entry.name : entry.name, out, depth + 1);
+    } else if (MD_RE.test(entry.name)) {
+      out.push({ name: entry.name, dir: dir, handle: entry, file: null });
+    }
+  }
+  return out;
+}
+
+/** Root documents first, README at the head of its folder, then natural order. */
+function sortLibrary(list) {
+  const readme = (n) => (/^readme\./i.test(n) ? 0 : 1);
+  return list.sort((a, b) => {
+    if ((a.dir === "") !== (b.dir === "")) return a.dir === "" ? -1 : 1;
+    if (a.dir !== b.dir) return a.dir.localeCompare(b.dir);
+    if (readme(a.name) !== readme(b.name)) return readme(a.name) - readme(b.name);
+    return a.name.localeCompare(b.name, undefined, { numeric: true });
+  });
+}
+
+function setLibrary(entries) {
+  state.library = sortLibrary(entries || []);
+  state.libraryIndex = -1;
+  renderLibrary();
+}
+
+function renderLibrary() {
+  const n = state.library.length;
+  // One document is not a set; showing a list of one is just noise.
+  els.docs.hidden = n < 2;
+  if (n < 2) { els.docsList.innerHTML = ""; els.docsCount.textContent = ""; return; }
+  els.docsCount.textContent = "(" + n + ")";
+  els.docsList.innerHTML = state.library.map((d, i) =>
+    '<a data-i="' + i + '" tabindex="0"' + (i === state.libraryIndex ? ' class="active"' : "") +
+    ' title="' + esc(d.dir ? d.dir + "/" + d.name : d.name) + '">' + esc(d.name) +
+    (d.dir ? '<span class="doc-dir">' + esc(d.dir) + "</span>" : "") + "</a>").join("");
+}
+
+async function openLibraryDoc(i) {
+  const d = state.library[i];
+  if (!d) return;
+  try {
+    const file = d.file || await d.handle.getFile();
+    const text = await file.text();
+    state.name = d.name;
+    // Still no full path: a handle names the file, not its location on disk.
+    state.path = "";
+    state.text = text;
+    state.lastModified = file.lastModified || 0;
+    state.handle = d.handle || null;
+    if (d.handle) state.dirAnchor = d.handle;
+    state.libraryIndex = i;
+    stopWatching();
+    updateSync();
+    render();
+    renderLibrary();
+    persist();
+    els.scroller.scrollTop = 0;
+  } catch (err) {
+    toast("Could not read " + d.name + ": " + err.message, true);
+  }
+}
+
+async function loadDirectory(dirHandle) {
+  let found;
+  try {
+    found = await collectMarkdown(dirHandle, "", [], 0);
+  } catch (err) {
+    toast("Could not read " + dirHandle.name + ": " + err.message, true);
+    return;
+  }
+  if (!found.length) {
+    toast("No markdown files found in " + dirHandle.name, true);
+    return;
+  }
+  releaseAssets();
+  state.dirAnchor = dirHandle;
+  setLibrary(found);
+  await openLibraryDoc(0);
+  const capped = found.length >= LIB_MAX ? " (first " + LIB_MAX + ")" : "";
+  toast("Loaded " + found.length + " document" + (found.length > 1 ? "s" : "") +
+        capped + " from " + dirHandle.name);
+}
+
+const canPickDir = typeof window.showDirectoryPicker === "function";
+
+async function openFolderViaPicker() {
+  if (!canPickDir) return;
+  try {
+    const dir = await window.showDirectoryPicker({ mode: "read" });
+    if (dir) await loadDirectory(dir);
+  } catch (err) {
+    if (err && err.name !== "AbortError") toast("Could not open folder: " + err.message, true);
+  }
+}
+
 /**
  * @param handlePromises  Optional promises captured synchronously from a drop's
  *   DataTransferItems. A real OS drag yields genuine FileSystemFileHandles with
@@ -1867,7 +2008,33 @@ function releaseAssets() {
  */
 async function loadFiles(fileList, handlePromises) {
   const files = Array.from(fileList || []);
+
+  let handles = [];
+  if (handlePromises && handlePromises.length) {
+    try { handles = (await Promise.all(handlePromises)).filter(Boolean); }
+    catch (e) { handles = []; }   // older engines, or a non-file drag source
+  }
+
+  // A dropped folder arrives as a directory handle; its files never appear in
+  // dataTransfer.files, so this has to be checked before anything reads those.
+  const dir = handles.find((h) => h.kind === "directory");
+  if (dir) return loadDirectory(dir);
+
   if (!files.length) return;
+
+  const mds = files.filter((f) => MD_RE.test(f.name));
+  if (mds.length > 1) {
+    const byName = new Map(handles.filter((h) => h.kind === "file").map((h) => [h.name, h]));
+    releaseAssets();
+    const imgs = files.filter((f) => IMG_RE.test(f.name));
+    if (imgs.length) {
+      state.assets = new Map(imgs.map((f) => [f.name.toLowerCase(), URL.createObjectURL(f)]));
+    }
+    setLibrary(mds.map((f) => ({ name: f.name, dir: "", file: f, handle: byName.get(f.name) || null })));
+    await openLibraryDoc(0);
+    toast("Loaded " + mds.length + " documents");
+    return;
+  }
 
   const doc = files.find((f) => MD_RE.test(f.name)) ||
               files.find((f) => /markdown|text\/plain/.test(f.type)) ||
@@ -1879,13 +2046,11 @@ async function loadFiles(fileList, handlePromises) {
     state.assets = new Map(images.map((f) => [f.name.toLowerCase(), URL.createObjectURL(f)]));
   }
 
-  let handle = null;
-  if (handlePromises && handlePromises.length) {
-    try {
-      const handles = await Promise.all(handlePromises);
-      handle = handles.find((h) => h && h.kind === "file" && h.name === doc.name) || null;
-    } catch (e) { handle = null; }   // older engines, or a non-file drag source
-  }
+  const handle = handles.find((h) => h.kind === "file" && h.name === doc.name) || null;
+
+  // A single document replaces any set that was open, so the sidebar never
+  // offers a list the current document is not part of.
+  setLibrary([]);
 
   try {
     const text = await doc.text();
@@ -1912,6 +2077,7 @@ async function loadFiles(fileList, handlePromises) {
 
 function loadText(text, name, path) {
   releaseAssets();
+  setLibrary([]);
   state.name = name || "";
   state.path = path || "";
   state.text = text;
@@ -2243,6 +2409,30 @@ $("#btn-copy-path").addEventListener("click", () => {
 
 els.fileInput.addEventListener("change", (e) => { loadFiles(e.target.files); e.target.value = ""; });
 
+// --- document list ---
+// Delegated: the list is rebuilt on every switch, so per-link handlers would
+// have to be rebound each time.
+els.docsList.addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-i]");
+  if (!a) return;
+  e.preventDefault();
+  openLibraryDoc(Number(a.dataset.i));
+});
+els.docsList.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const a = e.target.closest("a[data-i]");
+  if (!a) return;
+  e.preventDefault();
+  openLibraryDoc(Number(a.dataset.i));
+});
+
+if (canPickDir) {
+  $("#mi-open-folder").hidden = false;
+  $("#btn-open-folder").hidden = false;
+  $("#mi-open-folder").addEventListener("click", () => { closePops(); openFolderViaPicker(); });
+  $("#btn-open-folder").addEventListener("click", openFolderViaPicker);
+}
+
 // --- drag & drop over the whole window ---
 let dragDepth = 0;
 window.addEventListener("dragenter", (e) => {
@@ -2259,7 +2449,9 @@ window.addEventListener("drop", (e) => {
   dragDepth = 0;
   document.body.classList.remove("dragging");
   const dt = e.dataTransfer;
-  if (!dt || !dt.files.length) return;
+  // A dropped folder can arrive with items but no files, so this cannot gate
+  // on files alone or folder drops are discarded before they are inspected.
+  if (!dt || (!dt.files.length && !(dt.items && dt.items.length))) return;
 
   // Must be called synchronously: DataTransfer is neutered as soon as this
   // handler returns, so the promises are started now and awaited later.
