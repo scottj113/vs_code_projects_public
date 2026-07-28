@@ -1968,6 +1968,24 @@ async function openLibraryDoc(i) {
 }
 
 async function loadDirectory(dirHandle) {
+  // Chromium asks a second time, after the folder is chosen, before a page may
+  // read it. Dismissing that prompt rejects exactly like pressing Cancel, so
+  // without an explicit check the whole thing fails silently and looks broken.
+  if (typeof dirHandle.queryPermission === "function") {
+    try {
+      let p = await dirHandle.queryPermission({ mode: "read" });
+      if (p !== "granted" && typeof dirHandle.requestPermission === "function") {
+        p = await dirHandle.requestPermission({ mode: "read" });
+      }
+      if (p !== "granted") {
+        toast("Permission to read " + dirHandle.name + " was not granted.", true);
+        return;
+      }
+    } catch (_) { /* older engines: fall through and let the read decide */ }
+  }
+
+  // A big tree takes a noticeable moment, and silence reads as a dead click.
+  toast("Scanning " + dirHandle.name + "…");
   let found;
   try {
     found = await collectMarkdown(dirHandle, "", [], 0);
@@ -1996,6 +2014,7 @@ async function openFolderViaPicker() {
     const dir = await window.showDirectoryPicker({ mode: "read" });
     if (dir) await loadDirectory(dir);
   } catch (err) {
+    // AbortError is the user pressing Cancel, which deserves no comment.
     if (err && err.name !== "AbortError") toast("Could not open folder: " + err.message, true);
   }
 }
