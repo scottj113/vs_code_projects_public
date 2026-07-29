@@ -40,7 +40,33 @@ aborts instantly and proves nothing.
   the permission bar once; second and later saves are silent and write to disk
   with no dialogs.
 
-### 1a. Which drag sources supply a handle — resolved, mostly
+### 1a. VS Code task file editing doesn't preserve file location
+
+**Problem:** Opening a file from VS Code using the task (Ctrl+M then Down) and
+editing it via the section editor tries to save to the Documents folder instead
+of the original file location.
+
+**Root cause:** The File System Access API requires a file handle to write; the
+VS Code task can only pass a file path via the bootstrap. There is no API to
+convert a path string to a handle on `file://` origins. Drag & drop works
+because the OS provides a handle; the task cannot.
+
+**What was tried:**
+- Auto-opening a file picker on page load (requires user activation; page load
+  has none)
+- Waiting for first user interaction to trigger picker (activation issues; picker
+  still fails)
+- Requiring explicit "Open file" button at save time (button appears but picker
+  doesn't establish handle correctly)
+
+**Current state:** Unsolved. The task passes `autoConnect: true` in the
+bootstrap, but the file picker flow is unreliable. Needs investigation into why
+the picker isn't working or why selected files aren't establishing write access.
+
+**Workaround:** Use drag & drop instead of the VS Code task. Works perfectly
+because the OS provides the file handle.
+
+### 1b. Which drag sources supply a handle — resolved, mostly
 
 A drag from Windows File Explorer *does* supply one, and it upgrades to
 read-write cleanly (`tools/Probe-FileWrite.html`, test 3, Edge 150). The earlier
