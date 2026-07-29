@@ -2657,27 +2657,41 @@ function editorStatus(msg, isError, action) {
  */
 /**
  * Auto-connect bootstrap files to their original file handles.
- * Called once on page load if the VS Code task set autoConnect: true.
+ * Waits for the first user interaction before opening the picker,
+ * since the File System Access API requires user activation.
  */
-async function editorAutoConnectBootstrapFile() {
+function editorAutoConnectBootstrapFile() {
   if (!state.path || state.handle) return;
   if (typeof window.showOpenFilePicker !== "function") return;
 
-  try {
-    const [handle] = await window.showOpenFilePicker({
-      multiple: false,
-      types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
-    });
-    state.handle = handle;
-    state.dirAnchor = handle;
-    state.name = handle.name;
-    toast("Connected to " + handle.name);
-  } catch (e) {
-    if (e && e.name !== "AbortError") {
-      toast("Could not locate file: " + (e.message || e.name), true);
+  let attempted = false;
+
+  const attempt = async () => {
+    if (attempted) return;
+    attempted = true;
+    document.removeEventListener("click", attempt);
+    document.removeEventListener("keydown", attempt);
+
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        multiple: false,
+        types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
+      });
+      state.handle = handle;
+      state.dirAnchor = handle;
+      state.name = handle.name;
+      toast("Connected to " + handle.name);
+    } catch (e) {
+      if (e && e.name !== "AbortError") {
+        toast("Could not locate file (" + (e.name || "unknown error") + ") — try the editor's 'Open file' button", true);
+      }
     }
-    // If cancelled or failed, proceed without handle — user can click Edit to retry
-  }
+  };
+
+  // Wait for first user interaction (click or key press)
+  document.addEventListener("click", attempt, { once: true, capture: true });
+  document.addEventListener("keydown", attempt, { once: true, capture: true });
+  toast("Click anywhere to select your file");
 }
 
 function announceWriteTarget() {
