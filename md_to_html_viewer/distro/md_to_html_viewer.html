@@ -2908,6 +2908,36 @@ async function saveEditor() {
 
   if (unchanged && state.handle) { editorStatus("No changes to save"); return; }
 
+  // For bootstrap files (VS Code task), require connecting to the file first
+  if (state.path && !state.handle) {
+    editorStatus("Select your file first — click 'Open file' above", false, {
+      label: "Open file",
+      run: async () => {
+        const host = (editor.win && !editor.win.closed) ? editor.win : window;
+        if (typeof host.showOpenFilePicker !== "function") {
+          editorStatus("This browser cannot open files", true);
+          return;
+        }
+        try {
+          const [handle] = await host.showOpenFilePicker({
+            multiple: false,
+            types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
+          });
+          state.handle = handle;
+          state.dirAnchor = handle;
+          state.name = handle.name;
+          announceWriteTarget();
+          await saveEditor();
+        } catch (e) {
+          if (e && e.name !== "AbortError") {
+            editorStatus("Could not open file: " + (e.message || e.name), true);
+          }
+        }
+      }
+    });
+    return;
+  }
+
   editorStatus("Saving…");
   const res = await writeFile(state.text);
   if (res.ok) {
@@ -3300,12 +3330,9 @@ updateSync();
     // The only route that knows the source path: the task has it and
     // passes it through, where drop and picker cannot.
     loadText(bs.text, bs.name || "", bs.path || "");
-    // If autoConnect flag is set, queue a file picker prompt to get the handle.
-    // This runs after page setup completes.
+    // If autoConnect flag is set, wait for first user interaction to open file picker.
     if (bs.autoConnect) {
-      setTimeout(() => {
-        editorAutoConnectBootstrapFile();
-      }, 100);
+      editorAutoConnectBootstrapFile();
     }
     return;
   }
