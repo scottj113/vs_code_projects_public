@@ -12,7 +12,8 @@ param(
   [string] $Markdown,                          # optional doc, delivered via #md64
   [string] $DocName = 'fixture.md',            # filename the payload declares
   [string] $Name = 'probe',                    # staging dir suffix
-  [int]    $BudgetMs = 45000
+  [int]    $BudgetMs = 45000,
+  [string[]] $BrowserArgs = @()                # extra Chromium switches
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,24 +49,51 @@ if ($Markdown) {
 }
 
 $dump = Join-Path $stage 'dump.html'
-# Edge logs unrelated noise (profile sync, GPU) to stderr. In Windows
-# PowerShell each stderr line becomes an ErrorRecord, which under
-# ErrorActionPreference='Stop' would abort a perfectly good run -- so relax it
-# just around the launch.
-$prev = $ErrorActionPreference
-$ErrorActionPreference = 'Continue'
+$noise = Join-Path $stage 'stderr.txt'
+
+# A run that was interrupted leaves an Edge process holding this profile, and
+# the next launch then blocks on the lock forever rather than failing -- an
+# afternoon disappears into "the popup test hangs" when nothing is wrong with
+# the test. Start from a clean profile every time.
+$profileDir = Join-Path $env:TEMP "mdv-$Name-profile"
+Remove-Item -Recurse -Force $profileDir -ErrorAction SilentlyContinue
+
+# Start-Process rather than the call operator, for two reasons: stderr goes
+# straight to a file, so Windows PowerShell never turns Edge's unrelated GPU
+# and profile chatter into ErrorRecords; and the wait can be bounded, so a
+# browser that never exits is a failed run instead of a hung one.
+$edgeArgs = @(
+  '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  "--user-data-dir=$profileDir", "--virtual-time-budget=$BudgetMs"
+) + $BrowserArgs + @('--dump-dom', $url)
+
+$proc = Start-Process -FilePath $edge -ArgumentList $edgeArgs -PassThru -NoNewWindow `
+                      -RedirectStandardOutput $dump -RedirectStandardError $noise
+# The virtual-time budget is virtual; this ceiling is wall-clock, and only has
+# to be generous enough that a healthy run never reaches it.
+if (-not $proc.WaitForExit(120000)) {
+  try { $proc.Kill() } catch { }
+  return "browser did not exit within 120s (dump: $dump)"
+}
+# WaitForExit(timeout) returns as soon as the process ends, while the redirected
+# streams may still be flushing -- reading the dump then fails with a sharing
+# violation. The parameterless overload is the one that waits for the handles.
+$proc.WaitForExit()
+
+# Chromium's renderer and GPU children inherit the redirected stdout handle and
+# outlive the parent by a moment, so ReadAllText hits a sharing violation. The
+# dump is complete once the parent exits -- open it in a way that doesn't demand
+# exclusive access rather than sleeping and hoping.
+$fs = New-Object IO.FileStream($dump, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
 try {
-  & $edge --headless=new --disable-gpu --no-first-run --no-default-browser-check `
-          "--user-data-dir=$(Join-Path $env:TEMP "mdv-$Name-profile")" `
-          "--virtual-time-budget=$BudgetMs" --dump-dom $url 2>$null |
-    Out-File -FilePath $dump -Encoding utf8
+  $reader = New-Object IO.StreamReader($fs, [Text.Encoding]::UTF8, $true)
+  $dom = $reader.ReadToEnd()
 } finally {
-  $ErrorActionPreference = $prev
+  $fs.Dispose()
 }
 
 # Do NOT slice the dump at "<body": the mermaid bundle's minified text contains
 # that string. The probe element is matched directly instead.
-$dom = [IO.File]::ReadAllText($dump)
 $m = [regex]::Match($dom, '(?s)<pre id="probe">(.*?)</pre>')
 if (-not $m.Success) { return "probe element not found (dump: $dump)" }
 $text = $m.Groups[1].Value.Trim()

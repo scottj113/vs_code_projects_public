@@ -41,6 +41,25 @@ fighting you for space, no second rendering engine disagreeing with the first. O
 leave it off and hit `↻` when you want it. *(Chromium browsers — elsewhere the buttons
 simply aren't there and everything else works.)*
 
+**Fix the typo where you found it.** Hover a heading in the contents sidebar and click
+the pencil — or press `Ctrl+E` for the section you're reading — and that section's raw
+Markdown opens in a small editor window. `Ctrl+S` writes it back into the file and
+re-renders. Nothing else in the document is touched: the editor holds one section, and
+only those lines are replaced.
+
+A section means the heading, its text, and its subsections — editing `## Setup` gives
+you everything down to the next heading at the same level or higher.
+
+Click the pencil, the editor opens — no ceremony. The first time you press `Ctrl+S`, the
+browser asks once whether this page may edit the file. Allow it and **every `Ctrl+S` after
+that writes straight to disk** — no save dialog, no "do you want to replace it?". Where
+there is no file to write to — pasted text — `Ctrl+S` asks where to save instead, and
+if you'd rather not, offers the edited document as a download. It never writes one
+without being asked, because a copy in your Downloads folder looks like a saved file
+until you check the one you meant to edit.
+
+The editor's status line always says what `Ctrl+S` will do before you type a word.
+
 ## Markdown in, HTML out
 
 Reading is half of it. The other half is turning the document into something you can
@@ -209,6 +228,10 @@ restriction, not a bug — see below.
 - **Contents sidebar** with scroll-spy, and per-block copy buttons.
 - **Document set** — drop a folder (or several `.md` files) and the sidebar lists
   every document, click to move between them. No manifest, nothing written to disk.
+- **Section editing** — `Ctrl+E`, or the pencil on a contents entry, opens that
+  section's Markdown in its own window; `Ctrl+S` writes it back. Line endings and
+  the rest of the file are left exactly as they were, and a file that changed on
+  disk underneath you is reported rather than overwritten.
 - **Source path** — click the filename in the toolbar for a selectable field and a
   **Copy** button. Opening via the VS Code task shows the full
   path; drag & drop, the file picker and paste can only show the filename, because
@@ -257,6 +280,9 @@ stripped.
 | `D` | Toggle light / dark mode |
 | `Ctrl+O` | Open a file |
 | `Ctrl+R` | Re-read the file from disk |
+| `Ctrl+E` | Edit the section you're reading |
+| `Ctrl+S` | Save the open edit back to the file |
+| `Esc` | Close the editor |
 | `Ctrl+F` | Browser's own find — deliberately not overridden |
 | `Ctrl` `+` / `-` | Browser zoom, which scales the whole interface |
 
@@ -268,6 +294,10 @@ All preferences persist across sessions.
 Any current browser. Drag & drop, paste, and the file picker work everywhere. The
 **Reload** and **Watch** buttons use the File System Access API and appear only in
 Chromium browsers (Chrome, Edge); elsewhere they're hidden and everything else works.
+
+Saving an edit uses the same API, so it needs Chromium too. Editing itself does not:
+anywhere else, `Ctrl+S` gives you the edited document as a download. If your browser
+blocks the editor's popup, it opens as a pane beside the document instead.
 
 ## Updating Mermaid
 

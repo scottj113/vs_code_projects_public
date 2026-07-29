@@ -1,12 +1,21 @@
 ﻿# Regression suite for md_to_html_viewer.
 #
 #   .\tools\Test-Viewer.ps1
+#   .\tools\Test-Viewer.ps1 -Only 'section editor','editor window'
 #
-# Runs three passes in headless Edge: the main suite (parsing, sanitizing,
-# palettes, controls, chrome), the drag & drop handle path, and the sidecar
-# bootstrap used by the VS Code task. Exits non-zero if anything fails.
+# Runs six passes in headless Edge: the main suite (parsing, sanitizing,
+# palettes, controls, chrome), the drag & drop handle path, a dropped document
+# set, the section editor and its own window, and the sidecar bootstrap used by
+# the VS Code task. Exits non-zero if anything fails.
 #
 # PowerShell + Edge only. No node, no npm.
+
+[CmdletBinding()]
+param(
+  # Names of passes to run; the rest are skipped. A pass costs a browser launch,
+  # so iterating on one of them should not mean paying for all six.
+  [string[]] $Only = @()
+)
 
 $ErrorActionPreference = 'Stop'
 $run = Join-Path $PSScriptRoot 'Invoke-ViewerPage.ps1'
@@ -516,20 +525,413 @@ $sidecarHarness = $preamble + @'
 </script>
 '@
 
+# ---------------------------------------------------------------- pass 5
+# The section editor. A fake file handle stands in for the disk, so the write
+# itself is asserted rather than assumed -- what actually lands in the file is
+# the only thing that matters here.
+#
+# window.open is stubbed to null for most of it. That forces the in-page pane,
+# whose DOM the --dump-dom harness can reach; a real popup's document lives in
+# another window and never appears in the dump. The popup path is exercised at
+# the end, through the opener's reference to it.
+$editorHarness = $preamble + @'
+(async () => {
+  const P = document.getElementById("probe");
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  const el = (id) => document.getElementById(id);
+  let pass = 0, fail = 0;
+  const check = (n, cond, note) => {
+    if (cond) { pass++; } else { fail++; P.textContent += "  FAIL  " + n + (note ? "  -- " + note : "") + "\n"; }
+  };
+  await waitFor(() => el("btn-display"));
+
+  // Frontmatter shifts every line below it; the footnote definition used to
+  // shift everything below IT; the blockquote heading must not end a section;
+  // the fenced "# not a heading" must not start one; and "Alpha" appears twice
+  // so the de-duplicated id has to be the thing that is looked up.
+  const SRC = [
+    "---", "title: Fixture", "---", "",
+    "# Alpha", "",
+    "Intro text.[^n]", "",
+    "[^n]: a footnote definition, which shifts nothing", "",
+    "## Bravo", "",
+    "Bravo body.", "",
+    "> ### Quoted", ">", "> not editable", "",
+    "```", "# not a heading", "```", "",
+    "## Charlie", "",
+    "Charlie body.", "",
+    "# Alpha", "",
+    "Second Alpha body.",
+  ].join("\r\n");
+
+  // The file on "disk". A save must adopt its own write, or watch reloads over
+  // the top of it -- the sentinel makes any such reload visible in the page.
+  // Starts read-only, as a real dropped handle does. Opening the editor is the
+  // only moment the upgrade can be asked for -- window.open() spends the click
+  // that would have paid for it -- so the counters below are the real subject.
+  let body = SRC, mtime = 5000, perm = "prompt", asks = 0;
+  const written = [];
+  const handle = {
+    kind: "file", name: "notes.md",
+    queryPermission: async () => perm,
+    requestPermission: async () => { asks++; perm = "granted"; return perm; },
+    getFile: async () => ({
+      lastModified: mtime, name: "notes.md",
+      text: async () => body + "\r\n\r\nRELOADED SENTINEL",
+    }),
+    createWritable: async () => ({
+      write: async (t) => { written.push(t); body = t; mtime += 1000; },
+      close: async () => {},
+    }),
+  };
+
+  // Nothing in this stretch may fall back to a save dialog: that is the whole
+  // point of asking at open time.
+  let dialogs = 0;
+  const realSave = window.showSaveFilePicker;
+  window.showSaveFilePicker = async () => {
+    dialogs++;
+    const e = new Error("should not have been reached"); e.name = "AbortError"; throw e;
+  };
+
+  const file = new File([SRC], "notes.md", { type: "text/markdown", lastModified: mtime });
+  const ev = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(ev, "dataTransfer", { value: {
+    files: [file], types: ["Files"],
+    items: [{ kind: "file", getAsFileSystemHandle: async () => handle }],
+  }});
+  window.dispatchEvent(ev);
+  check("fixture loaded with a handle",
+    await waitFor(() => el("doc").textContent.includes("Bravo body")));
+
+  // ---- table of contents ----
+  const rows = document.querySelectorAll("#toc-list .toc-row");
+  const pencils = document.querySelectorAll("#toc-list .toc-edit");
+  check("every heading gets a row", rows.length === 5, "rows=" + rows.length);
+  check("only placeable headings get a pencil", pencils.length === 4, "pencils=" + pencils.length);
+  check("blockquote heading has no pencil",
+    !document.querySelector('#toc-list .toc-edit[data-edit="quoted"]'));
+  check("toc links still navigate", !!document.querySelector('#toc-list a[data-id="bravo"]'));
+
+  // ---- open a section in the in-page pane ----
+  const realOpen = window.open;
+  window.open = () => null;
+
+  document.querySelector('#toc-list .toc-edit[data-edit="bravo"]').click();
+  check("pane opens instantly when there is no window", !!el("editor-dock"));
+  const ta = el("editor-ta");
+  check("textarea present", !!ta);
+
+  const bravo = ta ? ta.value : "";
+  check("section starts at its heading", bravo.startsWith("## Bravo"), JSON.stringify(bravo.slice(0, 24)));
+  check("section carries its body", bravo.includes("Bravo body."));
+  check("blockquote heading does not end the section", bravo.includes("> ### Quoted"));
+  check("fenced hash does not start a section", bravo.includes("# not a heading"));
+  check("section stops at the next same-level heading", !bravo.includes("Charlie body."));
+  check("editor names the section",
+    document.querySelector(".mdv-where").textContent === "## Bravo");
+
+  // ---- a parent section owns its subsections ----
+  document.querySelector('#toc-list .toc-edit[data-edit="alpha"]').click();
+  const alpha = el("editor-ta").value;
+  check("parent section includes subsections",
+    alpha.includes("## Bravo") && alpha.includes("## Charlie"));
+  check("parent section stops at the next h1", !alpha.includes("Second Alpha body."));
+  check("duplicate heading resolves by id",
+    !alpha.startsWith("# Alpha\r"), "should be the first Alpha");
+
+  // ---- edit and save ----
+  document.querySelector('#toc-list .toc-edit[data-edit="bravo"]').click();
+  const ta2 = el("editor-ta");
+  ta2.value = ta2.value.replace("Bravo body.", "Bravo EDITED.");
+  ta2.dispatchEvent(new Event("input", { bubbles: true }));
+  check("dirty marker appears", !document.querySelector(".mdv-dirty").hidden);
+
+  el("btn-watch").click();   // armed across the save: it must not fire on our own write
+  ta2.dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true }));
+  check("save reaches the disk", await waitFor(() => written.length === 1));
+
+  const out = written[0];
+  check("edit landed in the file", out.includes("Bravo EDITED."));
+  check("old text is gone", !out.includes("Bravo body."));
+  check("frontmatter survives", out.startsWith("---\r\ntitle: Fixture"));
+  check("footnote definition survives", out.includes("[^n]: a footnote"));
+  check("neighbouring sections survive",
+    out.includes("## Charlie") && out.includes("Second Alpha body."));
+  check("heading is not glued to the previous section", out.includes("\r\n\r\n## Charlie"));
+  check("CRLF preserved", /\r\n/.test(out) && !/[^\r]\n/.test(out));
+  check("line count unchanged by the edit",
+    out.split("\r\n").length === SRC.split("\r\n").length,
+    out.split("\r\n").length + " vs " + SRC.split("\r\n").length);
+  check("document re-renders with the edit",
+    await waitFor(() => el("doc").textContent.includes("Bravo EDITED")));
+  check("dirty marker clears after saving", document.querySelector(".mdv-dirty").hidden);
+  check("granted access on first save means no further dialogs", dialogs === 0, "dialogs=" + dialogs);
+  check("permission is asked for once per handle on first save", asks === 1, "asks=" + asks);
+
+  // The watcher has been polling throughout. If the save had not adopted its
+  // own write, a reload would have pulled the sentinel into the document.
+  await waitFor(() => false, 12);
+  check("save does not trigger the watcher", !el("doc").textContent.includes("RELOADED SENTINEL"));
+  el("btn-watch").click();
+
+  // ---- an unchanged section does not touch the file ----
+  document.querySelector('#toc-list .toc-edit[data-edit="charlie"]').click();
+  el("editor-ta").dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true }));
+  await waitFor(() => document.querySelector(".mdv-status").textContent.includes("No changes"));
+  check("saving an untouched section writes nothing", written.length === 1,
+    "writes=" + written.length);
+
+  // ---- the file moved under us ----
+  mtime += 9000;
+  const ta3 = el("editor-ta");
+  ta3.value = ta3.value + "\nlate addition";
+  ta3.dispatchEvent(new Event("input", { bubbles: true }));
+  ta3.dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true }));
+  check("stale file is reported",
+    await waitFor(() => document.querySelector(".mdv-status").textContent.includes("changed on disk")));
+  check("stale file is not overwritten", written.length === 1, "writes=" + written.length);
+
+  // ---- closing ----
+  document.querySelector(".mdv-close").click();
+  check("close removes the pane", !el("editor-dock"));
+
+  // ---- a document with no file behind it ----
+  // Pasted text, or any drop the browser refused a handle for. Saving must not
+  // quietly write a copy into the Downloads folder: that looks like success
+  // until you check the file you thought you were editing.
+  // Count the download rather than performing it: a real one keeps headless
+  // Edge alive waiting on the transfer and --dump-dom never fires.
+  let downloads = 0;
+  const realClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () {
+    if (this.download) { downloads++; return; }
+    return realClick.call(this);
+  };
+
+  const paste = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(paste, "clipboardData", { value: {
+    getData: () => "# Loose\n\nnot backed by a file.",
+    files: [], types: ["text/plain"],
+  }});
+  window.dispatchEvent(paste);
+  check("pasted document renders",
+    await waitFor(() => el("doc").textContent.includes("not backed by a file")));
+
+  // Save As is the universal fallback, so it has to be stubbed to be tested.
+  // Cancelled first, then accepted.
+  let pickerCalls = 0, pickerOpts = null;
+  window.showSaveFilePicker = async (opts) => {
+    pickerCalls++; pickerOpts = opts;
+    const err = new Error("cancelled"); err.name = "AbortError"; throw err;
+  };
+
+  el("mi-edit").click();
+  check("editor opens for a pasted document", !!el("editor-ta"));
+  check("editor says up front how Ctrl+S will behave",
+    document.querySelector(".mdv-status").textContent.includes("ask where to save"),
+    JSON.stringify(document.querySelector(".mdv-status").textContent));
+
+  const ta4 = el("editor-ta");
+  ta4.value = "# Loose\n\nedited without a file.";
+  ta4.dispatchEvent(new Event("input", { bubbles: true }));
+  ta4.dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true }));
+
+  check("no file means Save As, not a dead end", await waitFor(() => pickerCalls === 1));
+  check("Save As suggests the document's own name",
+    pickerOpts && pickerOpts.suggestedName === "document.md", JSON.stringify(pickerOpts));
+  check("cancelling Save As is reported",
+    await waitFor(() => document.querySelector(".mdv-status").textContent.includes("cancelled")));
+  check("nothing was downloaded behind the user's back", downloads === 0, "downloads=" + downloads);
+  check("the edit still lands in the view",
+    await waitFor(() => el("doc").textContent.includes("edited without a file")));
+
+  const act = document.querySelector(".mdv-act");
+  check("a download is offered after cancelling",
+    act && !act.hidden && act.textContent === "Download instead");
+  act.click();
+  check("the download happens only when asked for", downloads === 1, "downloads=" + downloads);
+
+  // Now let the picker succeed: the handle it returns must be adopted, so the
+  // next save goes straight to disk with no dialog.
+  const adopted = [];
+  let adoptedMtime = 700;
+  const newHandle = {
+    kind: "file", name: "chosen.md",
+    queryPermission: async () => "granted",
+    getFile: async () => ({ lastModified: adoptedMtime, name: "chosen.md", text: async () => adopted[adopted.length - 1] || "" }),
+    createWritable: async () => ({
+      write: async (t) => { adopted.push(t); adoptedMtime += 100; },
+      close: async () => {},
+    }),
+  };
+  window.showSaveFilePicker = async () => { pickerCalls++; return newHandle; };
+
+  el("editor-ta").dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true }));
+  check("Save As writes the document", await waitFor(() => adopted.length === 1));
+  check("Save As wrote the edited text", adopted[0].includes("edited without a file."));
+  check("the toolbar takes the new name",
+    await waitFor(() => el("doc-name").textContent === "chosen.md"), el("doc-name").textContent);
+  check("live reload becomes available after Save As", !el("btn-refresh").hidden);
+
+  const callsBefore = pickerCalls;
+  const ta5 = el("editor-ta");
+  ta5.value = ta5.value + "\n\nsecond pass.";
+  ta5.dispatchEvent(new Event("input", { bubbles: true }));
+  ta5.dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true }));
+  check("the adopted handle saves silently", await waitFor(() => adopted.length === 2));
+  check("no second dialog", pickerCalls === callsBefore, "calls=" + pickerCalls);
+  check("the second save kept the first", adopted[1].includes("second pass."));
+
+  window.showSaveFilePicker = realSave;
+  HTMLAnchorElement.prototype.click = realClick;
+  document.querySelector(".mdv-close").click();
+
+  // ---- the popup path, through the opener's reference ----
+  window.open = realOpen;
+  let popup = null;
+  window.open = function () { popup = realOpen.apply(window, arguments); return popup; };
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "e", ctrlKey: true, bubbles: true }));
+  await waitFor(() => el("editor-dock") || (popup && popup.document.getElementById("editor-ta")));
+
+  let host = "none";
+  try { if (popup && popup.document.getElementById("editor-ta")) host = "window"; } catch (e) { host = "blocked"; }
+  if (el("editor-dock")) host = "pane";
+  check("Ctrl+E opens the editor in one host or the other", host === "window" || host === "pane", host);
+  P.textContent += "  (editor host in headless: " + host + ")\n";
+
+  P.textContent += "\n" + pass + " passed, " + fail + " failed\n";
+})();
+</script>
+'@
+
+# ---------------------------------------------------------------- pass 6
+# The editor in a window of its own. A synthetic click carries no user
+# activation, so the popup is blocked in a normal headless run and pass 5 only
+# ever sees the in-page pane -- this one runs with the blocker off so the
+# second document really is built, styled and saved from.
+$popupHarness = $preamble + @'
+(async () => {
+  const P = document.getElementById("probe");
+  let pass = 0, fail = 0;
+  const check = (n, cond, note) => {
+    if (cond) { pass++; } else { fail++; P.textContent += "  FAIL  " + n + (note ? "  -- " + note : "") + "\n"; }
+  };
+  await waitFor(() => document.getElementById("btn-display"));
+
+  let body = "# One\r\n\r\nfirst body.\r\n\r\n# Two\r\n\r\nsecond body.\r\n";
+  const written = [];
+  let mtime = 4000;
+  const handle = {
+    kind: "file", name: "popup.md",
+    queryPermission: async () => "granted",
+    getFile: async () => ({ lastModified: mtime, name: "popup.md", text: async () => body }),
+    createWritable: async () => ({
+      write: async (t) => { written.push(t); body = t; mtime += 1000; },
+      close: async () => {},
+    }),
+  };
+  const ev = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(ev, "dataTransfer", { value: {
+    files: [new File([body], "popup.md", { type: "text/markdown", lastModified: mtime })],
+    types: ["Files"],
+    items: [{ kind: "file", getAsFileSystemHandle: async () => handle }],
+  }});
+  window.dispatchEvent(ev);
+  await waitFor(() => document.getElementById("doc").textContent.includes("first body"));
+
+  let popup = null;
+  const realOpen = window.open;
+  window.open = function () { popup = realOpen.apply(window, arguments); return popup; };
+  document.querySelector('#toc-list .toc-edit[data-edit="two"]').click();
+  // Opening is async now: write access is asked for first, while the click is
+  // still worth something. Waiting is not optional -- asserting early leaves a
+  // window open behind the failure and the run hangs instead of reporting.
+  await waitFor(() => { try { return popup && popup.document.getElementById("editor-ta"); }
+                        catch (e) { return false; } });
+
+  check("a window was opened", !!popup);
+  check("no in-page pane when a window is available", !document.getElementById("editor-dock"));
+
+  let pdoc = null;
+  try { pdoc = popup && popup.document; } catch (e) { /* cross-origin */ }
+  check("the popup document is scriptable from file://", !!pdoc);
+  if (!pdoc) {
+    if (popup && !popup.closed) popup.close();   // or headless never exits
+    P.textContent += "\n" + pass + " passed, " + fail + " failed\n";
+    return;
+  }
+
+  const ta = pdoc.getElementById("editor-ta");
+  check("editor built in the popup", !!ta);
+  check("popup carries the right section", ta && ta.value.startsWith("# Two"));
+  check("popup styles injected", !!pdoc.getElementById("mdv-editor-css"));
+  check("popup follows the palette",
+    !!pdoc.documentElement.style.getPropertyValue("--bg"),
+    pdoc.documentElement.getAttribute("style"));
+  check("popup is titled", /Editor/.test(pdoc.title), pdoc.title);
+
+  // Theme changes must reach the second document too.
+  const before = pdoc.documentElement.style.getPropertyValue("--bg");
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", bubbles: true }));
+  check("popup repaints when the viewer's theme changes",
+    pdoc.documentElement.style.getPropertyValue("--bg") !== before);
+
+  // Ctrl+S inside the popup, not the opener.
+  ta.value = "# Two\r\n\r\nsecond body, rewritten.";
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+  ta.dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true }));
+  check("Ctrl+S in the popup writes the file", await waitFor(() => written.length === 1));
+  check("only the edited section changed",
+    written[0] && written[0].includes("first body.") && written[0].includes("rewritten."));
+  check("opener re-renders from the popup's save",
+    await waitFor(() => document.getElementById("doc").textContent.includes("rewritten")));
+
+  // Closing the window has to clear the app's stale references, or the next
+  // open writes into a textarea belonging to a document that is gone and
+  // nothing appears anywhere. unload is not dependable for a window closed by
+  // script, which is why the app re-checks .closed instead of trusting it.
+  // The reopen is pointed at the in-page pane: opening a second editor window
+  // in the same run leaves headless Edge running past its virtual-time budget
+  // and --dump-dom never fires. (Two plain about:blank windows are fine, so it
+  // is something about reusing the name with a built-out document -- not worth
+  // chasing, since the stale reference is stale in either host.)
+  popup.close();
+  check("closing the window releases the editor", await waitFor(() => popup.closed));
+  window.open = () => null;
+
+  document.querySelector('#toc-list .toc-edit[data-edit="one"]').click();
+  check("editor reopens after its window was closed", !!document.getElementById("editor-ta"));
+  check("the reopened editor is usable",
+    (document.getElementById("editor-ta") || {}).value === "# One\n\nfirst body.\n",
+    JSON.stringify((document.getElementById("editor-ta") || {}).value));
+
+  P.textContent += "\n" + pass + " passed, " + fail + " failed\n";
+})();
+</script>
+'@
+
 $total = 0; $failed = 0
-function Show-Pass([string] $label, [string] $output) {
+# The pass is a scriptblock, not a string: -Only has to skip the browser launch,
+# and an argument would already have run by the time this was called.
+function Show-Pass([string] $label, [scriptblock] $pass) {
+  if ($Only.Count -and $Only -notcontains $label) { return }
+  $output = & $pass
   "=== $label ==="
   $output
   ''
   $script:total += [int]([regex]::Match($output, '(\d+) passed').Groups[1].Value)
   $f = [int]([regex]::Match($output, '(\d+) failed').Groups[1].Value)
   $script:failed += $f
-  if ($output -match 'PAGE ERROR|REJECTION|not found|EMPTY') { $script:failed++ }
+  if ($output -match 'PAGE ERROR|REJECTION|not found|EMPTY|did not exit') { $script:failed++ }
 }
 
-Show-Pass 'main suite' (& $run -Harness $mainHarness -Markdown $torture -Name 'suite' -BudgetMs 45000)
-Show-Pass 'drag and drop' (& $run -Harness $dropHarness -Name 'drop' -BudgetMs 40000)
-Show-Pass 'document set'  (& $run -Harness $libraryHarness -Name 'library' -BudgetMs 40000)
+Show-Pass 'main suite' { & $run -Harness $mainHarness -Markdown $torture -Name 'suite' -BudgetMs 45000 }
+Show-Pass 'drag and drop' { & $run -Harness $dropHarness -Name 'drop' -BudgetMs 40000 }
+Show-Pass 'document set'  { & $run -Harness $libraryHarness -Name 'library' -BudgetMs 40000 }
+Show-Pass 'section editor' { & $run -Harness $editorHarness -Name 'editor' -BudgetMs 40000 }
+Show-Pass 'editor window' { & $run -Harness $popupHarness -Name 'popup' -BudgetMs 40000 `
+  -BrowserArgs '--disable-popup-blocking' }
 
 # Build the sidecar fixture, then stage md-bootstrap.js beside the page.
 $lines = @('# Sidecar Test', '',
@@ -549,7 +951,7 @@ $payload = @{ name = 'sidecar.md'; path = 'C:\vault\notes\sidecar.md'; text = $s
   ConvertTo-Json -Compress -Depth 3
 [IO.File]::WriteAllText((Join-Path $stage 'md-bootstrap.js'),
   'window.__MD_BOOTSTRAP__=' + $payload + ';', (New-Object Text.UTF8Encoding($false)))
-Show-Pass 'sidecar bootstrap' (& $run -Harness $sidecarHarness -Name 'sidecar' -BudgetMs 25000)
+Show-Pass 'sidecar bootstrap' { & $run -Harness $sidecarHarness -Name 'sidecar' -BudgetMs 25000 }
 
 "TOTAL: $total passed, $failed failed"
 if ($failed -gt 0) { exit 1 }

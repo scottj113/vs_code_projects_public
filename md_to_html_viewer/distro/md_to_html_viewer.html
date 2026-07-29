@@ -456,6 +456,21 @@ body.no-toc #toc { display: none; }
 #toc a.lv5, #toc a.lv6 { padding-left: 56px; font-size: 12.5px; }
 #toc .empty { color: var(--fg-faint); font-size: 12.5px; padding-left: 9px; }
 
+/* Per-heading edit affordance. The pencil only appears for headings the
+   parser could place in the source; one inside a blockquote or list item has
+   no editable range, so its row simply has no button. */
+#toc .toc-row { position: relative; }
+#toc .toc-row a { padding-right: 26px; }
+#toc .toc-edit {
+  position: absolute; right: 3px; top: 50%; transform: translateY(-50%);
+  appearance: none; border: 1px solid transparent; background: none;
+  color: var(--fg-faint); font: inherit; font-size: 12px; line-height: 1;
+  padding: 3px 4px; border-radius: 5px; cursor: pointer;
+  opacity: 0; pointer-events: none;
+}
+#toc .toc-row:hover .toc-edit, #toc .toc-edit:focus-visible { opacity: 1; pointer-events: auto; }
+#toc .toc-edit:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--border-strong); }
+
 /* ---------- document list (a dropped folder or multi-file drop) ---------- */
 #docs { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 #docs-count { font-weight: 400; letter-spacing: 0; text-transform: none; opacity: .8; }
@@ -466,6 +481,15 @@ body.no-toc #toc { display: none; }
 }
 #docs-list a .doc-dir { display: block; font-size: 11px; color: var(--fg-faint); }
 #docs-list a.active .doc-dir { color: var(--accent); opacity: .85; }
+
+/* Where the editor lands when it cannot have a window of its own -- a blocked
+   popup, or a browser that won't let this page script one. A flex child rather
+   than an overlay, so the document reflows beside it instead of hiding under it. */
+#editor-dock {
+  flex: 0 0 44%; min-width: 320px; max-width: 60vw;
+  border-left: 1px solid var(--border); background: var(--bg-raised);
+  position: relative; overflow: hidden;
+}
 
 #scroller { flex: 1; overflow: auto; scroll-behavior: smooth; }
 #page { max-width: 860px; margin: 0 auto; padding: 34px 40px 55vh; }
@@ -869,6 +893,7 @@ body.dragging #drop { display: flex; }
       <label class="pop-check"><input type="checkbox" id="chk-raw"> Allow raw HTML <span class="hint">sanitized</span></label>
       <hr>
       <button type="button" class="mi" id="mi-open-folder" hidden>Open a folder&hellip;</button>
+      <button type="button" class="mi" id="mi-edit" disabled>Edit this section&hellip; <kbd>Ctrl+E</kbd></button>
       <button type="button" class="mi" id="mi-export" disabled>Export standalone HTML&hellip;</button>
       <button type="button" class="mi" id="mi-print" disabled>Print / Save as PDF <kbd>Ctrl+P</kbd></button>
     </div>
@@ -1134,19 +1159,35 @@ function parse(markdown, ctx) {
 
   let frontmatter = "";
   const fm = src.match(/^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
-  if (fm) { frontmatter = fm[1]; src = src.slice(fm[0].length); }
+  // Frontmatter is sliced off the front, so every line below it shifts up by
+  // however many lines it occupied. blocks() adds that back when stamping
+  // heading line numbers; without it the section editor edits the wrong lines.
+  let line0 = 0;
+  if (fm) {
+    frontmatter = fm[1];
+    line0 = fm[0].split("\n").length - 1;
+    src = src.slice(fm[0].length);
+  }
 
   src = collectFootnoteDefs(src, ctx);
 
   let html = "";
   if (frontmatter) html += renderFrontmatter(frontmatter);
-  html += blocks(src.split("\n"), ctx);
+  html += blocks(src.split("\n"), ctx, { line0 });
   html += renderFootnotes(ctx);
 
   return { html, ctx };
 }
 
-/** Pull `[^id]: text` definitions (plus indented continuation lines) out of the source. */
+/** Pull `[^id]: text` definitions (plus indented continuation lines) out of the source.
+ *
+ *  Definitions are blanked rather than deleted. The section editor maps a
+ *  heading back to a line number in the user's file, and dropping lines here
+ *  would shift every heading below a footnote definition -- the splice would
+ *  then overwrite the wrong region. Blank lines are skipped by blocks(), so
+ *  the rendered output is unchanged apart from a footnote definition now
+ *  breaking a paragraph it sat inside, which is what a block-level construct
+ *  should do anyway. */
 function collectFootnoteDefs(src, ctx) {
   const lines = src.split("\n");
   const kept = [];
@@ -1154,8 +1195,10 @@ function collectFootnoteDefs(src, ctx) {
     const m = lines[i].match(/^ {0,3}\[\^([^\]\s]+)\]:[ \t]*(.*)$/);
     if (!m) { kept.push(lines[i]); continue; }
     const body = [m[2]];
+    kept.push("");
     while (i + 1 < lines.length && /^(?: {2,}|\t)\S/.test(lines[i + 1])) {
       body.push(lines[++i].replace(/^\s+/, ""));
+      kept.push("");
     }
     ctx.footnotes.set(m[1], { raw: body.join("\n").trim(), html: null });
   }
@@ -1194,6 +1237,17 @@ function blocks(lines, ctx, opts) {
 
   const isBlank = (n) => n >= lines.length || /^\s*$/.test(lines[n]);
 
+  // Only the top-level call knows where its lines sit in the file. Nested
+  // calls (blockquote, list item, definition list) are handed a rebuilt slice
+  // with markers stripped, so their line numbers are unrecoverable -- those
+  // headings keep line === null and the section editor skips them.
+  const line0 = opts && typeof opts.line0 === "number" ? opts.line0 : null;
+  const stamp = (n) => {
+    if (line0 === null) return;
+    const h = ctx.headings[ctx.headings.length - 1];
+    if (h) h.line = line0 + n;
+  };
+
   while (i < lines.length) {
     const line = lines[i];
 
@@ -1225,7 +1279,7 @@ function blocks(lines, ctx, opts) {
 
     // --- ATX heading ---
     m = line.match(/^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*(?:#+[ \t]*)?$/) || line.match(/^ {0,3}(#{1,6})[ \t]*$/);
-    if (m) { out += heading(m[1].length, m[2] || "", ctx); i++; continue; }
+    if (m) { out += heading(m[1].length, m[2] || "", ctx); stamp(i); i++; continue; }
 
     // --- horizontal rule ---
     if (/^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(line)) { out += "<hr>"; i++; continue; }
@@ -1277,6 +1331,7 @@ function blocks(lines, ctx, opts) {
     }
 
     // --- paragraph (with setext heading lookahead) ---
+    const pStart = i;
     const buf = [];
     while (i < lines.length && !isBlank(i)) {
       const setext = lines[i].match(/^ {0,3}(=+|-{2,})[ \t]*$/);
@@ -1287,7 +1342,9 @@ function blocks(lines, ctx, opts) {
     const prev = lines[i - 1] || "";
     const setextM = prev.match(/^ {0,3}(=+|-{2,})[ \t]*$/);
     if (setextM && buf.length) {
+      // A setext heading starts at its text, not at the ===== underline.
       out += heading(setextM[1][0] === "=" ? 1 : 2, buf.join(" "), ctx);
+      stamp(pStart);
     } else if (buf.length) {
       const text = inline(buf.join("\n"), ctx);
       out += loose ? "<p>" + text + "</p>" : text;
@@ -1302,7 +1359,9 @@ function heading(level, text, ctx) {
   const n = (ctx.slugs.get(base) || 0) + 1;
   ctx.slugs.set(base, n);
   const id = n > 1 ? base + "-" + n : base;
-  ctx.headings.push({ level, id, text: text.trim() });
+  // line is stamped by the caller: only blocks() knows the source position,
+  // and only its top-level invocation can map one. See sectionRange().
+  ctx.headings.push({ level, id, text: text.trim(), line: null });
   return "<h" + level + ' id="' + esc(id) + '">' +
     '<a class="anchor" href="#' + esc(id) + '" aria-hidden="true">#</a>' +
     inner + "</h" + level + ">";
@@ -1534,6 +1593,66 @@ function image(alt, url, title, ctx) {
     (title ? ' title="' + esc(title) + '"' : "") + ' loading="lazy">';
 }
 
+/* ---------------------------------------------------- source addressing --
+   Maps a heading in the rendered document back to the lines it came from, so
+   the editor can hand back one section of the file and write it straight in.
+
+   Line numbers are the parser's own (stamped in blocks()), not the result of
+   a second scan of the source. A separate scanner would have to re-derive
+   fenced-code state, frontmatter and the heading-id de-duplication counter,
+   and any drift there means splicing over the wrong lines.
+   -------------------------------------------------------------------------- */
+
+/** Split on any line ending. 1:1 with the line stream parse() works on, since
+ *  its \r\n -> \n normalisation collapses each break to exactly one line. */
+const splitLines = (text) => String(text).split(/\r\n|\r|\n/);
+
+/** Whatever the file already uses, so saving one section doesn't rewrite
+ *  every line ending in the file and turn a small edit into a whole-file diff. */
+const eolOf = (text) => (/\r\n/.test(text) ? "\r\n" : /\r/.test(text) ? "\r" : "\n");
+
+/**
+ * Line range [start, end) of a heading's section: the heading itself and
+ * everything beneath it *including its subsections*, ending at the next
+ * heading of the same or a shallower level.
+ *
+ * Headings the parser could not place (line === null -- inside a blockquote
+ * or a list item) are ignored at both ends. They can't be edited, and just as
+ * importantly they must not terminate the section containing them.
+ */
+function sectionRange(headings, id, totalLines) {
+  const placed = headings.filter((h) => typeof h.line === "number");
+  const at = placed.findIndex((h) => h.id === id);
+  if (at < 0) return null;
+  const h = placed[at];
+  const next = placed.slice(at + 1).find((n) => n.level <= h.level);
+  return { id, level: h.level, start: h.line, end: next ? next.line : totalLines };
+}
+
+function sliceSection(text, range) {
+  return splitLines(text).slice(range.start, range.end).join("\n");
+}
+
+/**
+ * Replace a section, preserving exactly the blank-line gap the original had
+ * before whatever follows. Trailing blanks in the replacement are dropped
+ * first, so a save is a no-op when nothing changed however the textarea
+ * trimmed things, and no edit can ever glue the next heading onto the last
+ * paragraph of this one.
+ */
+function spliceSection(text, range, replacement) {
+  const lines = splitLines(text);
+  const original = lines.slice(range.start, range.end);
+  let pad = 0;
+  while (pad < original.length && original[original.length - 1 - pad] === "") pad++;
+
+  const body = String(replacement).replace(/\r\n?/g, "\n").split("\n");
+  while (body.length > 1 && body[body.length - 1] === "") body.pop();
+  for (let n = 0; n < pad; n++) body.push("");
+
+  return lines.slice(0, range.start).concat(body, lines.slice(range.end)).join(eolOf(text));
+}
+
 /* ==========================================================================
    3. Sanitizer (only needed when raw HTML is enabled)
    ========================================================================== */
@@ -1582,6 +1701,7 @@ const state = {
   libraryIndex: -1,
   watchTimer: null,
   mermaidSources: [],
+  headings: [],      // last render's headings, carrying source line numbers
   rawHtml: localStorage.getItem("mdv:rawHtml") === "1",
   showToc: localStorage.getItem("mdv:toc") !== "0",
   fontSize: Number(localStorage.getItem("mdv:fontSize")) || 15.5,
@@ -1704,6 +1824,7 @@ function applyTheme(rerenderDiagrams) {
   }
 
   try { localStorage.setItem("mdv:appearance", JSON.stringify(a)); } catch (e) { /* quota */ }
+  paintEditorTheme();
   if (rerenderDiagrams && mermaidReady) renderMermaid();
 }
 
@@ -1754,7 +1875,8 @@ function render() {
     document.body.classList.add("blank");
     els.name.textContent = "No document";
     els.meta.textContent = "";
-    for (const id of ["mi-export", "mi-print"]) $("#" + id).disabled = true;
+    state.headings = [];
+    for (const id of ["mi-export", "mi-print", "mi-edit"]) $("#" + id).disabled = true;
     updatePathPanel();
     updateSync();
     return;
@@ -1762,6 +1884,10 @@ function render() {
 
   const { html, ctx } = parse(state.text, { rawHtml: state.rawHtml, assets: state.assets });
   state.mermaidSources = ctx.mermaid;
+  // Kept for the section editor: these carry the source line of every heading,
+  // and they go stale the moment the text changes, so they are replaced here
+  // rather than cached anywhere longer-lived.
+  state.headings = ctx.headings;
 
   els.doc.innerHTML = html;
   if (state.rawHtml) sanitize(els.doc);
@@ -1778,7 +1904,9 @@ function render() {
 
   $("#mi-export").disabled = false;
   $("#mi-print").disabled = false;
+  $("#mi-edit").disabled = false;
   updateSync();
+  syncEditor();
 
   if (location.hash && !location.hash.startsWith("#md64=")) {
     const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
@@ -1794,9 +1922,15 @@ function buildToc(headings) {
     return;
   }
   const min = Math.min(...usable.map((h) => h.level));
-  els.tocList.innerHTML = usable.map((h) =>
-    '<a href="#' + esc(h.id) + '" class="lv' + (h.level - min + 1) + '" data-id="' + esc(h.id) + '">' +
-    esc(h.text.replace(/[*_`~]/g, "")) + "</a>").join("");
+  els.tocList.innerHTML = usable.map((h) => {
+    const label = esc(h.text.replace(/[*_`~]/g, ""));
+    const pencil = typeof h.line === "number"
+      ? '<button type="button" class="toc-edit" data-edit="' + esc(h.id) + '" tabindex="-1" ' +
+        'title="Edit this section (Ctrl+E)" aria-label="Edit section: ' + label + '">&#9998;</button>'
+      : "";
+    return '<div class="toc-row"><a href="#' + esc(h.id) + '" class="lv' + (h.level - min + 1) +
+      '" data-id="' + esc(h.id) + '">' + label + "</a>" + pencil + "</div>";
+  }).join("");
   observeHeadings(usable.map((h) => h.id));
 }
 
@@ -1945,6 +2079,10 @@ function renderLibrary() {
 async function openLibraryDoc(i) {
   const d = state.library[i];
   if (!d) return;
+  // Switching documents replaces state.text wholesale; an open edit of the
+  // outgoing one would be dropped without a word.
+  if (!discardEdits("Switch documents and lose them?")) return;
+  closeEditor(true);
   try {
     const file = d.file || await d.handle.getFile();
     const text = await file.text();
@@ -2095,6 +2233,8 @@ async function loadFiles(fileList, handlePromises) {
 }
 
 function loadText(text, name, path) {
+  if (!discardEdits("Load a different document and lose them?")) return;
+  closeEditor(true);
   releaseAssets();
   setLibrary([]);
   state.name = name || "";
@@ -2242,6 +2382,520 @@ function toggleWatch() {
   toast("Watching " + state.name + " for changes");
 }
 
+/* ----------------------------------------------------------------- editor --
+   One section of the raw Markdown, in a window of its own, written straight
+   back to the file with Ctrl+S.
+
+   Two hosts, one UI: a real popup window when the browser allows it, an
+   in-page pane when it doesn't. That is why these styles live in a string
+   instead of #app-css -- a popup is a separate document and cannot use the
+   opener's stylesheet, and having the rules twice would let them drift.
+   -------------------------------------------------------------------------- */
+
+const EDITOR_CSS = [
+  ".mdv-editor { display: flex; flex-direction: column; height: 100%; width: 100%;",
+  "  font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--fg);",
+  "  background: var(--bg-raised); position: absolute; inset: 0; }",
+  ".mdv-editor header { display: flex; align-items: center; gap: 8px; flex: none;",
+  "  padding: 8px 10px; border-bottom: 1px solid var(--border); }",
+  ".mdv-where { font-weight: 600; font-size: 12.5px; white-space: nowrap;",
+  "  overflow: hidden; text-overflow: ellipsis; }",
+  ".mdv-dirty { color: var(--accent); font-size: 15px; line-height: 1; }",
+  ".mdv-spacer { flex: 1; }",
+  ".mdv-btn { appearance: none; border: 1px solid var(--border-strong); background: var(--bg);",
+  "  color: var(--fg); border-radius: 6px; padding: 5px 9px; font: inherit; font-size: 12px;",
+  "  cursor: pointer; white-space: nowrap; }",
+  ".mdv-btn:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }",
+  ".mdv-btn:disabled { opacity: .4; cursor: default; }",
+  ".mdv-editor textarea { flex: 1; width: 100%; resize: none; border: 0; outline: 0;",
+  "  padding: 12px 14px; background: var(--bg); color: var(--fg); tab-size: 4;",
+  "  font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }",
+  ".mdv-foot { flex: none; display: flex; align-items: center; gap: 8px;",
+  "  padding: 6px 10px; border-top: 1px solid var(--border); min-height: 34px; }",
+  ".mdv-status { flex: 1; color: var(--fg-faint); font-size: 11.5px;",
+  "  overflow: hidden; text-overflow: ellipsis; }",
+  ".mdv-status.err { color: var(--accent); }",
+  ".mdv-act { flex: none; font-size: 11.5px; padding: 4px 8px; }",
+].join("\n");
+
+// Copied into the popup's root so it matches the viewer's palette. The popup
+// cannot inherit them: custom properties resolve per document.
+const EDITOR_VARS = ["--bg", "--bg-raised", "--bg-sunk", "--fg", "--fg-muted", "--fg-faint",
+  "--border", "--border-strong", "--accent", "--accent-soft", "--code-bg"];
+
+const editor = {
+  win: null,        // popup window, when it has one
+  dock: null,       // in-page <aside>, when it doesn't
+  ui: null,         // { where, dirty, ta, status }
+  id: null,         // heading id under edit; null means the whole document
+  base: "",         // state.text as it was when this section was loaded
+  loaded: "",       // section text as loaded, to detect an untouched editor
+  confirmStale: false,
+  action: null,     // what the status line's button does, when it has one
+};
+
+/** Self-healing: a closed window leaves every reference in editor.ui pointing
+ *  into a document that no longer exists, and its unload event is not
+ *  something to depend on -- it doesn't always arrive when the window is
+ *  closed programmatically. Anything that touches the editor asks here first. */
+function editorOpen() {
+  if (editor.ui && editor.win && editor.win.closed) {
+    editor.win = null;
+    editor.ui = null;
+    editor.id = null;
+  }
+  return !!editor.ui;
+}
+
+const editorDirty = () => editorOpen() && editor.ui.ta.value !== editor.loaded;
+
+/** The heading the reader is looking at, per the TOC scroll-spy. */
+function activeHeadingId() {
+  const a = els.tocList.querySelector("a.active") || els.tocList.querySelector("a");
+  return a ? a.dataset.id : null;
+}
+
+/** Range for a heading id, or the whole document when there is no usable one. */
+function rangeFor(id) {
+  const total = splitLines(state.text).length;
+  if (id) {
+    const r = sectionRange(state.headings || [], id, total);
+    if (r) return r;
+  }
+  return { id: null, level: 0, start: 0, end: total };
+}
+
+function editorLabel(id) {
+  const h = (state.headings || []).find((x) => x.id === id);
+  if (!h) return state.name || "Whole document";
+  return "#".repeat(h.level) + " " + h.text.replace(/[*_`~]/g, "");
+}
+
+function buildEditorUI(doc, host) {
+  if (!doc.getElementById("mdv-editor-css")) {
+    const style = doc.createElement("style");
+    style.id = "mdv-editor-css";
+    style.textContent = EDITOR_CSS;
+    doc.head.appendChild(style);
+  }
+
+  const mk = (tag, cls, text) => {
+    const n = doc.createElement(tag);
+    if (cls) n.className = cls;
+    if (text) n.textContent = text;
+    return n;
+  };
+
+  const root = mk("div", "mdv-editor");
+  const head = doc.createElement("header");
+  const where = mk("span", "mdv-where");
+  const dirty = mk("span", "mdv-dirty", "●");
+  dirty.hidden = true;
+  dirty.title = "Unsaved changes";
+  const save = mk("button", "mdv-btn mdv-save", "Save  Ctrl+S");
+  const close = mk("button", "mdv-btn mdv-close", "Close");
+  head.append(where, dirty, mk("span", "mdv-spacer"), save, close);
+
+  const ta = doc.createElement("textarea");
+  ta.id = "editor-ta";
+  ta.spellcheck = false;
+  ta.wrap = "off";
+
+  const foot = mk("div", "mdv-foot");
+  const status = mk("div", "mdv-status");
+  const act = mk("button", "mdv-btn mdv-act");
+  act.hidden = true;
+  foot.append(status, act);
+
+  root.append(head, ta, foot);
+  host.appendChild(root);
+
+  save.addEventListener("click", () => saveEditor());
+  close.addEventListener("click", () => closeEditor());
+  act.addEventListener("click", () => { if (editor.action) editor.action(); });
+  ta.addEventListener("input", () => markEditorDirty());
+  // Bound to the host, not the document: the in-page pane shares its document
+  // with the app, so a document-level listener would both outlive the pane and
+  // fire for keystrokes aimed at the viewer.
+  host.addEventListener("keydown", onEditorKey);
+
+  return { where, dirty, ta, status, act };
+}
+
+function onEditorKey(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    e.stopPropagation();
+    saveEditor();
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    closeEditor();
+  }
+}
+
+/** Try for a real window; fall back to a pane inside the page. */
+function openEditorHost() {
+  let w = null;
+  try {
+    w = window.open("", "mdv-editor", "width=780,height=640,resizable=yes,scrollbars=yes");
+  } catch (_) { w = null; }
+
+  // A blocked popup returns null; a cross-origin one throws on .document.
+  // about:blank inherits this page's origin, so on file:// the usual case is
+  // that it works -- but neither outcome is worth an error message when a
+  // pane in the page does the same job.
+  let body = null;
+  try { body = w && w.document && w.document.body; } catch (_) { body = null; }
+
+  if (body) {
+    w.document.title = "Editor — " + (state.name || "markdown");
+    body.style.cssText = "margin:0;height:100vh;overflow:hidden;background:var(--bg,#fff)";
+    body.textContent = "";
+    editor.win = w;
+    // Closing the window with unsaved edits is the one way to lose them
+    // silently, so ask. The answer isn't observable here, hence the split:
+    // prompt on beforeunload, tear down on unload once it's actually going.
+    w.addEventListener("beforeunload", (e) => {
+      if (!editorDirty()) return;
+      e.preventDefault();
+      e.returnValue = "";
+    });
+    w.addEventListener("unload", () => {
+      editor.win = null;
+      closeEditor(true);
+    });
+    return { doc: w.document, host: body };
+  }
+
+  const dock = document.createElement("aside");
+  dock.id = "editor-dock";
+  $("#shell").appendChild(dock);
+  editor.dock = dock;
+  return { doc: document, host: dock };
+}
+
+async function openEditor(id) {
+  if (!state.text) { toast("Open a document first", true); return; }
+
+  const wanted = id || (editorOpen() ? editor.id : null) || activeHeadingId();
+  const range = rangeFor(wanted);
+  const text = sliceSection(state.text, range);
+
+  if (!editorOpen()) {
+    const { doc, host } = openEditorHost();
+    editor.ui = buildEditorUI(doc, host);
+  }
+
+  editor.id = range.id;
+  editor.base = state.text;
+  editor.loaded = text;
+  editor.confirmStale = false;
+  editor.ui.ta.value = text;
+  editor.ui.where.textContent = editorLabel(range.id);
+  editor.ui.where.title = editor.ui.where.textContent;
+  paintEditorTheme();
+  markEditorDirty();
+  announceWriteTarget();
+
+  editor.ui.ta.focus();
+  if (editor.win) editor.win.focus();
+}
+
+/** Gate for anything that replaces state.text out from under an open edit. */
+function discardEdits(question) {
+  if (!editorDirty()) return true;
+  return window.confirm("This section has unsaved changes. " + question);
+}
+
+function closeEditor(force) {
+  if (!editorOpen()) return;
+  if (!force && editorDirty() &&
+      !window.confirm("Discard unsaved changes to this section?")) return;
+
+  const win = editor.win;
+  if (editor.dock) editor.dock.remove();
+  editor.win = null;
+  editor.dock = null;
+  editor.ui = null;
+  editor.id = null;
+  if (win && !win.closed) win.close();
+}
+
+function markEditorDirty() {
+  if (!editorOpen()) return;
+  const d = editorDirty();
+  editor.ui.dirty.hidden = !d;
+  if (d) editor.confirmStale = false;   // a fresh edit re-arms the stale prompt
+}
+
+function editorStatus(msg, isError, action) {
+  if (!editorOpen()) return;
+  // Anything that resolves later checks this before writing, so a slow
+  // permission query cannot land on top of a save result.
+  editor.statusSeq = (editor.statusSeq || 0) + 1;
+  editor.ui.status.textContent = msg || "";
+  editor.ui.status.title = msg || "";
+  editor.ui.status.classList.toggle("err", !!isError);
+  editor.action = action ? action.run : null;
+  editor.ui.act.hidden = !action;
+  if (action) editor.ui.act.textContent = action.label;
+}
+
+/**
+ * Says what Ctrl+S will do, before a key is pressed. It only *queries* -- the
+ * permission prompt cannot be raised here, and the reason is worth writing down
+ * because it is not obvious and it wasted a day:
+ *
+ *   window.open() spends the click's transient user activation. By the time the
+ *   editor window exists, this page has none left, so requestPermission() fails
+ *   with SecurityError. Nor can the popup make up for it: activation is
+ *   per-browsing-context, and the handle belongs to this page, not the popup.
+ *   Measured, not assumed -- see tools/Probe-FileWrite.html, test 4.
+ *
+ * So the prompt is raised at save time instead, by whichever window the user
+ * actually pressed Ctrl+S in. See saveAs().
+ */
+function announceWriteTarget() {
+  const canSaveAs = typeof (editor.win || window).showSaveFilePicker === "function";
+
+  if (!state.handle) {
+    editorStatus(canSaveAs
+      ? "Not connected to a file — Ctrl+S will ask where to save"
+      : "This browser cannot write files — Ctrl+S will offer a download", !canSaveAs);
+    return;
+  }
+  if (typeof state.handle.queryPermission !== "function") {
+    editorStatus("Editing " + state.name + " — Ctrl+S saves");
+    return;
+  }
+
+  editorStatus("Editing " + state.name + "…");
+  const seq = editor.statusSeq;
+  const settle = (msg, isError) => {
+    if (editorOpen() && editor.statusSeq === seq) editorStatus(msg, isError);
+  };
+
+  state.handle.queryPermission({ mode: "readwrite" }).then((p) => {
+    settle(p === "granted"
+      ? "Editing " + state.name + " — Ctrl+S saves"
+      : "Editing " + state.name + " — Ctrl+S will ask for permission to write it");
+  }).catch((e) => {
+    settle("Could not check write access: " + (e.name || e.message), true);
+  });
+}
+
+/**
+ * Save As, raised on the window the gesture happened in.
+ *
+ * This is the reliable route: choosing a file in the dialog *is* the write
+ * grant, so there is no separate permission that can be refused. Calling it as
+ * editor.win.showSaveFilePicker() rather than window.showSaveFilePicker() is
+ * the whole trick -- the popup has the activation, this page does not.
+ *
+ * The handle it returns is adopted, so this costs one dialog per session and
+ * every save afterwards is silent.
+ */
+async function saveAs() {
+  const host = (editor.win && !editor.win.closed) ? editor.win : window;
+  if (typeof host.showSaveFilePicker !== "function") return { ok: false, why: "unsupported" };
+
+  try {
+    const opts = {
+      suggestedName: state.name || "document.md",
+      types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
+    };
+    // Opens in the file's own folder, so "save over the one I'm editing" is
+    // the default gesture rather than a hunt through the tree.
+    if (state.handle || state.dirAnchor) opts.startIn = state.handle || state.dirAnchor;
+
+    const handle = await host.showSaveFilePicker(opts);
+    const w = await handle.createWritable();
+    await w.write(state.text);
+    await w.close();
+
+    state.handle = handle;
+    state.dirAnchor = handle;
+    state.name = handle.name || state.name;
+    state.lastModified = (await handle.getFile()).lastModified;
+    updateSync();
+    render();
+    return { ok: true };
+  } catch (e) {
+    if (e && e.name === "AbortError") return { ok: false, why: "cancelled" };
+    return { ok: false, why: "error", error: e };
+  }
+}
+
+/** Follow the viewer's palette into the popup, including later theme changes. */
+function paintEditorTheme() {
+  if (!editor.win || editor.win.closed) return;
+  const from = getComputedStyle(document.documentElement);
+  const root = editor.win.document.documentElement;
+  for (const v of EDITOR_VARS) root.style.setProperty(v, from.getPropertyValue(v).trim());
+  root.style.colorScheme = activeMode();
+}
+
+/**
+ * Re-point the open editor after the document was re-rendered. The line
+ * numbers it was opened against are gone, so the range is recomputed from the
+ * heading id. An untouched editor simply reloads; one with edits in it is left
+ * alone and warned, because reloading would throw the edits away.
+ */
+function syncEditor() {
+  if (!editorOpen()) return;
+  if (editorDirty()) {
+    if (state.text !== editor.base) {
+      editorStatus("The document changed underneath this edit — saving will overwrite it", true);
+    }
+    return;
+  }
+  const range = rangeFor(editor.id);
+  editor.base = state.text;
+  editor.loaded = sliceSection(state.text, range);
+  editor.ui.ta.value = editor.loaded;
+  editor.ui.where.textContent = editorLabel(range.id);
+  markEditorDirty();
+}
+
+/**
+ * Write the whole file through the File System Access handle.
+ *
+ * Refuses when the file changed on disk since it was read: the edit was
+ * composed against lines that have since moved, so writing it back would
+ * overwrite whatever arrived in the meantime.
+ */
+async function writeFile(text) {
+  if (!state.handle) return { ok: false, why: "no-handle" };
+  try {
+    if (typeof state.handle.queryPermission === "function") {
+      let p = await state.handle.queryPermission({ mode: "readwrite" });
+      if (p !== "granted" && typeof state.handle.requestPermission === "function") {
+        // Succeeds when Ctrl+S was pressed in the viewer itself. From the
+        // editor's own window it throws SecurityError, because activation
+        // belongs to that window and this handle belongs to this page --
+        // caller falls back to saveAs(), which has no such problem.
+        try { p = await state.handle.requestPermission({ mode: "readwrite" }); }
+        catch (e) { return { ok: false, why: "no-activation" }; }
+      }
+      if (p !== "granted") return { ok: false, why: "denied" };
+    }
+    const before = await state.handle.getFile();
+    if (before.lastModified !== state.lastModified) return { ok: false, why: "stale" };
+
+    const w = await state.handle.createWritable();
+    await w.write(text);
+    await w.close();
+
+    // Adopt our own write, or the watch poll sees a changed file one second
+    // later and "reloads" the edit back over the top of itself.
+    state.lastModified = (await state.handle.getFile()).lastModified;
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, why: "error", error: e };
+  }
+}
+
+/** Last resort when there is no handle: hand the file back as a download. */
+function downloadMarkdown(text) {
+  const a = document.createElement("a");
+  const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+  a.href = URL.createObjectURL(blob);
+  a.download = state.name || "document.md";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/**
+ * Ctrl+S. Splices the section into the document first and re-renders, so the
+ * edit is always visible even when it cannot reach the disk, then writes.
+ */
+async function saveEditor() {
+  if (!editorOpen()) return;
+
+  const range = rangeFor(editor.id);
+  if (editor.id && range.id !== editor.id) {
+    editorStatus("That heading is gone from the document — close and reopen the editor", true);
+    return;
+  }
+  // Edits composed against an older version of the file: one keypress to
+  // reconsider, a second to go ahead anyway.
+  if (state.text !== editor.base && !editor.confirmStale) {
+    editor.confirmStale = true;
+    editorStatus("Document changed since you started — press Ctrl+S again to overwrite", true);
+    return;
+  }
+
+  const merged = spliceSection(state.text, range, editor.ui.ta.value);
+  const unchanged = merged === state.text;
+
+  state.text = merged;
+  const y = els.scroller.scrollTop;
+  render();                     // re-stamps heading lines; syncEditor() re-points us
+  els.scroller.scrollTop = y;
+  persist();
+
+  editor.base = state.text;
+  editor.loaded = editor.ui.ta.value;
+  editor.confirmStale = false;
+  markEditorDirty();
+
+  if (unchanged && state.handle) { editorStatus("No changes to save"); return; }
+
+  editorStatus("Saving…");
+  const res = await writeFile(state.text);
+  if (res.ok) {
+    editorStatus("Saved to " + (state.name || "file") + " at " + new Date().toLocaleTimeString());
+    toast("Saved " + (state.name || "document"));
+    return;
+  }
+  // The one failure Save As must not paper over: the bytes on disk are not the
+  // ones this edit was composed against, so writing would discard someone's
+  // work -- possibly the user's own, in their editor.
+  if (res.why === "stale") {
+    editorStatus("The file changed on disk — reload it before saving", true);
+    toast("Not saved: " + state.name + " changed on disk. Reload first.", true);
+    return;
+  }
+
+  // Everything else means "this handle cannot take the write": there is none,
+  // the browser will not upgrade it, or the prompt could not be raised from
+  // the window Ctrl+S was pressed in. Save As answers all three, because
+  // choosing the file in the dialog is itself the grant.
+  const because =
+    res.why === "denied" ? "Write access to " + state.name + " was refused" :
+    res.why === "error" ? "Could not write " + state.name + " (" + res.error.name + ")" :
+    res.why === "no-handle" ? "This document isn't connected to a file" :
+    "This edit needs a file to write to";
+
+  editorStatus(because + " — choose where to save…");
+  const alt = await saveAs();
+
+  if (alt.ok) {
+    editorStatus("Saved to " + state.name + " at " + new Date().toLocaleTimeString() +
+      " — later saves go straight there");
+    toast("Saved " + state.name);
+    return;
+  }
+
+  // Offer the download rather than performing it: a copy appearing in Downloads
+  // reads as a successful save until you check the file you meant to edit.
+  const offerDownload = { label: "Download instead", run: () => {
+    downloadMarkdown(state.text);
+    editorStatus("Downloaded " + (state.name || "document.md") + " — your original is untouched");
+  } };
+
+  if (alt.why === "cancelled") {
+    editorStatus(because + ", and saving was cancelled. The edit is in the view only.",
+      true, offerDownload);
+    return;
+  }
+  editorStatus(alt.why === "unsupported"
+    ? "This browser cannot write files from a page opened with file://"
+    : "Could not save: " + (alt.error && (alt.error.name || alt.error.message)),
+    true, offerDownload);
+  toast("Not saved — " + because.toLowerCase(), true);
+}
+
 /* ---------- persistence ---------- */
 
 const PERSIST_LIMIT = 2000000;
@@ -2326,6 +2980,7 @@ function refreshNow() {
 
 $("#btn-refresh").addEventListener("click", refreshNow);
 $("#btn-watch").addEventListener("click", toggleWatch);
+$("#mi-edit").addEventListener("click", () => openEditor(null));
 $("#mi-export").addEventListener("click", exportHtml);
 $("#mi-print").addEventListener("click", () => window.print());
 
@@ -2508,6 +3163,18 @@ window.addEventListener("keydown", (e) => {
     refreshNow();
     return;
   }
+  // Ctrl+E opens the section you are looking at; the editor's own host handles
+  // these too, for when focus is inside it.
+  if (mod && e.key.toLowerCase() === "e" && state.text) {
+    e.preventDefault();
+    openEditor(null);
+    return;
+  }
+  if (mod && e.key.toLowerCase() === "s" && editorOpen()) {
+    e.preventDefault();
+    saveEditor();
+    return;
+  }
 
   // Text-size keys are deliberately unmodified: Ctrl +/- must stay with the
   // browser's own zoom, which scales the toolbar and sidebar too.
@@ -2537,6 +3204,9 @@ window.addEventListener("keydown", (e) => {
 
 // Smooth-scroll TOC clicks without letting the hash pile up in history.
 els.tocList.addEventListener("click", (e) => {
+  const pencil = e.target.closest(".toc-edit");
+  if (pencil) { e.preventDefault(); openEditor(pencil.dataset.edit); return; }
+
   const a = e.target.closest("a");
   if (!a) return;
   e.preventDefault();
