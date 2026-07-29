@@ -2659,9 +2659,36 @@ function announceWriteTarget() {
   const canSaveAs = typeof (editor.win || window).showSaveFilePicker === "function";
 
   if (!state.handle) {
-    editorStatus(canSaveAs
-      ? "Not connected to a file — Ctrl+S will ask where to save"
-      : "This browser cannot write files — Ctrl+S will offer a download", !canSaveAs);
+    if (state.path) {
+      const connectAction = {
+        label: "Open file",
+        run: async () => {
+          const host = (editor.win && !editor.win.closed) ? editor.win : window;
+          if (typeof host.showOpenFilePicker !== "function") {
+            editorStatus("This browser cannot open files", true);
+            return;
+          }
+          try {
+            const [handle] = await host.showOpenFilePicker({
+              multiple: false,
+              types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
+            });
+            state.handle = handle;
+            state.dirAnchor = handle;
+            announceWriteTarget();
+          } catch (e) {
+            if (e && e.name !== "AbortError") {
+              editorStatus("Could not open file: " + (e.message || e.name), true);
+            }
+          }
+        }
+      };
+      editorStatus("File at " + state.path + " — open it to edit and save back", false, connectAction);
+    } else {
+      editorStatus(canSaveAs
+        ? "Not connected to a file — Ctrl+S will ask where to save"
+        : "This browser cannot write files — Ctrl+S will offer a download", !canSaveAs);
+    }
     return;
   }
   if (typeof state.handle.queryPermission !== "function") {
