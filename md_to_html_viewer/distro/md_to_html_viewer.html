@@ -2595,17 +2595,6 @@ async function openEditor(id) {
   editor.ui.where.title = editor.ui.where.textContent;
   paintEditorTheme();
   markEditorDirty();
-
-  // If this is a bootstrap file (opened via VS Code task), pre-fetch the handle
-  // before the user starts editing, so Ctrl+S saves straight to the file.
-  if (state.path && !state.handle && !editor.connectionPrompted) {
-    editor.connectionPrompted = true;
-    editorStatus("Getting ready — locating file…");
-    // Defer the picker prompt to next microtask so the UI paints first
-    await Promise.resolve();
-    await tryConnectBootstrapFile();
-  }
-
   announceWriteTarget();
 
   editor.ui.ta.focus();
@@ -2666,39 +2655,36 @@ function editorStatus(msg, isError, action) {
  * So the prompt is raised at save time instead, by whichever window the user
  * actually pressed Ctrl+S in. See saveAs().
  */
-/**
- * When a file is opened via bootstrap (VS Code task), try to get its handle
- * by prompting the user to open the file. This happens once, before editing.
- */
-async function tryConnectBootstrapFile() {
-  if (!state.path || state.handle) return;
-
-  const host = (editor.win && !editor.win.closed) ? editor.win : window;
-  if (typeof host.showOpenFilePicker !== "function") return;
-
-  try {
-    const [handle] = await host.showOpenFilePicker({
-      multiple: false,
-      types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
-    });
-    state.handle = handle;
-    state.dirAnchor = handle;
-    state.name = handle.name;
-    editorStatus("Connected to " + state.name);
-  } catch (e) {
-    if (e && e.name !== "AbortError") {
-      editorStatus("Could not locate file: " + (e.message || e.name), true);
-    }
-    // If cancelled or failed, just proceed without the handle
-  }
-}
-
 function announceWriteTarget() {
   const canSaveAs = typeof (editor.win || window).showSaveFilePicker === "function";
 
   if (!state.handle) {
     if (state.path) {
-      editorStatus("Not connected to the original file — Ctrl+S will ask where to save. Original: " + state.path, false);
+      const connectAction = {
+        label: "Open file",
+        run: async () => {
+          const host = (editor.win && !editor.win.closed) ? editor.win : window;
+          if (typeof host.showOpenFilePicker !== "function") {
+            editorStatus("This browser cannot open files", true);
+            return;
+          }
+          try {
+            const [handle] = await host.showOpenFilePicker({
+              multiple: false,
+              types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
+            });
+            state.handle = handle;
+            state.dirAnchor = handle;
+            state.name = handle.name;
+            announceWriteTarget();
+          } catch (e) {
+            if (e && e.name !== "AbortError") {
+              editorStatus("Could not open file: " + (e.message || e.name), true);
+            }
+          }
+        }
+      };
+      editorStatus("To save edits back to the original file, click Open file", false, connectAction);
     } else {
       editorStatus(canSaveAs
         ? "Not connected to a file — Ctrl+S will ask where to save"
