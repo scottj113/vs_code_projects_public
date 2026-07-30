@@ -482,17 +482,6 @@ body.no-toc #toc { display: none; }
 #docs-list a .doc-dir { display: block; font-size: 11px; color: var(--fg-faint); }
 #docs-list a.active .doc-dir { color: var(--accent); opacity: .85; }
 
-#browser { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
-#btn-browse-folder { width: 100%; padding: 8px; margin-bottom: 8px; }
-#browser-list { max-height: 300px; overflow-y: auto; }
-#browser-list button {
-  display: block; width: 100%; text-align: left; padding: 6px 9px;
-  border: none; background: none; color: inherit; font: inherit;
-  cursor: pointer; white-space: normal; overflow-wrap: anywhere;
-}
-#browser-list button:hover { background: var(--accent-soft); }
-#browser-list button.active { color: var(--accent); font-weight: 500; }
-
 /* Where the editor lands when it cannot have a window of its own -- a blocked
    popup, or a browser that won't let this page script one. A flex child rather
    than an overlay, so the document reflows beside it instead of hiding under it. */
@@ -911,11 +900,6 @@ body.dragging #drop { display: flex; }
 
 <div id="shell">
   <nav id="toc">
-    <div id="browser">
-      <p class="toc-head">Browse Folder</p>
-      <button type="button" id="btn-browse-folder">Select Folder…</button>
-      <div id="browser-list"></div>
-    </div>
     <div id="docs" hidden>
       <p class="toc-head">Documents <span id="docs-count"></span></p>
       <div id="docs-list"></div>
@@ -2157,92 +2141,6 @@ async function loadDirectory(dirHandle) {
         capped + " from " + dirHandle.name);
 }
 
-async function browseFolderAndDisplayFiles() {
-  if (typeof window.showDirectoryPicker !== "function") {
-    toast("Your browser doesn't support folder browsing", true);
-    return;
-  }
-  try {
-    const dirHandle = await window.showDirectoryPicker({ mode: "read" });
-    // Request permission
-    if (typeof dirHandle.queryPermission === "function") {
-      let p = await dirHandle.queryPermission({ mode: "read" });
-      if (p !== "granted" && typeof dirHandle.requestPermission === "function") {
-        p = await dirHandle.requestPermission({ mode: "read" });
-      }
-      if (p !== "granted") {
-        toast("Permission to read " + dirHandle.name + " was not granted.", true);
-        return;
-      }
-    }
-    toast("Scanning " + dirHandle.name + "…");
-
-    // Collect markdown files
-    const files = [];
-    const walkDir = async (handle, depth = 0) => {
-      if (depth > 8) return; // Don't go too deep
-      if (files.length >= 500) return; // Cap at 500 files
-
-      const skipFolders = new Set(["node_modules", "dist", "build", "target", "vendor", ".git", ".github"]);
-
-      try {
-        for await (const entry of handle.values()) {
-          if (skipFolders.has(entry.name) || entry.name.startsWith(".")) continue;
-          if (entry.kind === "file" && (entry.name.endsWith(".md") || entry.name.endsWith(".markdown"))) {
-            files.push({ name: entry.name, handle: entry });
-          } else if (entry.kind === "directory" && depth < 8) {
-            await walkDir(entry, depth + 1);
-          }
-        }
-      } catch (e) { /* permission denied on subfolder */ }
-    };
-
-    await walkDir(dirHandle);
-
-    if (!files.length) {
-      toast("No markdown files found in " + dirHandle.name, true);
-      return;
-    }
-
-    // Display files in browser-list
-    const list = $("#browser-list");
-    list.innerHTML = "";
-    files.forEach(file => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = file.name;
-      btn.title = file.name;
-      btn.addEventListener("click", async () => {
-        try {
-          const text = await file.handle.getFile().then(f => f.text());
-          state.name = file.name;
-          state.path = "";
-          state.text = text;
-          state.handle = file.handle;
-          state.dirAnchor = file.handle;
-          stopWatching();
-          updateSync();
-          render();
-          persist();
-          // Update active button
-          list.querySelectorAll("button").forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
-          toast("Loaded " + file.name);
-        } catch (err) {
-          toast("Could not read " + file.name + ": " + err.message, true);
-        }
-      });
-      list.appendChild(btn);
-    });
-
-    toast("Found " + files.length + " markdown file" + (files.length > 1 ? "s" : ""));
-  } catch (err) {
-    if (err && err.name !== "AbortError") {
-      toast("Could not browse folder: " + err.message, true);
-    }
-  }
-}
-
 /**
  * @param handlePromises  Optional promises captured synchronously from a drop's
  *   DataTransferItems. A real OS drag yields genuine FileSystemFileHandles with
@@ -2586,10 +2484,7 @@ function buildEditorUI(doc, host) {
   const status = mk("div", "mdv-status");
   const act = mk("button", "mdv-btn mdv-act");
   act.hidden = true;
-  const changePath = mk("button", "mdv-btn mdv-change-path", "📁");
-  changePath.hidden = true;
-  changePath.title = "Change project folder path";
-  foot.append(status, act, changePath);
+  foot.append(status, act);
 
   root.append(head, ta, foot);
   host.appendChild(root);
@@ -2598,23 +2493,13 @@ function buildEditorUI(doc, host) {
   close.addEventListener("click", () => closeEditor());
   selectFile.addEventListener("click", openFilePickerForEditor);
   act.addEventListener("click", () => { if (editor.action) editor.action(); });
-  changePath.addEventListener("click", async () => {
-    const newPath = prompt("Update project folder path:", localStorage.getItem("mdv:projectFolderPath") || "");
-    if (newPath !== null) {
-      localStorage.setItem("mdv:projectFolderPath", newPath);
-      try {
-        await navigator.clipboard.writeText(newPath);
-      } catch (e) {}
-      editorStatus("Project folder updated — " + newPath + " (copied to clipboard)", false);
-    }
-  });
   ta.addEventListener("input", () => markEditorDirty());
   // Bound to the host, not the document: the in-page pane shares its document
   // with the app, so a document-level listener would both outlive the pane and
   // fire for keystrokes aimed at the viewer.
   host.addEventListener("keydown", onEditorKey);
 
-  return { where, dirty, ta, status, act, changePath, selectFile };
+  return { where, dirty, ta, status, act, selectFile };
 }
 
 function onEditorKey(e) {
@@ -2722,23 +2607,6 @@ function markEditorDirty() {
   editor.ui.dirty.hidden = !d;
   if (d) editor.confirmStale = false;   // a fresh edit re-arms the stale prompt
 }
-async function getOrPromptProjectFolder() {
-  let stored = localStorage.getItem("mdv:projectFolderPath");
-  if (stored) return stored;
-
-  const path = prompt("Where is your project folder?\n\nPaste the full path here, then click Open file to navigate to your markdown file:");
-  if (!path) return null;
-
-  localStorage.setItem("mdv:projectFolderPath", path);
-  // Copy to clipboard for convenience
-  try {
-    await navigator.clipboard.writeText(path);
-  } catch (e) {
-    // Clipboard API may not be available; that's ok
-  }
-  return path;
-}
-
 async function openFilePickerForEditor() {
   if (!editorOpen()) return;
   const host = (editor.win && !editor.win.closed) ? editor.win : window;
@@ -3045,19 +2913,11 @@ async function saveEditor() {
 
   // For bootstrap files (VS Code task), require connecting to the file first
   if (state.path && !state.handle) {
-    const projectPath = await getOrPromptProjectFolder();
-    const pathInfo = projectPath ? " — " + projectPath + " (copied to clipboard)" : "";
-    editorStatus("Select your file first — use the 📋 icon in the header" + pathInfo, true);
-    if (editor.ui && editor.ui.changePath) {
-      editor.ui.changePath.hidden = false;
-    }
+    editorStatus("Select your file first — click the 📋 icon to choose", true);
     if (editor.ui && editor.ui.selectFile) {
       editor.ui.selectFile.hidden = false;
     }
     return;
-  }
-  if (editor.ui && editor.ui.changePath) {
-    editor.ui.changePath.hidden = true;
   }
   if (editor.ui && editor.ui.selectFile) {
     editor.ui.selectFile.hidden = true;
@@ -3204,7 +3064,6 @@ function exportHtml() {
    ========================================================================== */
 
 $("#btn-open2").addEventListener("click", () => openViaPicker(false));
-$("#btn-browse-folder").addEventListener("click", browseFolderAndDisplayFiles);
 function refreshNow() {
   // Spin regardless of outcome: the feedback is "your click registered",
   // which matters most when the file happens to be unchanged.
