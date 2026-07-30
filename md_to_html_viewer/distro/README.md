@@ -22,7 +22,7 @@ either.
 and a zoom that enlarges the entire interface — the toolbar grows along with the text,
 the layout reflows, tables break, and you end up with *fewer* words on screen than you
 started with. This scales the **document**, 65% to 260%, and leaves the furniture
-alone. More words, same layout, nothing rearranged.
+alone. More words, same layout, nothing rearranged--ok--ok
 
 **Contrast you choose.** Twelve palettes across light and dark, every one
 contrast-validated rather than eyeballed: body text holds 12:1 or better in all
