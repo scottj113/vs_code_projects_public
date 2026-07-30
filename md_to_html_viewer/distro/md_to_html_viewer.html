@@ -3322,6 +3322,11 @@ window.addEventListener("keydown", (e) => {
     openEditor(null);
     return;
   }
+  if (mod && e.key.toLowerCase() === "p" && state.text) {
+    e.preventDefault();
+    window.print();
+    return;
+  }
   if (mod && e.key.toLowerCase() === "s" && editorOpen()) {
     e.preventDefault();
     saveEditor();
