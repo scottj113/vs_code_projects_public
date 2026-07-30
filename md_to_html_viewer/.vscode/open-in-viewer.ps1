@@ -72,16 +72,24 @@ $bootstrapJson = @"
 }
 "@
 
-# Embed bootstrap data in HTML before the closing body tag
-$bootstrapScript = @"
+# Embed bootstrap data right after <body> opens (before boot function runs)
+# This ensures window.__MD_BOOTSTRAP__ is set before the boot() function executes
+$bodyStart = $html.IndexOf("<body")
+$bodyEnd = $html.IndexOf(">", $bodyStart) + 1
+
+if ($bodyStart -ge 0 -and $bodyEnd -gt $bodyStart) {
+    $bootstrapScript = @"
+
 <script>
 window.__MD_BOOTSTRAP__ = $bootstrapJson;
 </script>
-</body>
-</html>
-"@
 
-$html = $html -replace '</body>\s*</html>\s*$', $bootstrapScript
+"@
+    $html = $html.Substring(0, $bodyEnd) + $bootstrapScript + $html.Substring($bodyEnd)
+} else {
+    Write-Host "Error: Could not find <body> tag in HTML" -ForegroundColor Red
+    exit 1
+}
 
 # Write temp HTML file
 $tempHtml = Join-Path $tempDir "view.html"
