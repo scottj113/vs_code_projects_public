@@ -828,7 +828,7 @@ body.dragging #drop { display: flex; }
     <button type="button" class="name" id="doc-name" aria-haspopup="true" aria-expanded="false">No document</button>
     <div class="pop pop-left" id="pop-path" hidden>
       <p class="pop-head">Source file</p>
-      <input type="text" id="path-field" readonly spellcheck="false">
+      <input type="text" id="path-field" spellcheck="false" placeholder="Enter file path">
       <div class="pop-row">
         <button type="button" class="btn" id="btn-copy-path">Copy</button>
         <span class="hint" id="path-note"></span>
@@ -3220,6 +3220,15 @@ $("#doc-name").addEventListener("click", () => {
   const f = $("#path-field");
   f.focus();
   f.select();
+});
+
+$("#path-field").addEventListener("change", (e) => {
+  const newPath = e.target.value.trim();
+  if (newPath !== state.path) {
+    state.path = newPath;
+    persist();
+    toast("Path updated");
+  }
 });
 
 $("#btn-copy-path").addEventListener("click", () => {
