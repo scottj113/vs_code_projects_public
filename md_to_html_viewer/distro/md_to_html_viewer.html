@@ -2300,16 +2300,24 @@ async function openViaPicker(startWatching) {
 
 async function reloadFromHandle(force) {
   if (!state.handle) return false;
-  const file = await state.handle.getFile();
-  if (!force && file.lastModified === state.lastModified) return false;
-  state.text = await file.text();
-  state.name = file.name;
-  state.lastModified = file.lastModified;
-  const y = els.scroller.scrollTop;
-  render();
-  els.scroller.scrollTop = y;
-  persist();
-  return true;
+  try {
+    const file = await state.handle.getFile();
+    if (!force && file.lastModified === state.lastModified) return false;
+    state.text = await file.text();
+    state.name = file.name;
+    state.lastModified = file.lastModified;
+    const y = els.scroller.scrollTop;
+    render();
+    els.scroller.scrollTop = y;
+    persist();
+    return true;
+  } catch (err) {
+    // Handle became invalid (file moved, deleted, permission revoked, or browser limitation)
+    state.handle = null;
+    state.dirAnchor = null;
+    updateSync();
+    throw new Error("File handle is no longer valid: " + err.message);
+  }
 }
 
 /**
