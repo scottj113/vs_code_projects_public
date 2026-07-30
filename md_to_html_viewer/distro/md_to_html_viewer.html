@@ -3353,6 +3353,7 @@ $("#chk-raw").checked = state.rawHtml;
 updateSync();
 
 (function boot() {
+  console.log("=== BOOT FUNCTION START ===");
   // 1. Sidecar written by the VS Code task.
   const bs = window.__MD_BOOTSTRAP__;
   console.log("Boot function running. window.__MD_BOOTSTRAP__:", bs);
@@ -3361,7 +3362,8 @@ updateSync();
     // The only route that knows the source path: the task has it and
     // passes it through, where drop and picker cannot.
     loadText(bs.text, bs.name || "", bs.path || "");
-    console.log("loadText called");
+    console.log("loadText called successfully");
+    console.log("=== BOOT FUNCTION END (bootstrap loaded) ===");
     return;
   }
   console.log("No bootstrap detected, checking other routes...");
@@ -3396,12 +3398,17 @@ updateSync();
 
   // Show VS Code welcome popup if opened from VS Code task
   console.log("Boot check - state.path:", state.path, "state.handle:", state.handle);
+  console.log("state object keys:", Object.keys(state));
   if (state.path && !state.handle) {
-    console.log("Showing VS Code popup");
-    $("#vscode-welcome").hidden = false;
+    console.log("Condition TRUE: showing VS Code popup");
+    const popup = $("#vscode-welcome");
+    console.log("Popup element:", popup);
+    popup.hidden = false;
+    console.log("Popup hidden set to false, should now be visible");
   } else {
-    console.log("Not showing popup: path=" + !!state.path + " handle=" + !!state.handle);
+    console.log("Condition FALSE: not showing popup. path=" + !!state.path + " handle=" + !!state.handle);
   }
+  console.log("=== BOOT FUNCTION END ===");
 })();
 
 })();
