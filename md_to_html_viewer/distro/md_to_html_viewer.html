@@ -2313,10 +2313,8 @@ async function reloadFromHandle(force) {
     return true;
   } catch (err) {
     // Handle became invalid (file moved, deleted, permission revoked, or browser limitation)
-    state.handle = null;
-    state.dirAnchor = null;
-    updateSync();
-    throw new Error("File handle is no longer valid: " + err.message);
+    // Don't throw - just return false so watch timer can continue trying
+    return false;
   }
 }
 
