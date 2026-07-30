@@ -911,7 +911,7 @@ body.dragging #drop { display: flex; }
 
 <div id="shell">
   <nav id="toc">
-    <div id="browser" hidden>
+    <div id="browser">
       <p class="toc-head">Browse Folder</p>
       <button type="button" id="btn-browse-folder">Select Folder…</button>
       <div id="browser-list"></div>
@@ -2235,8 +2235,6 @@ async function browseFolderAndDisplayFiles() {
       list.appendChild(btn);
     });
 
-    // Show browser section
-    $("#browser").hidden = false;
     toast("Found " + files.length + " markdown file" + (files.length > 1 ? "s" : ""));
   } catch (err) {
     if (err && err.name !== "AbortError") {
