@@ -2940,8 +2940,12 @@ async function saveEditor() {
   // ones this edit was composed against, so writing would discard someone's
   // work -- possibly the user's own, in their editor.
   if (res.why === "stale") {
-    editorStatus("The file changed on disk — reload it before saving", true);
-    toast("Not saved: " + state.name + " changed on disk. Reload first.", true);
+    // File changed on disk. Update our timestamp so next save can proceed if user wants to overwrite.
+    try {
+      state.lastModified = (await state.handle.getFile()).lastModified;
+    } catch (e) { /* handle error */ }
+    editorStatus("The file changed on disk — reload it before saving, or click Save again to overwrite", true);
+    toast("File changed on disk. Reload first, or Save again to overwrite.", true);
     return;
   }
 
