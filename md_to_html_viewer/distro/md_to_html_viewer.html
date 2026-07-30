@@ -541,6 +541,31 @@ body.dragging #drop { display: flex; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 #toast.err { border-color: #d9534f; color: #d9534f; }
 
+#vscode-welcome {
+  position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+}
+#vscode-welcome[hidden] { display: none; }
+.vscode-welcome-overlay {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+.vscode-welcome-box {
+  position: relative; background: var(--bg-raised); border: 1px solid var(--border);
+  border-radius: 12px; padding: 32px; max-width: 420px; box-shadow: var(--shadow), 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+.vscode-welcome-box h2 {
+  margin: 0 0 12px 0; font-size: 18px; font-weight: 600; color: var(--fg);
+}
+.vscode-welcome-box p {
+  margin: 0 0 24px 0; font-size: 14px; color: var(--fg-muted); line-height: 1.5;
+}
+.vscode-welcome-buttons {
+  display: flex; gap: 12px; justify-content: flex-end;
+}
+.vscode-welcome-buttons .btn {
+  padding: 8px 16px; font-size: 14px;
+}
+
 #file-input { display: none; }
 
 /* ---------- file-sync pill ---------- */
@@ -930,6 +955,19 @@ body.dragging #drop { display: flex; }
 <div id="drop"><span>Drop markdown here</span></div>
 <div id="toast"></div>
 <input type="file" id="file-input" accept=".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain" multiple>
+
+<!-- VS Code welcome popup -->
+<div id="vscode-welcome" hidden>
+  <div class="vscode-welcome-overlay"></div>
+  <div class="vscode-welcome-box">
+    <h2>Opened from VS Code</h2>
+    <p>You opened this file from VS Code. To edit sections here, connect the file with one click. Or just read and auto-watch from VS Code.</p>
+    <div class="vscode-welcome-buttons">
+      <button type="button" class="btn" id="btn-vscode-connect">Connect File</button>
+      <button type="button" class="btn" id="btn-vscode-cancel">Just Watch</button>
+    </div>
+  </div>
+</div>
 
 <!-- Optional sidecar written by the VS Code task; absent in normal use. -->
 <script src="md-bootstrap.js" onerror="window.__MD_BOOTSTRAP_MISSING__=1"></script>
@@ -3071,6 +3109,16 @@ function exportHtml() {
    ========================================================================== */
 
 $("#btn-open2").addEventListener("click", () => openViaPicker(false));
+
+$("#btn-vscode-connect").addEventListener("click", async () => {
+  $("#vscode-welcome").hidden = true;
+  await openFilePickerForEditor();
+});
+
+$("#btn-vscode-cancel").addEventListener("click", () => {
+  $("#vscode-welcome").hidden = true;
+  toast("Ready to watch file for changes from VS Code");
+});
 function refreshNow() {
   // Spin regardless of outcome: the feedback is "your click registered",
   // which matters most when the file happens to be unchanged.
@@ -3380,6 +3428,11 @@ updateSync();
     return;
   }
   render();
+
+  // Show VS Code welcome popup if opened from VS Code task
+  if (state.path && !state.handle) {
+    $("#vscode-welcome").hidden = false;
+  }
 })();
 
 })();
