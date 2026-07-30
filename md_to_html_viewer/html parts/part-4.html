@@ -1,0 +1,332 @@
+/* ==========================================================================
+   3. Sanitizer (only needed when raw HTML is enabled)
+   ========================================================================== */
+
+function sanitize(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  const doomed = [];
+  let el;
+  while ((el = walker.nextNode())) {
+    const tag = el.tagName.toLowerCase();
+    if (tag === "input" && el.type === "checkbox" && el.disabled) continue; // our task-list boxes
+    if (!OK_TAGS.has(tag)) { doomed.push(el); continue; }
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      if (name.startsWith("data-")) continue;
+      if (!OK_ATTRS.has(name)) { el.removeAttribute(attr.name); continue; }
+      if (URL_ATTRS.has(name)) {
+        const clean = safeUrl(attr.value);
+        if (clean !== attr.value) el.setAttribute(attr.name, clean);
+      }
+    }
+  }
+  // Unwrap rather than delete, so text content survives a stray <script>-less tag.
+  for (const node of doomed) {
+    if (/^(script|style|iframe|object|embed|form|input|button|link|meta|base)$/i.test(node.tagName)) node.remove();
+    else node.replaceWith(...node.childNodes);
+  }
+}
+
+/* ==========================================================================
+   4. Application state + rendering pipeline
+   ========================================================================== */
+
+const state = {
+  name: "",
+  path: "",           // full source path; only the VS Code task can supply it
+  text: "",
+  handle: null,      // FileSystemFileHandle when opened via the File System Access API
+  dirAnchor: null,   // last handle this session, kept only to seed the picker's startIn
+  lastModified: 0,
+  assets: null,      // Map<lowercased filename, objectURL>
+  watchTimer: null,
+  mermaidSources: [],
+  rawHtml: localStorage.getItem("mdv:rawHtml") === "1",
+  showToc: localStorage.getItem("mdv:toc") !== "0",
+  fontSize: Number(localStorage.getItem("mdv:fontSize")) || 15.5,
+  bold: localStorage.getItem("mdv:bold") === "1",
+  // Appearance is two independent axes. Family and depth are remembered per
+  // mode, so flipping Light <-> Dark returns you to the exact look you last
+  // chose for that mode rather than resetting.
+  appearance: loadAppearance(),
+};
+
+const FAMILIES = { light: ["white", "beige"], dark: ["blue", "slate"] };
+
+const OS_DARK = window.matchMedia("(prefers-color-scheme: dark)");
+
+function loadAppearance() {
+  const d = { auto: false, mode: "light",
+              family: { light: "beige", dark: "blue" }, level: { light: 1, dark: 1 } };
+  try {
+    const s = JSON.parse(localStorage.getItem("mdv:appearance") || "null");
+    if (!s) return d;
+    const mode = s.mode === "dark" ? "dark" : "light";
+    // "grey" was renamed to "slate"; carry old saved preferences across.
+    if (s.family && s.family.dark === "grey") s.family.dark = "slate";
+    const pick = (m) => FAMILIES[m].includes((s.family || {})[m]) ? s.family[m] : d.family[m];
+    const lvl = (m) => [1, 2, 3].includes(Number((s.level || {})[m])) ? Number(s.level[m]) : 1;
+    return { auto: s.auto === true, mode,
+             family: { light: pick("light"), dark: pick("dark") },
+             level: { light: lvl("light"), dark: lvl("dark") } };
+  } catch (e) { return d; }
+}
+
+/**
+ * The mode actually in force. `appearance.mode` is the *pinned* choice; when
+ * "Match system" is on the OS wins, but the pinned value is kept so unticking
+ * returns you to what you had rather than to a default.
+ */
+function activeMode() {
+  const a = state.appearance;
+  return a.auto ? (OS_DARK.matches ? "dark" : "light") : a.mode;
+}
+
+const BASE_FONT = 15.5;
+const MIN_FONT = 10;
+const MAX_FONT = 40;
+
+/** Push the reading preferences onto the document. Cheap enough to call freely. */
+function applyDocStyle() {
+  const size = Math.min(MAX_FONT, Math.max(MIN_FONT, state.fontSize));
+  state.fontSize = size;
+  const root = document.documentElement.style;
+  root.setProperty("--doc-size", size + "px");
+  root.setProperty("--doc-zoom", (size / BASE_FONT).toFixed(4));
+  root.setProperty("--doc-weight", state.bold ? "600" : "400");
+  root.setProperty("--doc-strong", state.bold ? "800" : "650");
+
+  const pct = Math.round((size / BASE_FONT) * 100);
+  $("#btn-smaller").disabled = size <= MIN_FONT;
+  $("#btn-bigger").disabled = size >= MAX_FONT;
+  $("#font-readout").textContent = pct + "%";
+  $("#btn-font-reset").disabled = size === BASE_FONT;
+  $("#chk-bold").checked = state.bold;
+  return pct;
+}
+
+function nudgeFont(delta) {
+  // Step proportionally so it feels even at both ends of the range.
+  const step = state.fontSize < 20 ? 1 : state.fontSize < 30 ? 2 : 3;
+  state.fontSize = Math.round((state.fontSize + delta * step) * 2) / 2;
+  const pct = applyDocStyle();
+  localStorage.setItem("mdv:fontSize", String(state.fontSize));
+  toast("Text " + pct + "%" + (pct === 100 ? " (default)" : ""));
+}
+
+const els = {
+  doc: $("#doc"), tocList: $("#toc-list"), name: $("#doc-name"), meta: $("#doc-meta"),
+  toast: $("#toast"), fileInput: $("#file-input"), scroller: $("#scroller"),
+};
+
+let toastTimer = null;
+function toast(msg, isError) {
+  els.toast.textContent = msg;
+  els.toast.classList.toggle("err", !!isError);
+  els.toast.classList.add("show");
+  clearTimeout(toastTimer);
+  // Doubled from the original 2400/5200: several of these carry instructions
+  // ("paste the path into the dialog") that were gone before they were read.
+  toastTimer = setTimeout(() => els.toast.classList.remove("show"), isError ? 10400 : 4800);
+}
+
+const isDark = () => activeMode() === "dark";
+
+/** mode + family + depth collapse into one [data-pal] value on <html>. */
+function currentPal() {
+  const a = state.appearance, m = activeMode();
+  return a.family[m] + "-" + a.level[m];
+}
+
+function applyTheme(rerenderDiagrams) {
+  const a = state.appearance;
+  const m = activeMode();
+  document.documentElement.setAttribute("data-pal", currentPal());
+
+  // Sync the controls to state. Family and depth always follow the mode in
+  // force, so they stay meaningful while "Match system" is driving.
+  $("#chk-auto").checked = a.auto;
+  $("#auto-hint").textContent = a.auto ? "currently " + m : "";
+  for (const btn of $("#seg-mode").children) {
+    btn.setAttribute("aria-pressed", String(btn.dataset.v === m));
+  }
+  for (const btn of $("#seg-family").children) {
+    // Family options are mode-specific: White/Beige are meaningless in dark
+    // mode and vice versa, so the irrelevant pair is removed rather than
+    // shown disabled.
+    btn.hidden = btn.dataset.mode !== m;
+    btn.setAttribute("aria-pressed", String(btn.dataset.v === a.family[m]));
+  }
+  for (const btn of $("#seg-level").children) {
+    btn.setAttribute("aria-pressed", String(Number(btn.dataset.v) === a.level[m]));
+  }
+
+  try { localStorage.setItem("mdv:appearance", JSON.stringify(a)); } catch (e) { /* quota */ }
+  if (rerenderDiagrams && mermaidReady) renderMermaid();
+}
+
+function setAppearance(patch) {
+  const a = state.appearance;
+  const before = activeMode();
+  if (patch.auto !== undefined) {
+    a.auto = patch.auto;
+    // Unticking pins whatever is on screen, so nothing jumps underneath you.
+    if (!a.auto) a.mode = before;
+  }
+  // Picking a mode explicitly is an override: it releases "Match system".
+  if (patch.mode) { a.auto = false; a.mode = patch.mode; }
+  const m = activeMode();
+  if (patch.family) a.family[m] = patch.family;
+  if (patch.level) a.level[m] = Number(patch.level);
+  // Mermaid bakes its light/dark theme into the rendered SVG, so it only needs
+  // re-rendering when the mode actually flips.
+  applyTheme(before !== m);
+}
+
+/**
+ * Fills the source-file panel. The full path is only ever known when the
+ * document arrived through the VS Code task, which passes it in the sidecar --
+ * browsers withhold it from both dropped files and the file picker, so for
+ * every other route the best available answer is the bare filename.
+ */
+function updatePathPanel() {
+  const field = $("#path-field");
+  const note = $("#path-note");
+  const known = !!state.path;
+  field.value = state.path || state.name || "";
+  note.textContent = known
+    ? ""
+    : state.name
+      ? "Filename only — browsers don't reveal full paths to a web page. " +
+        "Open from VS Code to get the path."
+      : "Pasted text has no source file.";
+  $("#btn-copy-path").disabled = !field.value;
+  els.name.disabled = !state.text;
+  els.name.title = state.text
+    ? (known ? state.path : "Click to copy the filename") + "\nClick for the source path"
+    : "";
+}
+
+function render() {
+  if (!state.text) {
+    document.body.classList.add("blank");
+    els.name.textContent = "No document";
+    els.meta.textContent = "";
+    for (const id of ["mi-export", "mi-print"]) $("#" + id).disabled = true;
+    updatePathPanel();
+    updateSync();
+    return;
+  }
+
+  const { html, ctx } = parse(state.text, { rawHtml: state.rawHtml, assets: state.assets });
+  state.mermaidSources = ctx.mermaid;
+
+  els.doc.innerHTML = html;
+  if (state.rawHtml) sanitize(els.doc);
+
+  document.body.classList.remove("blank");
+  buildToc(ctx.headings);
+  wireCodeCopy();
+  renderMermaid();
+
+  const words = els.doc.textContent.trim().split(/\s+/).filter(Boolean).length;
+  els.name.textContent = state.name || "Pasted markdown";
+  updatePathPanel();
+  els.meta.textContent = words.toLocaleString() + " words · ~" + Math.max(1, Math.round(words / 220)) + " min";
+
+  $("#mi-export").disabled = false;
+  $("#mi-print").disabled = false;
+  updateSync();
+
+  if (location.hash && !location.hash.startsWith("#md64=")) {
+    const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (target) target.scrollIntoView();
+  }
+}
+
+function buildToc(headings) {
+  const usable = headings.filter((h) => h.level >= 1 && h.level <= 4);
+  if (usable.length < 2) {
+    els.tocList.innerHTML = '<p class="empty">No headings</p>';
+    observeHeadings([]);
+    return;
+  }
+  const min = Math.min(...usable.map((h) => h.level));
+  els.tocList.innerHTML = usable.map((h) =>
+    '<a href="#' + esc(h.id) + '" class="lv' + (h.level - min + 1) + '" data-id="' + esc(h.id) + '">' +
+    esc(h.text.replace(/[*_`~]/g, "")) + "</a>").join("");
+  observeHeadings(usable.map((h) => h.id));
+}
+
+let headingObserver = null;
+function observeHeadings(ids) {
+  if (headingObserver) headingObserver.disconnect();
+  if (!ids.length) return;
+  const links = new Map(
+    Array.from(els.tocList.querySelectorAll("a")).map((a) => [a.dataset.id, a]));
+  const visible = new Set();
+
+  headingObserver = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) visible.add(e.target.id); else visible.delete(e.target.id);
+    }
+    const first = ids.find((id) => visible.has(id));
+    for (const [id, a] of links) a.classList.toggle("active", id === first);
+    const active = links.get(first);
+    if (active && document.activeElement !== active) {
+      const box = els.tocList.parentElement.getBoundingClientRect();
+      const r = active.getBoundingClientRect();
+      if (r.top < box.top || r.bottom > box.bottom) active.scrollIntoView({ block: "nearest" });
+    }
+  }, { rootMargin: "-58px 0px -70% 0px", threshold: 0 });
+
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el) headingObserver.observe(el);
+  }
+}
+
+function wireCodeCopy() {
+  for (const btn of els.doc.querySelectorAll(".code-copy")) {
+    btn.addEventListener("click", () => {
+      const code = btn.parentElement.querySelector("code");
+      navigator.clipboard.writeText(code.textContent).then(
+        () => { btn.textContent = "Copied"; setTimeout(() => (btn.textContent = "Copy"), 1200); },
+        () => toast("Clipboard blocked by the browser", true));
+    });
+  }
+}
+
+let mermaidReady = false;
+function renderMermaid() {
+  const blocks = els.doc.querySelectorAll(".mermaid-block");
+  if (!blocks.length) return;
+  if (typeof window.mermaid === "undefined") {
+    for (const b of blocks) b.innerHTML = '<div class="mermaid-error">mermaid bundle not loaded</div>';
+    return;
+  }
+  window.mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "strict",
+    theme: isDark() ? "dark" : "default",
+    fontFamily: "inherit",
+  });
+  mermaidReady = true;
+
+  blocks.forEach((el, n) => {
+    const code = state.mermaidSources[Number(el.dataset.mermaid)] || "";
+    const id = "mmd-" + Date.now().toString(36) + "-" + n;
+    Promise.resolve()
+      .then(() => window.mermaid.render(id, code))
+      .then(({ svg }) => { el.innerHTML = svg; })
+      .catch((err) => {
+        el.innerHTML = '<div class="mermaid-error">Mermaid error: ' +
+          esc(err && err.message ? err.message : String(err)) + "</div>" +
+          codeBlock(code, "mermaid");
+        // mermaid leaves its measuring sandbox behind when a parse fails
+        const orphan = document.getElementById("d" + id) || document.getElementById(id);
+        if (orphan) orphan.remove();
+      });
+  });
+}
+
