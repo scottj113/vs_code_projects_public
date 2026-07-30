@@ -896,6 +896,8 @@ body.dragging #drop { display: flex; }
       <button type="button" class="mi" id="mi-edit" disabled>Edit this section&hellip; <kbd>Ctrl+E</kbd></button>
       <button type="button" class="mi" id="mi-export" disabled>Export standalone HTML&hellip;</button>
       <button type="button" class="mi" id="mi-print" disabled>Print / Save as PDF <kbd>Ctrl+P</kbd></button>
+      <hr>
+      <button type="button" class="mi" id="mi-clear-cache">Clear cache and settings&hellip;</button>
     </div>
   </div>
 </div>
@@ -3056,6 +3058,25 @@ function restore() {
   return false;
 }
 
+function clearCache() {
+  const confirmed = confirm("Clear all cache and settings?\n\nThis will reset text size, appearance, saved documents, project folder path, and other stored preferences.");
+  if (!confirmed) return;
+
+  // Clear all localStorage keys that belong to this app (mdv: prefix)
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith("mdv:")) {
+      keys.push(key);
+    }
+  }
+  keys.forEach(key => localStorage.removeItem(key));
+
+  toast("Cache and settings cleared");
+  // Reload to apply defaults
+  setTimeout(() => window.location.reload(), 500);
+}
+
 /* ---------- export ---------- */
 
 function exportHtml() {
@@ -3117,6 +3138,7 @@ $("#btn-watch").addEventListener("click", toggleWatch);
 $("#mi-edit").addEventListener("click", () => openEditor(null));
 $("#mi-export").addEventListener("click", exportHtml);
 $("#mi-print").addEventListener("click", () => window.print());
+$("#mi-clear-cache").addEventListener("click", clearCache);
 
 $("#btn-smaller").addEventListener("click", () => nudgeFont(-1));
 $("#btn-bigger").addEventListener("click", () => nudgeFont(1));
