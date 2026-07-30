@@ -2505,7 +2505,10 @@ function buildEditorUI(doc, host) {
   const status = mk("div", "mdv-status");
   const act = mk("button", "mdv-btn mdv-act");
   act.hidden = true;
-  foot.append(status, act);
+  const changePath = mk("button", "mdv-btn mdv-change-path", "📁");
+  changePath.hidden = true;
+  changePath.title = "Change project folder path";
+  foot.append(status, act, changePath);
 
   root.append(head, ta, foot);
   host.appendChild(root);
@@ -2513,13 +2516,23 @@ function buildEditorUI(doc, host) {
   save.addEventListener("click", () => saveEditor());
   close.addEventListener("click", () => closeEditor());
   act.addEventListener("click", () => { if (editor.action) editor.action(); });
+  changePath.addEventListener("click", async () => {
+    const newPath = prompt("Update project folder path:", localStorage.getItem("mdv:projectFolderPath") || "");
+    if (newPath !== null) {
+      localStorage.setItem("mdv:projectFolderPath", newPath);
+      try {
+        await navigator.clipboard.writeText(newPath);
+      } catch (e) {}
+      editorStatus("Project folder updated — " + newPath + " (copied to clipboard)", false);
+    }
+  });
   ta.addEventListener("input", () => markEditorDirty());
   // Bound to the host, not the document: the in-page pane shares its document
   // with the app, so a document-level listener would both outlive the pane and
   // fire for keystrokes aimed at the viewer.
   host.addEventListener("keydown", onEditorKey);
 
-  return { where, dirty, ta, status, act };
+  return { where, dirty, ta, status, act, changePath };
 }
 
 function onEditorKey(e) {
@@ -2626,6 +2639,22 @@ function markEditorDirty() {
   const d = editorDirty();
   editor.ui.dirty.hidden = !d;
   if (d) editor.confirmStale = false;   // a fresh edit re-arms the stale prompt
+}
+async function getOrPromptProjectFolder() {
+  let stored = localStorage.getItem("mdv:projectFolderPath");
+  if (stored) return stored;
+
+  const path = prompt("Where is your project folder?\n\nPaste the full path here, then click Open file to navigate to your markdown file:");
+  if (!path) return null;
+
+  localStorage.setItem("mdv:projectFolderPath", path);
+  // Copy to clipboard for convenience
+  try {
+    await navigator.clipboard.writeText(path);
+  } catch (e) {
+    // Clipboard API may not be available; that's ok
+  }
+  return path;
 }
 
 function editorStatus(msg, isError, action) {
@@ -2910,7 +2939,9 @@ async function saveEditor() {
 
   // For bootstrap files (VS Code task), require connecting to the file first
   if (state.path && !state.handle) {
-    editorStatus("Select your file first — click 'Open file' above", false, {
+    const projectPath = await getOrPromptProjectFolder();
+    const pathInfo = projectPath ? " — " + projectPath + " (copied to clipboard)" : "";
+    editorStatus("Select your file first — click 'Open file' above" + pathInfo, false, {
       label: "Open file",
       run: async () => {
         const host = (editor.win && !editor.win.closed) ? editor.win : window;
@@ -2935,7 +2966,13 @@ async function saveEditor() {
         }
       }
     });
+    if (editor.ui && editor.ui.changePath) {
+      editor.ui.changePath.hidden = false;
+    }
     return;
+  }
+  if (editor.ui && editor.ui.changePath) {
+    editor.ui.changePath.hidden = true;
   }
 
   editorStatus("Saving…");
