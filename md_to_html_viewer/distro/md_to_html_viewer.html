@@ -960,11 +960,15 @@ body.dragging #drop { display: flex; }
 <div id="vscode-welcome" hidden>
   <div class="vscode-welcome-overlay"></div>
   <div class="vscode-welcome-box">
-    <h2>Opened from VS Code</h2>
-    <p>You opened this file from VS Code. To edit sections here, connect the file with one click. Or just read and auto-watch from VS Code.</p>
+    <h2>Viewing from VS Code</h2>
+    <p><strong>Edit in VS Code,</strong> then:</p>
+    <ul style="margin: 0 0 16px 0; padding-left: 20px; color: var(--fg-muted); font-size: 14px;">
+      <li>Click <strong>↻ Refresh</strong> (Ctrl+R) to see your changes, or</li>
+      <li>Click <strong>Watch</strong> to auto-refresh as you save</li>
+    </ul>
+    <p style="margin: 16px 0 0 0; color: var(--fg-muted); font-size: 12px;">This viewer is read-only when opened from VS Code. Edit in your text editor.</p>
     <div class="vscode-welcome-buttons">
-      <button type="button" class="btn" id="btn-vscode-connect">Connect File</button>
-      <button type="button" class="btn" id="btn-vscode-cancel">Just Watch</button>
+      <button type="button" class="btn" id="btn-vscode-close">Got it</button>
     </div>
   </div>
 </div>
@@ -3075,14 +3079,8 @@ function exportHtml() {
 
 $("#btn-open2").addEventListener("click", () => openViaPicker(false));
 
-$("#btn-vscode-connect").addEventListener("click", async () => {
+$("#btn-vscode-close").addEventListener("click", () => {
   $("#vscode-welcome").hidden = true;
-  await openFilePickerForEditor();
-});
-
-$("#btn-vscode-cancel").addEventListener("click", () => {
-  $("#vscode-welcome").hidden = true;
-  toast("Ready to watch file for changes from VS Code");
 });
 function refreshNow() {
   // Spin regardless of outcome: the feedback is "your click registered",
@@ -3353,20 +3351,14 @@ $("#chk-raw").checked = state.rawHtml;
 updateSync();
 
 (function boot() {
-  console.log("=== BOOT FUNCTION START ===");
   // 1. Sidecar written by the VS Code task.
   const bs = window.__MD_BOOTSTRAP__;
-  console.log("Boot function running. window.__MD_BOOTSTRAP__:", bs);
   if (bs && typeof bs.text === "string") {
-    console.log("Bootstrap detected, calling loadText with name:", bs.name, "path:", bs.path);
     // The only route that knows the source path: the task has it and
     // passes it through, where drop and picker cannot.
     loadText(bs.text, bs.name || "", bs.path || "");
-    console.log("loadText called successfully");
-    console.log("=== BOOT FUNCTION END (bootstrap loaded) ===");
     return;
   }
-  console.log("No bootstrap detected, checking other routes...");
   // 2. Hash payload: #name=<uri-encoded>&md64=<base64 or base64url, utf-8>
   const hash = location.hash.slice(1);
   const payload = hash.match(/(?:^|&)md64=([^&]*)/);
@@ -3396,19 +3388,10 @@ updateSync();
   }
   render();
 
-  // Show VS Code welcome popup if opened from VS Code task
-  console.log("Boot check - state.path:", state.path, "state.handle:", state.handle);
-  console.log("state object keys:", Object.keys(state));
+  // Show VS Code workflow popup if opened from VS Code task (has path but no handle)
   if (state.path && !state.handle) {
-    console.log("Condition TRUE: showing VS Code popup");
-    const popup = $("#vscode-welcome");
-    console.log("Popup element:", popup);
-    popup.hidden = false;
-    console.log("Popup hidden set to false, should now be visible");
-  } else {
-    console.log("Condition FALSE: not showing popup. path=" + !!state.path + " handle=" + !!state.handle);
+    $("#vscode-welcome").hidden = false;
   }
-  console.log("=== BOOT FUNCTION END ===");
 })();
 
 })();
