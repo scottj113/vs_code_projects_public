@@ -2959,10 +2959,7 @@ async function saveEditor() {
   if (state.path && !state.handle) {
     const projectPath = await getOrPromptProjectFolder();
     const pathInfo = projectPath ? " — " + projectPath + " (copied to clipboard)" : "";
-    editorStatus("Select your file first — click 'Open file' above" + pathInfo, false, {
-      label: "Open file",
-      run: openFilePickerForEditor
-    });
+    editorStatus("Select your file first — use the 📋 icon in the header" + pathInfo, true);
     if (editor.ui && editor.ui.changePath) {
       editor.ui.changePath.hidden = false;
     }
