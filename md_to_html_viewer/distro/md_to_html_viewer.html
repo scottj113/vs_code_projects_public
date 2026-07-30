@@ -2703,45 +2703,6 @@ function editorStatus(msg, isError, action) {
  * So the prompt is raised at save time instead, by whichever window the user
  * actually pressed Ctrl+S in. See saveAs().
  */
-/**
- * Auto-connect bootstrap files to their original file handles.
- * Waits for the first user interaction before opening the picker,
- * since the File System Access API requires user activation.
- */
-function editorAutoConnectBootstrapFile() {
-  if (!state.path || state.handle) return;
-  if (typeof window.showOpenFilePicker !== "function") return;
-
-  let attempted = false;
-
-  const attempt = async () => {
-    if (attempted) return;
-    attempted = true;
-    document.removeEventListener("click", attempt);
-    document.removeEventListener("keydown", attempt);
-
-    try {
-      const [handle] = await window.showOpenFilePicker({
-        multiple: false,
-        types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
-      });
-      state.handle = handle;
-      state.dirAnchor = handle;
-      state.name = handle.name;
-      toast("Connected to " + handle.name);
-    } catch (e) {
-      if (e && e.name !== "AbortError") {
-        toast("Could not locate file (" + (e.name || "unknown error") + ") — try the editor's 'Open file' button", true);
-      }
-    }
-  };
-
-  // Wait for first user interaction (click or key press)
-  document.addEventListener("click", attempt, { once: true, capture: true });
-  document.addEventListener("keydown", attempt, { once: true, capture: true });
-  toast("Click anywhere to select your file");
-}
-
 function announceWriteTarget() {
   const canSaveAs = typeof (editor.win || window).showSaveFilePicker === "function";
 
@@ -3394,10 +3355,6 @@ updateSync();
     // The only route that knows the source path: the task has it and
     // passes it through, where drop and picker cannot.
     loadText(bs.text, bs.name || "", bs.path || "");
-    // If autoConnect flag is set, wait for first user interaction to open file picker.
-    if (bs.autoConnect) {
-      editorAutoConnectBootstrapFile();
-    }
     return;
   }
   // 2. Hash payload: #name=<uri-encoded>&md64=<base64 or base64url, utf-8>
