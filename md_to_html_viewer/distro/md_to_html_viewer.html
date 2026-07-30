@@ -3391,8 +3391,12 @@ updateSync();
   render();
 
   // Show VS Code welcome popup if opened from VS Code task
+  console.log("Boot check - state.path:", state.path, "state.handle:", state.handle);
   if (state.path && !state.handle) {
+    console.log("Showing VS Code popup");
     $("#vscode-welcome").hidden = false;
+  } else {
+    console.log("Not showing popup: path=" + !!state.path + " handle=" + !!state.handle);
   }
 })();
 
