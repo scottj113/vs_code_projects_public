@@ -913,7 +913,6 @@ body.dragging #drop { display: flex; }
           <h1>Eye Love Markdown Viewer</h1>
           <p class="sub">Drop a <code>.md</code> file anywhere on this window.</p>
           <button type="button" class="btn" id="btn-open2">Choose a file&hellip;</button>
-          <button type="button" class="btn" id="btn-open-folder" hidden>Open a folder&hellip;</button>
           <ul>
             <li><b>Drag &amp; drop</b> &mdash; drop the <code>.md</code> plus any local images together and the images resolve.</li>
             <li><b>Drop a whole folder</b> &mdash; every <code>.md</code> inside it becomes a list in the sidebar, so you can read straight through a project. Several <code>.md</code> files dropped together work the same way.</li>
@@ -2142,19 +2141,6 @@ async function loadDirectory(dirHandle) {
         capped + " from " + dirHandle.name);
 }
 
-const canPickDir = typeof window.showDirectoryPicker === "function";
-
-async function openFolderViaPicker() {
-  if (!canPickDir) return;
-  try {
-    const dir = await window.showDirectoryPicker({ mode: "read" });
-    if (dir) await loadDirectory(dir);
-  } catch (err) {
-    // AbortError is the user pressing Cancel, which deserves no comment.
-    if (err && err.name !== "AbortError") toast("Could not open folder: " + err.message, true);
-  }
-}
-
 /**
  * @param handlePromises  Optional promises captured synchronously from a drop's
  *   DataTransferItems. A real OS drag yields genuine FileSystemFileHandles with
@@ -3259,11 +3245,6 @@ els.docsList.addEventListener("keydown", (e) => {
   e.preventDefault();
   openLibraryDoc(Number(a.dataset.i));
 });
-
-if (canPickDir) {
-  $("#btn-open-folder").hidden = false;
-  $("#btn-open-folder").addEventListener("click", openFolderViaPicker);
-}
 
 // --- drag & drop over the whole window ---
 let dragDepth = 0;
