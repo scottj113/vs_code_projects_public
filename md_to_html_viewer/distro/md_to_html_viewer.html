@@ -3355,12 +3355,16 @@ updateSync();
 (function boot() {
   // 1. Sidecar written by the VS Code task.
   const bs = window.__MD_BOOTSTRAP__;
+  console.log("Boot function running. window.__MD_BOOTSTRAP__:", bs);
   if (bs && typeof bs.text === "string") {
+    console.log("Bootstrap detected, calling loadText with name:", bs.name, "path:", bs.path);
     // The only route that knows the source path: the task has it and
     // passes it through, where drop and picker cannot.
     loadText(bs.text, bs.name || "", bs.path || "");
+    console.log("loadText called");
     return;
   }
+  console.log("No bootstrap detected, checking other routes...");
   // 2. Hash payload: #name=<uri-encoded>&md64=<base64 or base64url, utf-8>
   const hash = location.hash.slice(1);
   const payload = hash.match(/(?:^|&)md64=([^&]*)/);
