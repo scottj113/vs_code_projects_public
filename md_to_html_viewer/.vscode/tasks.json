@@ -24,8 +24,8 @@
   "tasks": [
     {
       "label": "Open in MD Viewer",
-      "type": "shell",
-      "command": "pwsh",
+      "type": "process",
+      "command": "powershell.exe",
       "args": [
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",

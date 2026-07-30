@@ -88,4 +88,15 @@ $tempHtml = Join-Path $tempDir "view.html"
 Set-Content -Path $tempHtml -Value $html -Encoding UTF8
 
 # Open in default browser
-Start-Process $tempHtml
+try {
+    Start-Process $tempHtml -ErrorAction Stop
+} catch {
+    # If Start-Process fails (e.g., no default browser), try via cmd
+    try {
+        cmd /c start `"$tempHtml`"
+    } catch {
+        Write-Host "Could not open browser. Open manually: $tempHtml" -ForegroundColor Yellow
+    }
+}
+
+exit 0
