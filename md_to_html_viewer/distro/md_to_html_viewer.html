@@ -2484,7 +2484,10 @@ function buildEditorUI(doc, host) {
   dirty.title = "Unsaved changes";
   const save = mk("button", "mdv-btn mdv-save", "Save  Ctrl+S");
   const close = mk("button", "mdv-btn mdv-close", "Close");
-  head.append(where, dirty, mk("span", "mdv-spacer"), save, close);
+  const selectFile = mk("button", "mdv-btn mdv-select-file", "📋");
+  selectFile.hidden = true;
+  selectFile.title = "Select file to save to";
+  head.append(where, dirty, mk("span", "mdv-spacer"), selectFile, save, close);
 
   const ta = doc.createElement("textarea");
   ta.id = "editor-ta";
@@ -2505,6 +2508,7 @@ function buildEditorUI(doc, host) {
 
   save.addEventListener("click", () => saveEditor());
   close.addEventListener("click", () => closeEditor());
+  selectFile.addEventListener("click", openFilePickerForEditor);
   act.addEventListener("click", () => { if (editor.action) editor.action(); });
   changePath.addEventListener("click", async () => {
     const newPath = prompt("Update project folder path:", localStorage.getItem("mdv:projectFolderPath") || "");
@@ -2522,7 +2526,7 @@ function buildEditorUI(doc, host) {
   // fire for keystrokes aimed at the viewer.
   host.addEventListener("keydown", onEditorKey);
 
-  return { where, dirty, ta, status, act, changePath };
+  return { where, dirty, ta, status, act, changePath, selectFile };
 }
 
 function onEditorKey(e) {
@@ -2645,6 +2649,30 @@ async function getOrPromptProjectFolder() {
     // Clipboard API may not be available; that's ok
   }
   return path;
+}
+
+async function openFilePickerForEditor() {
+  if (!editorOpen()) return;
+  const host = (editor.win && !editor.win.closed) ? editor.win : window;
+  if (typeof host.showOpenFilePicker !== "function") {
+    editorStatus("This browser cannot open files", true);
+    return;
+  }
+  try {
+    const [handle] = await host.showOpenFilePicker({
+      multiple: false,
+      types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
+    });
+    state.handle = handle;
+    state.dirAnchor = handle;
+    state.name = handle.name;
+    announceWriteTarget();
+    await saveEditor();
+  } catch (e) {
+    if (e && e.name !== "AbortError") {
+      editorStatus("Could not open file: " + (e.message || e.name), true);
+    }
+  }
 }
 
 function editorStatus(msg, isError, action) {
@@ -2933,36 +2961,21 @@ async function saveEditor() {
     const pathInfo = projectPath ? " — " + projectPath + " (copied to clipboard)" : "";
     editorStatus("Select your file first — click 'Open file' above" + pathInfo, false, {
       label: "Open file",
-      run: async () => {
-        const host = (editor.win && !editor.win.closed) ? editor.win : window;
-        if (typeof host.showOpenFilePicker !== "function") {
-          editorStatus("This browser cannot open files", true);
-          return;
-        }
-        try {
-          const [handle] = await host.showOpenFilePicker({
-            multiple: false,
-            types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
-          });
-          state.handle = handle;
-          state.dirAnchor = handle;
-          state.name = handle.name;
-          announceWriteTarget();
-          await saveEditor();
-        } catch (e) {
-          if (e && e.name !== "AbortError") {
-            editorStatus("Could not open file: " + (e.message || e.name), true);
-          }
-        }
-      }
+      run: openFilePickerForEditor
     });
     if (editor.ui && editor.ui.changePath) {
       editor.ui.changePath.hidden = false;
+    }
+    if (editor.ui && editor.ui.selectFile) {
+      editor.ui.selectFile.hidden = false;
     }
     return;
   }
   if (editor.ui && editor.ui.changePath) {
     editor.ui.changePath.hidden = true;
+  }
+  if (editor.ui && editor.ui.selectFile) {
+    editor.ui.selectFile.hidden = true;
   }
 
   editorStatus("Saving…");
