@@ -560,7 +560,6 @@ body.dragging #drop { display: flex; }
 .pill button:disabled { opacity: .45; cursor: default; }
 #btn-refresh { font-size: 15px; line-height: 1; padding: 5px 8px; }
 .pill button[hidden] { display: none; }
-#btn-connect { color: var(--accent); }
 
 /* State is carried by the dot's fill, not by colour alone: hollow ring = off,
    solid with a halo = live. */
@@ -838,12 +837,10 @@ body.dragging #drop { display: flex; }
   </div>
   <span class="meta" id="doc-meta"></span>
   <span class="spacer"></span>
-  <button type="button" class="btn" id="btn-open" title="Open a markdown file (Ctrl+O)">Open</button>
 
   <!-- File-sync pill. Refresh is a repeated action so it stays one click;
        Watch is a set-once preference that doubles as the state indicator. -->
   <div class="pill" id="sync" hidden>
-    <button type="button" id="btn-connect">&#8635;&nbsp; Enable live reload</button>
     <button type="button" id="btn-refresh" title="Re-read the file from disk now (Ctrl+R)" hidden>&#8635;</button>
     <button type="button" id="btn-watch" aria-pressed="false" hidden><i class="dot"></i><span id="watch-label">Watch</span></button>
   </div>
@@ -892,7 +889,6 @@ body.dragging #drop { display: flex; }
     <div class="pop pop-menu" id="pop-more" hidden>
       <label class="pop-check"><input type="checkbox" id="chk-raw"> Allow raw HTML <span class="hint">sanitized</span></label>
       <hr>
-      <button type="button" class="mi" id="mi-open-folder" hidden>Open a folder&hellip;</button>
       <button type="button" class="mi" id="mi-edit" disabled>Edit this section&hellip; <kbd>Ctrl+E</kbd></button>
       <button type="button" class="mi" id="mi-export" disabled>Export standalone HTML&hellip;</button>
       <button type="button" class="mi" id="mi-print" disabled>Print / Save as PDF <kbd>Ctrl+P</kbd></button>
@@ -2345,19 +2341,11 @@ function updateSync() {
 
   const has = !!state.handle;
   const watching = !!state.watchTimer;
-  const connect = $("#btn-connect");
   const refresh = $("#btn-refresh");
   const watch = $("#btn-watch");
 
-  // Without a handle the pill offers a way IN rather than sitting disabled --
-  // a dead button is indistinguishable from a broken one.
-  connect.hidden = has;
   refresh.hidden = !has;
   watch.hidden = !has;
-
-  connect.title = "Re-pick " + (state.name || "this file") +
-    " so the viewer can re-read it from disk. Needed once per page load — " +
-    "browsers cannot retain file access across a refresh.";
 
   watch.setAttribute("aria-pressed", String(watching));
   $("#watch-label").textContent = watching ? "Live" : "Watch";
@@ -3117,10 +3105,7 @@ function exportHtml() {
    6. Wiring
    ========================================================================== */
 
-$("#btn-open").addEventListener("click", () => openViaPicker(false));
 $("#btn-open2").addEventListener("click", () => openViaPicker(false));
-// One click from "no access" to "watching": pick the file, then start.
-$("#btn-connect").addEventListener("click", () => openViaPicker(true));
 function refreshNow() {
   // Spin regardless of outcome: the feedback is "your click registered",
   // which matters most when the file happens to be unchanged.
@@ -3257,9 +3242,7 @@ els.docsList.addEventListener("keydown", (e) => {
 });
 
 if (canPickDir) {
-  $("#mi-open-folder").hidden = false;
   $("#btn-open-folder").hidden = false;
-  $("#mi-open-folder").addEventListener("click", () => { closePops(); openFolderViaPicker(); });
   $("#btn-open-folder").addEventListener("click", openFolderViaPicker);
 }
 
