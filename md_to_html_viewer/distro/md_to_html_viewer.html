@@ -492,8 +492,12 @@ body.no-toc #toc { display: none; }
 }
 
 #scroller { flex: 1; overflow: auto; scroll-behavior: smooth; }
-#page { max-width: 860px; margin: 0 auto; padding: 34px 40px 55vh; }
-#page.full-width { max-width: none; margin: 0; padding: 34px 20px 55vh; }
+#page { max-width: none; margin: 0; padding: 34px 20px 55vh; }
+#page.bumper-10 { margin: 0 10%; }
+#page.bumper-20 { margin: 0 20%; }
+#page.bumper-30 { margin: 0 30%; }
+#page.bumper-40 { margin: 0 40%; }
+#page.bumper-50 { margin: 0 50%; }
 
 /* ---------- empty state ---------- */
 #empty { display: none; padding: 6vh 24px 24px; }
@@ -914,7 +918,14 @@ body.dragging #drop { display: flex; }
             aria-haspopup="true" aria-expanded="false">&#8942;</button>
     <div class="pop pop-menu" id="pop-more" hidden>
       <label class="pop-check"><input type="checkbox" id="chk-raw"> Allow raw HTML <span class="hint">sanitized</span></label>
-      <label class="pop-check"><input type="checkbox" id="chk-fullwidth"> Full-width mode</label>
+      <p class="pop-head">Bumper lanes</p>
+      <div class="seg" id="seg-bumpers" role="group">
+        <button type="button" data-v="0">None</button>
+        <button type="button" data-v="10">10%</button>
+        <button type="button" data-v="20">20%</button>
+        <button type="button" data-v="30">30%</button>
+        <button type="button" data-v="40">40%</button>
+      </div>
       <hr>
       <button type="button" class="mi" id="mi-edit" disabled>Edit this section&hellip; <kbd>Ctrl+E</kbd></button>
       <button type="button" class="mi" id="mi-export" disabled>Export standalone HTML&hellip;</button>
@@ -1744,7 +1755,7 @@ const state = {
   mermaidSources: [],
   headings: [],      // last render's headings, carrying source line numbers
   rawHtml: localStorage.getItem("mdv:rawHtml") === "1",
-  fullwidth: localStorage.getItem("mdv:fullwidth") === "1",
+  bumpers: Number(localStorage.getItem("mdv:bumpers")) || 0,
   showToc: localStorage.getItem("mdv:toc") !== "0",
   fontSize: Number(localStorage.getItem("mdv:fontSize")) || 15.5,
   bold: localStorage.getItem("mdv:bold") === "1",
@@ -3154,12 +3165,17 @@ $("#chk-raw").addEventListener("change", (e) => {
   toast(state.rawHtml ? "Raw HTML on (sanitized allow-list)" : "Raw HTML off — tags shown as text");
 });
 
-$("#chk-fullwidth").addEventListener("change", (e) => {
-  state.fullwidth = e.target.checked;
-  localStorage.setItem("mdv:fullwidth", state.fullwidth ? "1" : "0");
-  $("#page").classList.toggle("full-width", state.fullwidth);
-  toast(state.fullwidth ? "Full-width mode on" : "Full-width mode off");
-});
+for (const btn of $("#seg-bumpers").querySelectorAll("button")) {
+  btn.addEventListener("click", () => {
+    state.bumpers = Number(btn.dataset.v);
+    localStorage.setItem("mdv:bumpers", state.bumpers);
+    for (const b of $("#seg-bumpers").querySelectorAll("button")) {
+      b.classList.toggle("active", b === btn);
+    }
+    $("#page").className = state.bumpers === 0 ? "" : `bumper-${state.bumpers}`;
+    toast(`Bumper lanes: ${state.bumpers}%`);
+  });
+}
 
 /* ---------- popovers ---------- */
 
@@ -3358,8 +3374,12 @@ applyDocStyle();
 document.body.classList.toggle("no-toc", !state.showToc);
 $("#btn-toc").setAttribute("aria-pressed", String(state.showToc));
 $("#chk-raw").checked = state.rawHtml;
-$("#chk-fullwidth").checked = state.fullwidth;
-$("#page").classList.toggle("full-width", state.fullwidth);
+for (const btn of $("#seg-bumpers").querySelectorAll("button")) {
+  if (Number(btn.dataset.v) === state.bumpers) {
+    btn.classList.add("active");
+  }
+}
+if (state.bumpers > 0) $("#page").className = `bumper-${state.bumpers}`;
 updateSync();
 
 (function boot() {
