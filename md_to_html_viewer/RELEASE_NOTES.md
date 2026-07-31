@@ -68,9 +68,28 @@ Perfect for wide tables (20+ columns) and data-heavy documents.
 > "this thing is seriously a professional tool now. its not a joke. not a toy."
 
 ### Next Steps
-- v2.0 is shipping-ready
-- All features in stable state
-- Backlog: multi-pattern highlighting, docx export, mobile responsive improvements
+
+**v2.0 Status:** Shipping ✓
+
+**v3.0 Backlog** (Data Layer Architecture)
+- Embedded data sources: JSON, CSV, XML stored in HTML or as data-URI
+- Custom table schema support (field names, types, constraints)
+- Data-driven tables (load from embedded dataset instead of markdown)
+- Column sorting (click header to sort, multi-column support)
+- Advanced filtering (by value, range, type, not just text search)
+- Export filtered/sorted data to CSV
+- Export filtered/sorted data to JSON
+- Backward compatibility with v2 markdown tables
+- Table metadata in YAML frontmatter or `<table data-source="...">` attribute
+
+**Future Considerations**
+- Search across embedded datasets
+- In-memory data transformation pipeline
+- Aggregation/pivot capabilities
+- Chart generation from table data
+- Mobile responsive improvements
+- Multi-pattern text highlighting
+- Docx export
 
 ---
 
