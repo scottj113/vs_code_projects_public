@@ -4527,14 +4527,16 @@ function initDataTableInteractivity() {
   document.addEventListener('click', (e) => {
     if (e.target.classList.contains('data-table-menu-btn')) {
       e.stopPropagation();
-      const datasetId = e.target.dataset.dataset;
-      const menu = document.querySelector(`.data-table-menu[data-dataset="${datasetId}"]`);
-      const isShowing = menu.style.display !== 'none';
-      menu.style.display = isShowing ? 'none' : 'block';
+      const menu = e.target.nextElementSibling;
+      if (menu && menu.classList.contains('data-table-menu')) {
+        const isShowing = menu.style.display !== 'none';
+        menu.style.display = isShowing ? 'none' : 'block';
+      }
       return;
     }
     // Close menus when clicking elsewhere
-    if (!e.target.closest('.data-table-export')) {
+    const exportDiv = e.target.closest('.data-table-export');
+    if (!exportDiv) {
       document.querySelectorAll('.data-table-menu').forEach(m => m.style.display = 'none');
     }
   });
@@ -4571,7 +4573,7 @@ function initDataTableInteractivity() {
       DataSystem.dataState[datasetId].sortBy = null;
       DataSystem.dataState[datasetId].sortAsc = true;
       DataSystem.dataState[datasetId].hiddenColumns = [];
-      const filtersDiv = document.querySelector(`.md-table-filters[data-dataset="${datasetId}"]`);
+      const filtersDiv = document.querySelector('.md-table-filters');
       if (filtersDiv) {
         filtersDiv.querySelectorAll('.md-filter-input').forEach(input => input.value = '');
       }
