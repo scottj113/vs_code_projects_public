@@ -83,6 +83,7 @@ Perfect for wide tables (20+ columns) and data-heavy documents.
 - Table metadata in YAML frontmatter or `<table data-source="...">` attribute
 
 **Future Considerations**
+- Markdown validation & linting — Detect malformed MD (broken tables, unclosed code blocks, etc.) and warn at top of page instead of silently rendering broken content
 - Search across embedded datasets
 - In-memory data transformation pipeline
 - Aggregation/pivot capabilities
