@@ -2038,12 +2038,16 @@ function render() {
     return;
   }
 
-  const { html, ctx } = parse(state.text, { rawHtml: state.rawHtml, assets: state.assets });
+  let { html, ctx } = parse(state.text, { rawHtml: state.rawHtml, assets: state.assets });
   state.mermaidSources = ctx.mermaid;
   // Kept for the section editor: these carry the source line of every heading,
   // and they go stale the moment the text changes, so they are replaced here
   // rather than cached anywhere longer-lived.
   state.headings = ctx.headings;
+
+  // Unescape data-table placeholders (safe because we control this syntax)
+  // Format: &lt;table data-source=&quot;datasetId&quot;&gt;&lt;/table&gt;
+  html = html.replace(/&lt;table\s+data-source=&quot;([^&]+)&quot;&gt;&lt;\/table&gt;/g, '<table data-source="$1"></table>');
 
   els.doc.innerHTML = html;
   if (state.rawHtml) sanitize(els.doc);
