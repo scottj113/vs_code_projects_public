@@ -516,8 +516,13 @@
 
       document.getElementById('detailEdit').value = cardText;
       document.getElementById('detailEdit').style.display = 'none';
+      // Must be reset: toggleDetailEdit() hides this to show the editor, and a
+      // stale display:none here is what made saved highlights look invisible.
+      detailText.style.display = 'block';
       document.getElementById('detailOverlay').style.display = 'block';
-      document.getElementById('detailModal').style.display = 'block';
+      // "flex", not "block" -- an inline display beats the stylesheet, and the
+      // modal's layout depends on it staying a column flex container.
+      document.getElementById('detailModal').style.display = 'flex';
     }
 
     function closeDetail() {
@@ -532,10 +537,6 @@
       const detailText = document.getElementById('detailText');
       const isHidden = editArea.style.display === 'none' || !editArea.style.display;
       if (isHidden) {
-        // Textareas don't reliably stretch via flex-grow in all browsers,
-        // so pin the height to match the sibling it's replacing.
-        const h = detailText.getBoundingClientRect().height;
-        editArea.style.height = h + 'px';
         editArea.style.display = 'block';
         detailText.style.display = 'none';
         editArea.focus();
@@ -553,8 +554,9 @@
         card.text = newText;
         saveData();
         updateChangeCount();
+        render();
+        showDetail(detailLane, detailCardId, newText);
         toast('✓ Card saved');
-        setTimeout(() => window.location.reload(), 600);
       }
     }
 
