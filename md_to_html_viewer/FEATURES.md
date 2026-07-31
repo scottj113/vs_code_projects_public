@@ -15,7 +15,7 @@ Complete feature inventory with status, timeline, and metadata.
 ## Release Features
 
 | Feature | Type | Status | % | Added | Completed | Planned v | Released v | Priority | Importance | Reason | Notes |
-|---------|------|--------|---|-------|-----------|----------|-----------|--------|-------|
+|---------|------|--------|---|-------|-----------|----------|-----------|---------|-----------|--------|-------|
 | **CORE PARSING** | | | | | | | | | |
 | Markdown rendering (GFM) | core | ✓ | 100% | 7/24 | 7/25 | v1.0 | v1.0 | 1 | critical | Foundation | Full GFM support + tables, task lists, strikethrough |
 | Mermaid diagrams | render | ✓ | 100% | 7/25 | 7/26 | v1.0 | v1.0 | 1 | critical | Feature | Offline diagram rendering with dark mode |
