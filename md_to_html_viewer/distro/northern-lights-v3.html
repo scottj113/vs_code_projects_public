@@ -3887,13 +3887,10 @@ function populateTableFilters(datasetId, menuBar) {
     exportDiv.className = 'md-table-export';
     controls.appendChild(exportDiv);
     exportDiv.innerHTML = `
-      <button class="data-table-menu-btn" data-dataset="${datasetId}" title="Table options">☰</button>
-      <div class="data-table-menu" data-dataset="${datasetId}" style="display: none;">
-        <button class="md-table-reset" data-dataset="${datasetId}">Reset</button>
-        <button class="data-export-csv" data-dataset="${datasetId}">Export CSV</button>
-        <button class="data-export-json" data-dataset="${datasetId}">Export JSON</button>
-        <button class="data-filter-help" data-dataset="${datasetId}">Filter Help</button>
-      </div>
+      <button class="md-table-reset" data-dataset="${datasetId}" title="Reset filters, sort, and columns">Reset</button>
+      <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV</button>
+      <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON</button>
+      <button class="data-filter-help" data-dataset="${datasetId}" title="Filter syntax help">?</button>
     `;
   }
 
@@ -4397,8 +4394,10 @@ function renderDataTable(datasetId, skipControls = false) {
     });
     html += '</div>';
     html += `<div class="data-table-export">
-      <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV ↓</button>
-      <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON ↓</button>
+      <button class="md-table-reset" data-dataset="${datasetId}" title="Reset">Reset</button>
+      <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV</button>
+      <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON</button>
+      <button class="data-filter-help" data-dataset="${datasetId}" title="Filter Help">?</button>
     </div>`;
     html += '</div>';
   }
@@ -4523,47 +4522,23 @@ function initDataTableInteractivity() {
     }
   });
 
-  // Table menu toggle
-  document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('data-table-menu-btn')) {
-      e.stopPropagation();
-      const menu = e.target.nextElementSibling;
-      if (menu && menu.classList.contains('data-table-menu')) {
-        const isShowing = menu.style.display !== 'none';
-        menu.style.display = isShowing ? 'none' : 'block';
-      }
-      return;
-    }
-    // Close menus when clicking elsewhere
-    const exportDiv = e.target.closest('.data-table-export');
-    if (!exportDiv) {
-      document.querySelectorAll('.data-table-menu').forEach(m => m.style.display = 'none');
-    }
-  });
-
-  // Export buttons & menu items
+  // Export buttons & other menu items
   document.addEventListener('click', (e) => {
     if (e.target.classList.contains('data-export-csv')) {
       e.stopPropagation();
       const datasetId = e.target.dataset.dataset;
       const csv = DataSystem.exportCSV(datasetId);
       downloadFile(csv, datasetId + '.csv', 'text/csv');
-      const menu = document.querySelector(`.data-table-menu[data-dataset="${datasetId}"]`);
-      if (menu) menu.style.display = 'none';
     }
     if (e.target.classList.contains('data-export-json')) {
       e.stopPropagation();
       const datasetId = e.target.dataset.dataset;
       const json = DataSystem.exportJSON(datasetId);
       downloadFile(json, datasetId + '.json', 'application/json');
-      const menu = document.querySelector(`.data-table-menu[data-dataset="${datasetId}"]`);
-      if (menu) menu.style.display = 'none';
     }
     if (e.target.classList.contains('data-filter-help')) {
       e.stopPropagation();
       showFilterHelp();
-      const menu = e.target.closest('.data-table-menu');
-      if (menu) menu.style.display = 'none';
     }
     if (e.target.classList.contains('md-table-reset')) {
       e.stopPropagation();
@@ -4578,8 +4553,6 @@ function initDataTableInteractivity() {
         filtersDiv.querySelectorAll('.md-filter-input').forEach(input => input.value = '');
       }
       updateDataTableContent(datasetId);
-      const menu = e.target.closest('.data-table-menu');
-      if (menu) menu.style.display = 'none';
     }
     if (e.target.classList.contains('filter-help-close') || e.target.classList.contains('filter-help-modal-overlay')) {
       const modal = document.querySelector('.filter-help-modal');
