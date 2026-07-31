@@ -815,7 +815,17 @@ body.dragging #drop { display: flex; }
 .data-table-filters { display: flex; gap: 8px; flex-wrap: wrap; }
 .data-table-filters input { padding: 5px 8px; font-size: 12px; border: 1px solid var(--border-strong);
   background: var(--code-bg); color: var(--fg); border-radius: 4px; width: 150px; }
-.data-table-export { display: flex; gap: 6px; }
+.data-table-export { display: flex; gap: 6px; position: relative; }
+.data-table-menu-btn { appearance: none; border: 1px solid var(--border-strong); background: var(--code-bg);
+  color: var(--fg-muted); padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+.data-table-menu-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.data-table-menu { position: absolute; top: 100%; right: 0; background: var(--bg); border: 1px solid var(--border-strong);
+  border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); z-index: 1000; min-width: 150px; margin-top: 4px; }
+.data-table-menu button { display: block; width: 100%; text-align: left; padding: 8px 12px; border: none; background: none;
+  color: var(--fg); cursor: pointer; font-size: 12px; }
+.data-table-menu button:hover { background: var(--accent-soft); color: var(--accent); }
+.data-table-menu button:first-child { border-radius: 4px 4px 0 0; }
+.data-table-menu button:last-child { border-radius: 0 0 4px 4px; }
 .data-export-csv, .data-export-json, .data-filter-help { appearance: none; border: 1px solid var(--border-strong); background: var(--code-bg);
   color: var(--fg-muted); padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .data-export-csv:hover, .data-export-json:hover, .data-filter-help:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
@@ -3877,25 +3887,16 @@ function populateTableFilters(datasetId, menuBar) {
     exportDiv.className = 'md-table-export';
     controls.appendChild(exportDiv);
     exportDiv.innerHTML = `
-      <button class="md-table-reset" data-dataset="${datasetId}" title="Reset filters, sort, and columns">Reset</button>
-      <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV ↓</button>
-      <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON ↓</button>
-      <button class="data-filter-help" data-dataset="${datasetId}" title="Filter syntax help">?</button>
+      <button class="data-table-menu-btn" data-dataset="${datasetId}" title="Table options">☰</button>
+      <div class="data-table-menu" data-dataset="${datasetId}" style="display: none;">
+        <button class="md-table-reset" data-dataset="${datasetId}">Reset</button>
+        <button class="data-export-csv" data-dataset="${datasetId}">Export CSV</button>
+        <button class="data-export-json" data-dataset="${datasetId}">Export JSON</button>
+        <button class="data-filter-help" data-dataset="${datasetId}">Filter Help</button>
+      </div>
     `;
   }
 
-  // Wire up Reset button
-  controls.querySelector('.md-table-reset')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    // Clear filters, sort, and hidden columns
-    DataSystem.dataState[datasetId].filterBy = {};
-    DataSystem.dataState[datasetId].sorted = [];
-    DataSystem.dataState[datasetId].sortBy = null;
-    DataSystem.dataState[datasetId].sortAsc = true;
-    DataSystem.dataState[datasetId].hiddenColumns = [];
-    filtersDiv.querySelectorAll('.md-filter-input').forEach(input => input.value = '');
-    updateDataTableContent(datasetId);
-  });
 }
 
 // Update data table content (regenerate for hidden columns, sort, filter)
@@ -4522,23 +4523,61 @@ function initDataTableInteractivity() {
     }
   });
 
-  // Export buttons
+  // Table menu toggle
+  document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('data-table-menu-btn')) {
+      e.stopPropagation();
+      const datasetId = e.target.dataset.dataset;
+      const menu = document.querySelector(`.data-table-menu[data-dataset="${datasetId}"]`);
+      const isShowing = menu.style.display !== 'none';
+      menu.style.display = isShowing ? 'none' : 'block';
+      return;
+    }
+    // Close menus when clicking elsewhere
+    if (!e.target.closest('.data-table-export')) {
+      document.querySelectorAll('.data-table-menu').forEach(m => m.style.display = 'none');
+    }
+  });
+
+  // Export buttons & menu items
   document.addEventListener('click', (e) => {
     if (e.target.classList.contains('data-export-csv')) {
       e.stopPropagation();
       const datasetId = e.target.dataset.dataset;
       const csv = DataSystem.exportCSV(datasetId);
       downloadFile(csv, datasetId + '.csv', 'text/csv');
+      const menu = document.querySelector(`.data-table-menu[data-dataset="${datasetId}"]`);
+      if (menu) menu.style.display = 'none';
     }
     if (e.target.classList.contains('data-export-json')) {
       e.stopPropagation();
       const datasetId = e.target.dataset.dataset;
       const json = DataSystem.exportJSON(datasetId);
       downloadFile(json, datasetId + '.json', 'application/json');
+      const menu = document.querySelector(`.data-table-menu[data-dataset="${datasetId}"]`);
+      if (menu) menu.style.display = 'none';
     }
     if (e.target.classList.contains('data-filter-help')) {
       e.stopPropagation();
       showFilterHelp();
+      const menu = e.target.closest('.data-table-menu');
+      if (menu) menu.style.display = 'none';
+    }
+    if (e.target.classList.contains('md-table-reset')) {
+      e.stopPropagation();
+      const datasetId = e.target.dataset.dataset;
+      DataSystem.dataState[datasetId].filterBy = {};
+      DataSystem.dataState[datasetId].sorted = [];
+      DataSystem.dataState[datasetId].sortBy = null;
+      DataSystem.dataState[datasetId].sortAsc = true;
+      DataSystem.dataState[datasetId].hiddenColumns = [];
+      const filtersDiv = document.querySelector(`.md-table-filters[data-dataset="${datasetId}"]`);
+      if (filtersDiv) {
+        filtersDiv.querySelectorAll('.md-filter-input').forEach(input => input.value = '');
+      }
+      updateDataTableContent(datasetId);
+      const menu = e.target.closest('.data-table-menu');
+      if (menu) menu.style.display = 'none';
     }
     if (e.target.classList.contains('filter-help-close') || e.target.classList.contains('filter-help-modal-overlay')) {
       const modal = document.querySelector('.filter-help-modal');
