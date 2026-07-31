@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en" data-pal="blue-dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cardoo — Personal Kanban</title>
+  <script>
+    try {
+      var s = localStorage.getItem('cardoo:theme');
+      if (s) document.documentElement.setAttribute('data-pal', s);
+    } catch (e) {}
+  </script>
+  <style>
+    :root {
+      --bg-main: #1a1a1a;
+      --bg-toolbar: #0d0d0d;
+      --bg-lane: #2a2a2a;
+      --bg-card: #3a3a3a;
+      --fg: #fff;
+      --fg-muted: #aaa;
+      --fg-faint: #888;
+      --border: #333;
+      --border-strong: #555;
+    }
+
+    :root[data-pal="white-light"] {
+      --bg-main: #ffffff;
+      --bg-toolbar: #f5f5f5;
+      --bg-lane: #eeeeee;
+      --bg-card: #ffffff;
+      --fg: #1a1a1a;
+      --fg-muted: #666;
+      --fg-faint: #999;
+      --border: #ddd;
+      --border-strong: #bbb;
+    }
+
+    :root[data-pal="beige-light"] {
+      --bg-main: #faf9f5;
+      --bg-toolbar: #f0ede6;
+      --bg-lane: #e9e5d8;
+      --bg-card: #faf9f5;
+      --fg: #191917;
+      --fg-muted: #6b634e;
+      --fg-faint: #8b7f6d;
+      --border: #d6cfbb;
+      --border-strong: #b3a593;
+    }
+
+    :root[data-pal="slate-dark"] {
+      --bg-main: #0f1419;
+      --bg-toolbar: #0a0d12;
+      --bg-lane: #151a23;
+      --bg-card: #1a202b;
+      --fg: #e0e6ed;
+      --fg-muted: #9099a8;
+      --fg-faint: #6b7684;
+      --border: #2a3548;
+      --border-strong: #3d4a61;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-main); color: var(--fg); }
+    .toolbar { background: var(--bg-toolbar); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; gap: 8px; align-items: center; }
+    .toolbar button { background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--fg); padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+    .toolbar button:hover { background: var(--bg-lane); border-color: var(--fg-muted); }
+    .container { display: flex; gap: 16px; padding: 20px; max-width: 1400px; margin: 0 auto; overflow-x: auto; min-height: 100vh; }
+    .lane { background: var(--bg-lane); border-radius: 8px; padding: 12px; min-width: 300px; flex-shrink: 0; display: flex; flex-direction: column; }
+    .lane-title { font-weight: 600; margin-bottom: 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-muted); }
+    .cards { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .card { background: var(--bg-card); padding: 12px; border-radius: 6px; cursor: move; user-select: none; border: 1px solid var(--border);
+      transition: all 0.2s; }
+    .card:hover { background: var(--bg-lane); border-color: var(--border-strong); }
+    .card.dragging { opacity: 0.5; }
+    .card.drag-over { background: var(--bg-lane); border-color: var(--border-strong); }
+    .card-text { font-size: 14px; line-height: 1.4; word-wrap: break-word; }
+    .card-delete { float: right; cursor: pointer; color: var(--fg-faint); font-size: 16px; margin-left: 8px; }
+    .card-delete:hover { color: #f00; }
+    .add-card { background: var(--bg-lane); border: 1px dashed var(--border-strong); padding: 8px; border-radius: 6px; cursor: pointer;
+      text-align: center; font-size: 12px; color: var(--fg-faint); transition: all 0.2s; margin-top: auto; }
+    .add-card:hover { background: var(--bg-card); border-color: var(--fg-muted); color: var(--fg-muted); }
+    .input-dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-lane);
+      border: 1px solid var(--border); border-radius: 8px; padding: 20px; z-index: 1000; min-width: 300px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+    .input-dialog input { width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px;
+      color: var(--fg); font-size: 14px; margin-bottom: 12px; }
+    .input-dialog button { width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 4px;
+      color: var(--fg); cursor: pointer; font-size: 14px; transition: all 0.2s; margin-bottom: 8px; }
+    .input-dialog button:hover { background: var(--bg-lane); }
+    .input-dialog button:last-child { background: var(--border-strong); margin-bottom: 0; }
+    .overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 999; }
+    .fire-meter { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+    .fire-bar { width: 120px; height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
+    .fire-fill { height: 100%; background: #0f0; width: 0%; transition: width 0.2s, background-color 0.2s; }
+    .fire-label { font-size: 11px; color: #999; min-width: 40px; text-align: right; }
+    #toast { position: fixed; left: 50%; top: 62px; transform: translate(-50%, -8px); z-index: 100; background: #2a2a2a;
+      color: #fff; border: 1px solid #555; border-radius: 6px; padding: 10px 14px; font-size: 13px; opacity: 0; pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s; max-width: 70vw; }
+    #toast.show { opacity: 1; transform: translate(-50%, 0); }
+    #toast.alert { border-color: #f80; color: #ff9944; }
+    mark { background: #ffff00; color: #000; padding: 2px 4px; border-radius: 2px; font-weight: normal; }
+    .detail-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-lane);
+      border: 1px solid var(--border); border-radius: 8px; padding: 20px; z-index: 1000; min-width: 400px; max-width: 90%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+    .detail-modal h3 { margin-bottom: 12px; font-size: 14px; color: var(--fg-muted); text-transform: uppercase; }
+    .detail-text { background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; padding: 12px; margin-bottom: 12px;
+      min-height: 60px; line-height: 1.5; }
+    .detail-edit { width: 100%; min-height: 80px; padding: 10px; background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 4px; color: var(--fg); font-family: monospace; font-size: 13px; display: none; }
+    .detail-buttons { display: flex; gap: 8px; }
+    .detail-buttons button { flex: 1; padding: 8px; background: var(--bg-card); border: 1px solid var(--border-strong);
+      border-radius: 4px; color: var(--fg); cursor: pointer; font-size: 13px; }
+    .detail-buttons button:hover { background: var(--bg-lane); }
+    .config-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2a2a2a;
+      border: 1px solid #444; border-radius: 8px; padding: 20px; z-index: 1000; min-width: 400px; max-width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+    .config-modal h3 { margin-bottom: 16px; font-size: 16px; }
+    .config-item { margin-bottom: 12px; }
+    .config-item label { display: block; font-size: 13px; color: #ccc; margin-bottom: 4px; }
+    .config-item input[type="checkbox"] { margin-right: 6px; }
+    .config-modal button { width: 100%; padding: 10px; margin-top: 8px; background: #4a4a4a; border: 1px solid #555; border-radius: 4px; color: #fff; cursor: pointer; font-size: 13px; }
+    .config-modal button:hover { background: #5a5a5a; }
+    .config-modal button.close { background: #666; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="exportState()">📥 Export</button>
+    <button onclick="importState()">📤 Import</button>
+    <button onclick="cycleTheme()">🎨 Theme</button>
+    <button onclick="openConfig()">⚙️ Config</button>
+    <div class="fire-meter">
+      <span class="fire-label" id="changeCount">0</span>
+      <div class="fire-bar">
+        <div class="fire-fill" id="fireFill"></div>
+      </div>
+    </div>
+  </div>
+  <div class="container" id="board"></div>
+  <div id="overlay" class="overlay" style="display: none;"></div>
+  <div id="dialog" class="input-dialog" style="display: none;">
+    <input type="text" id="input" placeholder="Enter card text..." />
+    <button onclick="saveInput()">Add</button>
+    <button onclick="cancelInput()">Cancel</button>
+  </div>
+  <div id="toast"></div>
+  <div id="detailOverlay" class="overlay" style="display: none;"></div>
+  <div id="detailModal" class="detail-modal" style="display: none;">
+    <h3 id="detailTitle">Card Details</h3>
+    <div id="detailText" class="detail-text"></div>
+    <textarea id="detailEdit" class="detail-edit"></textarea>
+    <div class="detail-buttons">
+      <button onclick="toggleDetailEdit()">✏️ Edit</button>
+      <button onclick="saveDetailEdit()">💾 Save</button>
+      <button onclick="closeDetail()">Close</button>
+    </div>
+  </div>
+  <div id="configOverlay" class="overlay" style="display: none;"></div>
+  <div id="configModal" class="config-modal" style="display: none;">
+    <h3>Backup Config</h3>
+    <div class="config-item">
+      <label>
+        <input type="checkbox" id="autoExportToggle" onchange="toggleAutoExport()" />
+        Auto-export to local folder (Chrome/Edge only)
+      </label>
+      <small style="color: #888; display: block; margin-top: 4px;">
+        Select a folder once, then backups save automatically after changes
+      </small>
+    </div>
+    <div class="config-item" id="folderStatus" style="font-size: 12px; color: #888;">
+      No folder selected
+    </div>
+    <button onclick="selectFolder()">Choose Folder</button>
+    <button class="close" onclick="closeConfig()">Done</button>
+  </div>
+
+  <script>
+    const LANES = ['Pondering', 'To Do', 'In Progress', 'Done'];
+    const THEMES = ['blue-dark', 'slate-dark', 'white-light', 'beige-light'];
+    let data = { cards: {}, laneOrder: {} };
+    let currentLaneForInput = null;
+    let changeCount = 0;
+    let folderHandle = null;
+    let autoExportEnabled = false;
+    let wasRed = false;
+    let toastTimer = null;
+    let currentTheme = 'blue-dark';
+
+    function initData() {
+      const stored = localStorage.getItem('cardoo');
+      if (stored) {
+        data = JSON.parse(stored);
+      } else {
+        LANES.forEach(lane => {
+          data.cards[lane] = [];
+          data.laneOrder[lane] = [];
+        });
+        saveData();
+      }
+      changeCount = localStorage.getItem('cardoo:changes') ? parseInt(localStorage.getItem('cardoo:changes')) : 0;
+      autoExportEnabled = localStorage.getItem('cardoo:autoExport') === 'true';
+      currentTheme = localStorage.getItem('cardoo:theme') || 'blue-dark';
+      document.documentElement.setAttribute('data-pal', currentTheme);
+      document.getElementById('autoExportToggle').checked = autoExportEnabled;
+      updateFireMeter();
+    }
+
+    function cycleTheme() {
+      const idx = THEMES.indexOf(currentTheme);
+      currentTheme = THEMES[(idx + 1) % THEMES.length];
+      document.documentElement.setAttribute('data-pal', currentTheme);
+      localStorage.setItem('cardoo:theme', currentTheme);
+      const names = { 'blue-dark': 'Blue Dark', 'slate-dark': 'Slate Dark', 'white-light': 'White Light', 'beige-light': 'Beige Light' };
+      toast('Theme: ' + names[currentTheme]);
+    }
+
+    function saveData() {
+      localStorage.setItem('cardoo', JSON.stringify(data));
+    }
+
+    function updateChangeCount() {
+      changeCount++;
+      localStorage.setItem('cardoo:changes', changeCount);
+      updateFireMeter();
+      if (autoExportEnabled && folderHandle) {
+        autoExportToFolder();
+      }
+    }
+
+    function updateFireMeter() {
+      const meter = Math.min(changeCount / 21, 1);
+      const fill = document.getElementById('fireFill');
+      const label = document.getElementById('changeCount');
+      const isRed = changeCount >= 21;
+
+      label.textContent = isRed ? '🔥' : changeCount;
+      fill.style.width = (meter * 100) + '%';
+
+      if (changeCount < 11) {
+        fill.style.backgroundColor = '#0f0';
+      } else if (changeCount < 21) {
+        fill.style.backgroundColor = '#ff0';
+      } else {
+        fill.style.backgroundColor = '#f00';
+      }
+
+      if (isRed && !wasRed) {
+        toast('Time to export your work! 🔥');
+        wasRed = true;
+      } else if (!isRed) {
+        wasRed = false;
+      }
+    }
+
+    function toast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 4800);
+    }
+
+    function render() {
+      const board = document.getElementById('board');
+      board.innerHTML = '';
+
+      LANES.forEach(lane => {
+        const laneDiv = document.createElement('div');
+        laneDiv.className = 'lane';
+
+        const title = document.createElement('div');
+        title.className = 'lane-title';
+        title.textContent = lane;
+        laneDiv.appendChild(title);
+
+        const cardsDiv = document.createElement('div');
+        cardsDiv.className = 'cards';
+        cardsDiv.dataset.lane = lane;
+        cardsDiv.ondragover = (e) => e.preventDefault();
+        cardsDiv.ondrop = (e) => handleDrop(e, lane);
+        cardsDiv.ondragleave = (e) => e.currentTarget.classList.remove('drag-over');
+
+        const cardOrder = data.laneOrder[lane] || [];
+        cardOrder.forEach(cardId => {
+          const cardData = data.cards[lane]?.find(c => c.id === cardId);
+          const cardText = cardData?.text;
+          if (cardText) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.draggable = true;
+            card.dataset.id = cardId;
+            card.dataset.lane = lane;
+            card.ondragstart = (e) => {
+              e.dataTransfer.effectAllowed = 'move';
+              e.currentTarget.classList.add('dragging');
+            };
+            card.ondragend = (e) => e.currentTarget.classList.remove('dragging');
+
+            const text = document.createElement('span');
+            text.className = 'card-text';
+            const firstLine = cardText.split('\n')[0];
+            text.textContent = firstLine;
+
+            const del = document.createElement('span');
+            del.className = 'card-delete';
+            del.textContent = '×';
+            del.onclick = (e) => { e.stopPropagation(); deleteCard(lane, cardId); };
+
+            card.appendChild(del);
+            card.appendChild(text);
+            card.onclick = () => showDetail(lane, cardId, cardText);
+            cardsDiv.appendChild(card);
+          }
+        });
+
+        const addBtn = document.createElement('div');
+        addBtn.className = 'add-card';
+        addBtn.textContent = '+ Add card';
+        addBtn.onclick = () => openInput(lane);
+        cardsDiv.appendChild(addBtn);
+
+        laneDiv.appendChild(cardsDiv);
+        board.appendChild(laneDiv);
+      });
+    }
+
+    function handleDrop(e, toLane) {
+      e.preventDefault();
+      const card = document.querySelector('.card.dragging');
+      if (!card) return;
+
+      const cardId = card.dataset.id;
+      const fromLane = card.dataset.lane;
+      const cardData = data.cards[fromLane].find(c => c.id === cardId);
+      const cardText = cardData.text;
+
+      // Remove from old lane
+      data.cards[fromLane] = data.cards[fromLane].filter(c => c.id !== cardId);
+      data.laneOrder[fromLane] = data.laneOrder[fromLane].filter(id => id !== cardId);
+
+      // Add to new lane
+      if (!data.cards[toLane]) data.cards[toLane] = [];
+      if (!data.laneOrder[toLane]) data.laneOrder[toLane] = [];
+      data.cards[toLane].push({ id: cardId, text: cardText });
+      data.laneOrder[toLane].push(cardId);
+
+      saveData();
+      updateChangeCount();
+      render();
+      e.currentTarget.classList.remove('drag-over');
+    }
+
+    function openInput(lane) {
+      currentLaneForInput = lane;
+      document.getElementById('overlay').style.display = 'block';
+      document.getElementById('dialog').style.display = 'block';
+      document.getElementById('input').value = '';
+      document.getElementById('input').focus();
+    }
+
+    function saveInput() {
+      const text = document.getElementById('input').value.trim();
+      if (!text || !currentLaneForInput) return;
+
+      const cardId = Date.now().toString();
+      if (!data.cards[currentLaneForInput]) data.cards[currentLaneForInput] = [];
+      if (!data.laneOrder[currentLaneForInput]) data.laneOrder[currentLaneForInput] = [];
+
+      data.cards[currentLaneForInput].push({ id: cardId, text });
+      data.laneOrder[currentLaneForInput].push(cardId);
+
+      saveData();
+      updateChangeCount();
+      cancelInput();
+      render();
+    }
+
+    function cancelInput() {
+      document.getElementById('overlay').style.display = 'none';
+      document.getElementById('dialog').style.display = 'none';
+      currentLaneForInput = null;
+    }
+
+    function deleteCard(lane, cardId) {
+      data.cards[lane] = data.cards[lane].filter(c => c.id !== cardId);
+      data.laneOrder[lane] = data.laneOrder[lane].filter(id => id !== cardId);
+      saveData();
+      updateChangeCount();
+      render();
+    }
+
+    function exportState() {
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const filename = 'cardoo-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      changeCount = 0;
+      localStorage.setItem('cardoo:changes', '0');
+      updateFireMeter();
+    }
+
+    async function autoExportToFolder() {
+      if (!folderHandle) return;
+      try {
+        const filename = 'cardoo-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+        const fileHandle = await folderHandle.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(JSON.stringify(data, null, 2));
+        await writable.close();
+      } catch (err) {
+        console.warn('Auto-export failed:', err);
+      }
+    }
+
+    function importState() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          try {
+            const imported = JSON.parse(evt.target.result);
+            if (imported.cards && imported.laneOrder) {
+              data = imported;
+              saveData();
+              render();
+              alert('✓ Cards restored from backup');
+            } else {
+              alert('✗ Invalid backup file format');
+            }
+          } catch (err) {
+            alert('✗ Could not read file: ' + err.message);
+          }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    }
+
+    function openConfig() {
+      document.getElementById('configOverlay').style.display = 'block';
+      document.getElementById('configModal').style.display = 'block';
+    }
+
+    function closeConfig() {
+      document.getElementById('configOverlay').style.display = 'none';
+      document.getElementById('configModal').style.display = 'none';
+    }
+
+    function toggleAutoExport() {
+      autoExportEnabled = document.getElementById('autoExportToggle').checked;
+      localStorage.setItem('cardoo:autoExport', autoExportEnabled);
+    }
+
+    async function selectFolder() {
+      try {
+        folderHandle = await window.showDirectoryPicker();
+        const name = folderHandle.name || 'Selected folder';
+        document.getElementById('folderStatus').textContent = '✓ Folder: ' + name;
+        localStorage.setItem('cardoo:folderName', name);
+        document.getElementById('autoExportToggle').disabled = false;
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          alert('Could not select folder: ' + err.message);
+        }
+      }
+    }
+
+    document.getElementById('input').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') saveInput();
+      if (e.key === 'Escape') cancelInput();
+    });
+
+    document.getElementById('overlay').addEventListener('click', cancelInput);
+    document.getElementById('configOverlay').addEventListener('click', closeConfig);
+
+    let detailLane = null;
+    let detailCardId = null;
+
+    function showDetail(lane, cardId, cardText) {
+      detailLane = lane;
+      detailCardId = cardId;
+      const detailText = document.getElementById('detailText');
+      detailText.innerHTML = '';
+
+      const parts = cardText.split(/<<(.*?)>>/);
+      for (let i = 0; i < parts.length; i++) {
+        if (i % 2 === 0) {
+          const span = document.createElement('span');
+          span.textContent = parts[i];
+          detailText.appendChild(span);
+        } else {
+          const mark = document.createElement('mark');
+          mark.textContent = parts[i];
+          detailText.appendChild(mark);
+        }
+      }
+
+      document.getElementById('detailEdit').value = cardText;
+      document.getElementById('detailEdit').style.display = 'none';
+      document.getElementById('detailOverlay').style.display = 'block';
+      document.getElementById('detailModal').style.display = 'block';
+    }
+
+    function closeDetail() {
+      document.getElementById('detailOverlay').style.display = 'none';
+      document.getElementById('detailModal').style.display = 'none';
+      detailLane = null;
+      detailCardId = null;
+    }
+
+    function toggleDetailEdit() {
+      const editArea = document.getElementById('detailEdit');
+      const detailText = document.getElementById('detailText');
+      if (editArea.style.display === 'none') {
+        editArea.style.display = 'block';
+        detailText.style.display = 'none';
+        editArea.focus();
+      } else {
+        editArea.style.display = 'none';
+        detailText.style.display = 'block';
+      }
+    }
+
+    function saveDetailEdit() {
+      const newText = document.getElementById('detailEdit').value.trim();
+      if (!newText || !detailLane || !detailCardId) return;
+      const card = data.cards[detailLane].find(c => c.id === detailCardId);
+      if (card) {
+        card.text = newText;
+        saveData();
+        updateChangeCount();
+        toast('✓ Card saved');
+        setTimeout(() => window.location.reload(), 600);
+      }
+    }
+
+    document.getElementById('detailOverlay').addEventListener('click', closeDetail);
+
+    initData();
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+{
+  "cards": {
+    "Pondering": [
+      {
+        "id": "1722517200000",
+        "text": "Improve cardoo with light theme"
+      },
+      {
+        "id": "1722517300000",
+        "text": "Add keyboard shortcuts for lane navigation"
+      }
+    ],
+    "To Do": [
+      {
+        "id": "1722517400000",
+        "text": "Extract theming patterns to reusable module"
+      },
+      {
+        "id": "1722517500000",
+        "text": "Write guide for porting to new projects"
+      }
+    ],
+    "In Progress": [
+      {
+        "id": "1722517600000",
+        "text": "Document export/import feature"
+      }
+    ],
+    "Done": [
+      {
+        "id": "1722517700000",
+        "text": "Create cardoo kanban board"
+      },
+      {
+        "id": "1722517800000",
+        "text": "Write README and design docs"
+      },
+      {
+        "id": "1722517900000",
+        "text": "Add export/import for git backups"
+      }
+    ]
+  },
+  "laneOrder": {
+    "Pondering": [
+      "1722517200000",
+      "1722517300000"
+    ],
+    "To Do": [
+      "1722517400000",
+      "1722517500000"
+    ],
+    "In Progress": [
+      "1722517600000"
+    ],
+    "Done": [
+      "1722517700000",
+      "1722517800000",
+      "1722517900000"
+    ]
+  }
+}
