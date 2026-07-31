@@ -829,7 +829,7 @@ body.dragging #drop { display: flex; }
 
 /* Markdown table to interactive v3 table conversion */
 .md-table-wrapper { margin: 0 0 1.15em; }
-.md-table-menubar { display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--bg-sunk);
+.md-table-menubar { display: flex; align-items: flex-start; gap: 12px; padding: 10px; background: var(--bg-sunk);
   border: 1px solid var(--border); border-radius: 4px 4px 0 0; }
 .md-table-toggle { appearance: none; background: var(--code-bg); border: 1px solid var(--border-strong);
   color: var(--fg); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;
@@ -843,14 +843,28 @@ body.dragging #drop { display: flex; }
   background: var(--code-bg); color: var(--fg); border-radius: 4px; width: 120px; }
 .md-table-source { border: 1px solid var(--border); border-top: none; border-radius: 0 0 4px 4px; }
 .md-table-interactive { border: 1px solid var(--border); border-top: none; border-radius: 0 0 4px 4px; }
-.md-filter-row { display: flex; gap: 8px; align-items: center; }
-.md-filter-column { appearance: none; background: var(--code-bg); border: 1px solid var(--border-strong);
-  color: var(--fg); padding: 5px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; }
-.md-filter-input { padding: 5px 8px; font-size: 12px; border: 1px solid var(--border-strong);
-  background: var(--code-bg); color: var(--fg); border-radius: 4px; flex: 1; max-width: 150px; }
+.md-filter-row { display: flex; gap: 0; align-items: center; border: 2px solid var(--accent);
+  border-radius: 4px; overflow: hidden; padding: 2px; }
+.md-filter-column { appearance: none; background: var(--code-bg); border: none; border-right: 2px solid var(--accent);
+  color: var(--fg); padding: 5px 8px; font-size: 12px; cursor: pointer; }
+.md-filter-input { padding: 5px 8px; font-size: 12px; border: none;
+  background: var(--code-bg); color: var(--fg); flex: 1; min-width: 120px; }
 .md-table-showall, .md-table-reset { appearance: none; border: 1px solid var(--border-strong); background: var(--code-bg);
   color: var(--fg-muted); padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .md-table-showall:hover, .md-table-reset:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.data-table-pillbox { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--bg-sunk);
+  border-bottom: 1px solid var(--border); }
+.pillbox-label { font-size: 12px; font-weight: 600; color: var(--fg-muted); }
+.pillbox-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pillbox-pill { display: inline-flex; align-items: center; gap: 4px; background: var(--accent-soft);
+  color: var(--accent); padding: 4px 8px; border-radius: 16px; font-size: 12px; }
+.pill-remove { appearance: none; background: none; border: none; color: var(--accent); cursor: pointer;
+  padding: 0; font-size: 14px; font-weight: bold; }
+.pill-remove:hover { color: var(--fg); }
+.col-remove-btn { appearance: none; background: none; border: none; color: var(--accent); cursor: pointer;
+  margin-left: 4px; font-size: 14px; padding: 0; font-weight: bold; }
+.col-remove-btn:hover { color: var(--fg); }
+.hidden-col { display: none; }
 
 .md dl { margin: 0 0 1.05em; }
 .md dt { font-weight: 650; margin-top: .8em; }
@@ -1572,19 +1586,10 @@ function table(lines, start, ctx) {
     "<" + tag + (align[j] ? ' align="' + align[j] + '"' : "") + ' data-col="' + j + '">' + inline(t, ctx) + "</" + tag + ">";
 
   const tableId = "tbl-" + Math.random().toString(36).substr(2, 9);
-  let html = '<div class="table-wrap"><div class="table-controls">';
-  html += '<div class="table-filter"><input type="text" placeholder="Filter rows..." data-table="' + tableId + '" class="table-filter-input"></div>';
-  html += '<button class="table-autofit" data-table="' + tableId + '" title="Distribute columns evenly">Auto-fit</button>';
-  html += '<button class="table-showall" data-table="' + tableId + '" title="Show all hidden columns">↑ Show all</button>';
-  html += '<button class="table-reset" data-table="' + tableId + '" title="Reset to original layout">↻ Reset</button>';
-  html += '</div><div class="table-scroll"><table id="' + tableId + '" data-cols="' + head.length + '"><thead><tr>';
+  let html = '<table id="' + tableId + '" data-cols="' + head.length + '"><thead><tr>';
 
   head.forEach((h, j) => {
-    html += '<th data-col="' + j + '" title="Drag right edge to resize, click × to hide"><div class="th-content">';
-    html += '<span class="th-title">' + inline(h, ctx) + '</span>';
-    html += '<div class="col-resize" data-table="' + tableId + '" data-col="' + j + '"></div>';
-    html += '<button class="col-toggle" data-table="' + tableId + '" data-col="' + j + '" title="Hide column">×</button>';
-    html += '</div></th>';
+    html += '<th data-col="' + j + '">' + inline(h, ctx) + '</th>';
   });
   html += "</tr></thead><tbody>";
 
@@ -1596,7 +1601,7 @@ function table(lines, start, ctx) {
     for (let j = 0; j < head.length; j++) html += cell(cells[j] || "", "td", j);
     html += "</tr>";
   }
-  return { html: html + "</tbody></table></div></div>", next: i };
+  return { html: html + "</tbody></table>", next: i };
 }
 
 function defList(lines, start, ctx) {
@@ -3630,7 +3635,8 @@ function convertMarkdownTablesToDataTables() {
       filtered: [],
       sortBy: null,
       sortAsc: true,
-      filterBy: {}
+      filterBy: {},
+      hiddenColumns: []
     };
 
     // Find and remove v2 table controls (they're inserted by initTableInteractivity before the table)
@@ -3746,8 +3752,6 @@ function createTableMenuBar(datasetId) {
       </button>
       <div class="md-table-controls" style="display: none;">
         <div class="md-table-filters"></div>
-        <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV ↓</button>
-        <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON ↓</button>
       </div>
     </div>
   `;
@@ -3886,7 +3890,7 @@ function populateTableFilters(datasetId, menuBar) {
   });
 }
 
-// Update just the data table rows (for filter/sort without full re-render)
+// Update data table content (regenerate for hidden columns, sort, filter)
 function updateDataTableContent(datasetId) {
   const wrap = document.querySelector(`.data-table-wrap[data-dataset="${datasetId}"]`);
   if (!wrap) return;
@@ -3897,31 +3901,56 @@ function updateDataTableContent(datasetId) {
 
   const fields = schema.fields;
   const state = DataSystem.dataState[datasetId];
+  const hiddenCols = state.hiddenColumns || [];
 
-  // Update headers with sort indicators
+  // Update or create pillbox
+  let pillbox = wrap.querySelector('.data-table-pillbox');
+  if (hiddenCols.length > 0) {
+    if (!pillbox) {
+      pillbox = document.createElement('div');
+      pillbox.className = 'data-table-pillbox';
+      wrap.insertBefore(pillbox, wrap.querySelector('.data-table-scroll'));
+    }
+    pillbox.innerHTML = '<span class="pillbox-label">Removed cols:</span><div class="pillbox-pills">' +
+      hiddenCols.map(colName => `
+        <span class="pillbox-pill" data-column="${colName}">
+          ${colName}
+          <button class="pill-remove" title="Restore column">×</button>
+        </span>
+      `).join('') + '</div>';
+  } else if (pillbox) {
+    pillbox.remove();
+  }
+
+  // Update headers with sort indicators and remove buttons
   const thead = wrap.querySelector('thead tr');
   if (thead) {
     thead.innerHTML = fields.map((field) => {
+      const isHidden = hiddenCols.includes(field.name);
       const isActive = state.sortBy === field.name;
       const sortIcon = isActive ? (state.sortAsc ? ' ↑' : ' ↓') : '';
       const sortClass = isActive ? 'sorted' : '';
       const cursor = field.sortable ? 'pointer' : 'default';
-      return `<th data-field="${field.name}" class="${sortClass}" style="cursor: ${cursor};">${field.name}${sortIcon}</th>`;
+      return `<th data-field="${field.name}" class="${sortClass}${isHidden ? ' hidden-col' : ''}" style="cursor: ${cursor};">
+        <span class="col-header-content">${field.name}${sortIcon}</span>
+        <button class="col-remove-btn" data-field="${field.name}" title="Hide column">×</button>
+      </th>`;
     }).join('');
   }
 
-  // Update rows with current filtered/sorted data
+  // Update rows with current filtered/sorted data and hidden columns
   const tbody = wrap.querySelector('tbody');
   if (tbody) {
     tbody.innerHTML = data.map((row) => {
       return '<tr>' + fields.map((field) => {
+        const isHidden = hiddenCols.includes(field.name);
         let val = row[field.name];
         if (field.type === 'date') {
           val = new Date(val).toLocaleDateString();
         } else if (field.type === 'number' && field.format === 'currency') {
           val = Number(val).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
         }
-        return `<td>${val || ''}</td>`;
+        return `<td class="${isHidden ? 'hidden-col' : ''}">${val || ''}</td>`;
       }).join('') + '</tr>';
     }).join('');
   }
@@ -4302,6 +4331,7 @@ function renderDataTable(datasetId, skipControls = false) {
   if (!schema || !data) return '';
 
   const fields = schema.fields;
+  const state = DataSystem.dataState[datasetId];
   let html = `<div class="data-table-wrap" data-dataset="${datasetId}">`;
 
   // Controls row (filters + export) - skip for markdown tables (handled in menubar)
@@ -4321,20 +4351,38 @@ function renderDataTable(datasetId, skipControls = false) {
     html += '</div>';
   }
 
+  // Hidden columns pillbox
+  const hiddenCols = state.hiddenColumns || [];
+  if (hiddenCols.length > 0) {
+    html += '<div class="data-table-pillbox">';
+    html += '<span class="pillbox-label">Removed cols:</span>';
+    html += '<div class="pillbox-pills">';
+    hiddenCols.forEach((colName) => {
+      html += `<span class="pillbox-pill" data-column="${colName}">
+        ${colName}
+        <button class="pill-remove" title="Restore column">×</button>
+      </span>`;
+    });
+    html += '</div></div>';
+  }
+
   // Table
   html += '<div class="data-table-scroll"><table class="data-table">';
 
-  // Headers with sort
+  // Headers with sort and remove buttons
   html += '<thead><tr>';
   fields.forEach((field) => {
-    const sortClass = DataSystem.dataState[datasetId].sortBy === field.name ? 'sorted' : '';
-    const sortIcon = DataSystem.dataState[datasetId].sortAsc ? '↑' : '↓';
+    const isHidden = hiddenCols.includes(field.name);
+    const sortClass = state.sortBy === field.name ? 'sorted' : '';
+    const sortIcon = state.sortAsc ? '↑' : '↓';
     const cursor = field.sortable ? 'pointer' : 'default';
-    html += `<th data-field="${field.name}" class="${sortClass}" style="cursor: ${cursor};">`;
-    html += field.name;
-    if (field.sortable && DataSystem.dataState[datasetId].sortBy === field.name) {
+    html += `<th data-field="${field.name}" class="${sortClass}${isHidden ? ' hidden-col' : ''}" style="cursor: ${cursor};">`;
+    html += `<span class="col-header-content">${field.name}`;
+    if (field.sortable && state.sortBy === field.name) {
       html += ` ${sortIcon}`;
     }
+    html += '</span>';
+    html += `<button class="col-remove-btn" data-field="${field.name}" title="Hide column">×</button>`;
     html += '</th>';
   });
   html += '</tr></thead>';
@@ -4344,13 +4392,14 @@ function renderDataTable(datasetId, skipControls = false) {
   data.forEach((row) => {
     html += '<tr>';
     fields.forEach((field) => {
+      const isHidden = hiddenCols.includes(field.name);
       let val = row[field.name];
       if (field.type === 'date') {
         val = new Date(val).toLocaleDateString();
       } else if (field.type === 'number' && field.format === 'currency') {
         val = '$' + Number(val).toFixed(2);
       }
-      html += `<td>${val}</td>`;
+      html += `<td class="${isHidden ? 'hidden-col' : ''}">${val}</td>`;
     });
     html += '</tr>';
   });
@@ -4389,6 +4438,37 @@ function initDataTableInteractivity() {
     const fieldName = e.target.dataset.field;
     DataSystem.filter(datasetId, fieldName, e.target.value);
     updateDataTableContent(datasetId); // Update table without full re-render
+  });
+
+  // Hide column
+  document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('col-remove-btn')) {
+      e.stopPropagation();
+      const fieldName = e.target.dataset.field;
+      const wrap = e.target.closest('.data-table-wrap');
+      const datasetId = wrap.dataset.dataset;
+      const state = DataSystem.dataState[datasetId];
+      if (!state.hiddenColumns) state.hiddenColumns = [];
+      if (!state.hiddenColumns.includes(fieldName)) {
+        state.hiddenColumns.push(fieldName);
+      }
+      updateDataTableContent(datasetId);
+    }
+  });
+
+  // Restore column from pillbox
+  document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('pill-remove')) {
+      e.stopPropagation();
+      const colName = e.target.closest('.pillbox-pill').dataset.column;
+      const wrap = e.target.closest('.data-table-wrap');
+      const datasetId = wrap.dataset.dataset;
+      const state = DataSystem.dataState[datasetId];
+      if (state.hiddenColumns) {
+        state.hiddenColumns = state.hiddenColumns.filter(c => c !== colName);
+      }
+      updateDataTableContent(datasetId);
+    }
   });
 
   // Export buttons
