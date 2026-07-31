@@ -3644,7 +3644,8 @@ function convertMarkdownTablesToDataTables() {
       sortBy: null,
       sortAsc: true,
       filterBy: {},
-      hiddenColumns: []
+      hiddenColumns: [],
+      filterMode: 'AND'
     };
 
     // Find and remove v2 table controls (they're inserted by initTableInteractivity before the table)
@@ -4287,23 +4288,42 @@ const DataSystem = {
 
     state.filterBy[fieldName] = { query, isInverted };
 
+    const filterMode = state.filterMode || 'AND';
     const filtered = data.filter((row) => {
-      for (const [fname, filterSpec] of Object.entries(state.filterBy)) {
-        if (!filterSpec || !filterSpec.query) continue;
+      const filters = Object.entries(state.filterBy).filter(([_, spec]) => spec && spec.query);
+      if (filters.length === 0) return true;
 
-        const rowValue = String(row[fname]).toLowerCase();
-        const matches = rowValue.includes(filterSpec.query);
+      if (filterMode === 'AND') {
+        // AND: all filters must pass
+        for (const [fname, filterSpec] of filters) {
+          const rowValue = String(row[fname]).toLowerCase();
+          const matches = rowValue.includes(filterSpec.query);
+          if (filterSpec.isInverted && matches) return false;
+          if (!filterSpec.isInverted && !matches) return false;
+        }
+        return true;
+      } else {
+        // OR: at least one normal filter must match, and all inverted filters must pass
+        const normalFilters = filters.filter(([_, spec]) => !spec.isInverted);
+        const invertedFilters = filters.filter(([_, spec]) => spec.isInverted);
 
-        // For inverted filters, exclude matching rows
-        if (filterSpec.isInverted && matches) {
-          return false;
+        // Check all inverted filters first (they must ALL pass)
+        for (const [fname, filterSpec] of invertedFilters) {
+          const rowValue = String(row[fname]).toLowerCase();
+          const matches = rowValue.includes(filterSpec.query);
+          if (matches) return false; // Inverted filter failed
         }
-        // For normal filters, exclude non-matching rows
-        if (!filterSpec.isInverted && !matches) {
-          return false;
+
+        // If no normal filters, row passes (inverted filters passed)
+        if (normalFilters.length === 0) return true;
+
+        // At least one normal filter must match
+        for (const [fname, filterSpec] of normalFilters) {
+          const rowValue = String(row[fname]).toLowerCase();
+          if (rowValue.includes(filterSpec.query)) return true;
         }
+        return false;
       }
-      return true;
     });
 
     state.filtered = filtered;
@@ -4550,14 +4570,37 @@ function initDataTableInteractivity() {
         <li>Type "+Completed" → shows only Completed status</li>
         <li>Type "-Pending" → removes all Pending rows</li>
       </ul>
-      <p><strong>Multiple filters:</strong> AND logic across columns</p>
-      <ul>
-        <li>Region: "-East" + Status: "Completed" → Completed rows that aren't East</li>
+      <p><strong>Multiple filters logic:</strong></p>
+      <div style="margin: 12px 0;">
+        <label style="display: block; margin: 6px 0;">
+          <input type="radio" name="filter-mode" value="AND" checked> AND (default) — all filters must match
+        </label>
+        <label style="display: block; margin: 6px 0;">
+          <input type="radio" name="filter-mode" value="OR"> OR — any filter can match
+        </label>
+      </div>
+      <p style="font-size: 12px; color: var(--fg-muted);">Example: Region "West" + Status "Completed"</p>
+      <ul style="font-size: 12px; margin: 6px 0;">
+        <li><strong>AND:</strong> Shows Completed rows from West only</li>
+        <li><strong>OR:</strong> Shows all West rows + all Completed rows</li>
       </ul>
     `;
 
     document.body.appendChild(overlay);
     document.body.appendChild(modal);
+
+    // Wire up radio buttons
+    const radios = modal.querySelectorAll('input[name="filter-mode"]');
+    radios.forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        // Find the dataset from currently visible filters
+        const activeDataset = document.querySelector('.data-table-filters input')?.dataset.dataset;
+        if (activeDataset) {
+          DataSystem.dataState[activeDataset].filterMode = e.target.value;
+          updateDataTableContent(activeDataset);
+        }
+      });
+    });
   }
 }
 
