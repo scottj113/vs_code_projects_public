@@ -857,6 +857,9 @@ body.dragging #drop { display: flex; }
   color: var(--fg); padding: 5px 8px; font-size: 12px; cursor: pointer; }
 .md-filter-input { padding: 5px 8px; font-size: 12px; border: none;
   background: var(--code-bg); color: var(--fg); flex: 1; min-width: 120px; }
+.md-filter-operator { display: flex; justify-content: center; align-items: center; padding: 0 12px; font-size: 12px;
+  color: var(--fg-muted); font-weight: 500; min-height: 32px; }
+.filter-mode-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
 .md-table-reset { appearance: none; border: 1px solid var(--border-strong); background: var(--code-bg);
   color: var(--fg-muted); padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .md-table-reset:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
@@ -3826,6 +3829,9 @@ function populateTableFilters(datasetId, menuBar) {
         <input type="text" class="md-filter-input" data-dataset="${datasetId}" data-filter-idx="${i}" placeholder="Search...">
       </div>
     `;
+    if (i < 2) {
+      html += `<div class="md-filter-operator"><span class="filter-mode-label">AND</span></div>`;
+    }
   }
 
   filtersDiv.innerHTML = html;
@@ -4600,10 +4606,17 @@ function initDataTableInteractivity() {
         const activeDataset = document.querySelector('.data-table-filters input')?.dataset.dataset;
         if (activeDataset) {
           DataSystem.dataState[activeDataset].filterMode = e.target.value;
+          updateFilterOperatorLabels(activeDataset);
           updateDataTableContent(activeDataset);
         }
       });
     });
+  }
+
+  function updateFilterOperatorLabels(datasetId) {
+    const state = DataSystem.dataState[datasetId];
+    const labels = document.querySelectorAll('.filter-mode-label');
+    labels.forEach(label => label.textContent = state.filterMode || 'AND');
   }
 }
 
