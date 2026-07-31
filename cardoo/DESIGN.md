@@ -154,17 +154,16 @@ Northern Lights proves that single-file HTML applications can ship production-gr
 
 ---
 
-## Theming Pattern (Extractable)
+## Reusable Patterns
 
-The approach used in Cardoo (and more extensively in Northern Lights) is portable:
+The portable parts of Cardoo — theming, the state/render loop, export/import, the
+staleness meter, the UI primitives — are documented in the shared library:
 
-1. **CSS custom properties** for all colors
-2. **Palette variants** as `data-pal` or `data-theme` attributes
-3. **localStorage** for preference persistence
-4. **Pre-render script** to apply saved theme before first paint (avoids flash)
-5. **System preference detection** via `prefers-color-scheme` media query
+**[../html_as_a_solution/PATTERNS.md](../html_as_a_solution/PATTERNS.md)**
 
-This can be ported to any single-file HTML project. See Northern Lights' `DESIGN.md` or `distro/northern-lights-v3.html` (lines ~19-43) for the implementation.
+Cardoo is one of its two reference implementations. When something here is proven to work
+and would carry to another single-file app, it belongs in that library rather than in this
+file.
 
 ---
 

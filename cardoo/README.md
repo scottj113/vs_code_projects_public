@@ -105,4 +105,5 @@ See [DESIGN.md](DESIGN.md) for information about extending the theme, adding lan
 
 ---
 
-Made with the "HTML as solution" philosophy: if it doesn't need a server or network, use the platform you already have.
+Built on the [HTML as a Solution](../html_as_a_solution/) approach: if it doesn't need a
+server or a network, use the platform you already have.
