@@ -3645,8 +3645,9 @@ function initTableInteractivity() {
     });
   });
 
-  document.addEventListener("click", (e) => {
+  const tableClickHandler = (e) => {
     if (e.target.classList.contains("col-toggle")) {
+      e.stopPropagation();
       const tableId = e.target.dataset.table;
       const colIdx = Number(e.target.dataset.col);
       const table = document.getElementById(tableId);
@@ -3663,6 +3664,7 @@ function initTableInteractivity() {
       updateTableDisplay(table, tableState[tableId]);
     }
     if (e.target.classList.contains("table-autofit")) {
+      e.stopPropagation();
       const tableId = e.target.dataset.table;
       const table = document.getElementById(tableId);
       if (!table) return;
@@ -3675,12 +3677,14 @@ function initTableInteractivity() {
       visible.forEach((j) => {
         tableState[tableId].widths[j] = colWidth;
         table.querySelectorAll(`th[data-col="${j}"], td[data-col="${j}"]`).forEach((cell) => {
-          cell.style.width = colWidth + "px";
+          cell.style.minWidth = colWidth + "px";
+          cell.style.maxWidth = colWidth + "px";
         });
       });
       localStorage.setItem("mdv:tables", JSON.stringify(tableState));
     }
     if (e.target.classList.contains("table-showall")) {
+      e.stopPropagation();
       const tableId = e.target.dataset.table;
       const table = document.getElementById(tableId);
       if (!table) return;
@@ -3691,20 +3695,26 @@ function initTableInteractivity() {
       updateTableDisplay(table, tableState[tableId]);
     }
     if (e.target.classList.contains("table-reset")) {
+      e.stopPropagation();
       const tableId = e.target.dataset.table;
       const table = document.getElementById(tableId);
       if (!table) return;
       if (!confirm("Reset table to original layout? (Clear column widths and visibility)")) return;
-      delete tableState[tableId];
+      tableState[tableId] = { hidden: [], widths: {} };
       localStorage.setItem("mdv:tables", JSON.stringify(tableState));
       table.querySelectorAll("th, td").forEach((cell) => {
         cell.style.width = "";
+        cell.style.minWidth = "";
+        cell.style.maxWidth = "";
         cell.classList.remove("hidden");
       });
       table.querySelectorAll(".col-toggle").forEach((btn) => { btn.textContent = "×"; });
-      updateHiddenBadges(table);
+      updateTableDisplay(table, tableState[tableId]);
     }
-  });
+  };
+
+  document.removeEventListener("click", tableClickHandler);
+  document.addEventListener("click", tableClickHandler);
 
   document.addEventListener("mousedown", (e) => {
     if (!e.target.classList.contains("col-resize")) return;
