@@ -768,11 +768,35 @@ body.dragging #drop { display: flex; }
 .tok-atr { color: var(--tok-atr); }
 .tok-pun { color: var(--tok-pun); }
 
-.md .table-wrap { overflow-x: auto; margin: 0 0 1.15em; }
+.md .table-wrap { margin: 0 0 1.15em; }
+.md .table-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+.md .table-filter { display: flex; align-items: center; gap: 4px; }
+.md .table-filter input { padding: 4px 8px; font-size: 13px; border: 1px solid var(--border-strong);
+  background: var(--code-bg); color: var(--fg); border-radius: 5px; width: 200px; }
+.md .table-filter input::placeholder { color: var(--fg-faint); }
+.md .table-controls button { appearance: none; border: 1px solid var(--border-strong); background: var(--code-bg);
+  color: var(--fg-muted); padding: 4px 8px; border-radius: 5px; cursor: pointer; font-size: 12px; }
+.md .table-controls button:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.md .table-scroll { overflow-x: auto; }
 .md table { border-collapse: collapse; font-size: .94em; }
 .md th, .md td { border: 1px solid var(--border); padding: 7px 12px; text-align: left; }
-.md th { background: var(--bg-sunk); font-weight: 650; }
+.md th { background: var(--bg-sunk); font-weight: 650; position: relative; -webkit-user-select: none; user-select: none; }
+.md th.hidden { display: none; }
+.md td.hidden { display: none; }
+.md tbody tr.hidden { display: none; }
 .md tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--bg-sunk) 55%, transparent); }
+.md .th-content { display: flex; align-items: center; gap: 4px; flex: 1; }
+.md .th-title { flex: 1; min-width: 0; }
+.md .col-resize { width: 5px; cursor: col-resize; opacity: 0; transition: opacity .12s; flex: none; margin-left: 4px; }
+.md th:hover .col-resize { opacity: .6; }
+.md .col-toggle { appearance: none; border: 1px solid transparent; background: none; color: var(--fg-faint);
+  font: inherit; font-size: 11px; padding: 2px 4px; cursor: pointer; border-radius: 3px; flex: none; }
+.md .col-toggle:hover { background: var(--accent-soft); color: var(--accent); }
+.md .col-hidden-badge { display: inline-block; background: var(--accent-soft); color: var(--accent);
+  padding: 2px 6px; border-radius: 3px; font-size: 11px; cursor: pointer; white-space: nowrap;
+  font-weight: 600; }
+.md .col-hidden-badge:hover { background: var(--accent); color: var(--bg-raised); }
+.md .col-hidden-badge-icon { margin-right: 3px; }
 
 .md dl { margin: 0 0 1.05em; }
 .md dt { font-weight: 650; margin-top: .8em; }
@@ -1454,10 +1478,23 @@ function table(lines, start, ctx) {
     return l && r ? "center" : r ? "right" : l ? "left" : "";
   });
   const cell = (t, tag, j) =>
-    "<" + tag + (align[j] ? ' align="' + align[j] + '"' : "") + ">" + inline(t, ctx) + "</" + tag + ">";
+    "<" + tag + (align[j] ? ' align="' + align[j] + '"' : "") + ' data-col="' + j + '">' + inline(t, ctx) + "</" + tag + ">";
 
-  let html = '<div class="table-wrap"><table><thead><tr>';
-  head.forEach((h, j) => { html += cell(h, "th", j); });
+  const tableId = "tbl-" + Math.random().toString(36).substr(2, 9);
+  let html = '<div class="table-wrap"><div class="table-controls">';
+  html += '<div class="table-filter"><input type="text" placeholder="Filter rows..." data-table="' + tableId + '" class="table-filter-input"></div>';
+  html += '<button class="table-autofit" data-table="' + tableId + '" title="Distribute columns evenly">Auto-fit</button>';
+  html += '<button class="table-showall" data-table="' + tableId + '" title="Show all hidden columns">↑ Show all</button>';
+  html += '<button class="table-reset" data-table="' + tableId + '" title="Reset to original layout">↻ Reset</button>';
+  html += '</div><div class="table-scroll"><table id="' + tableId + '" data-cols="' + head.length + '"><thead><tr>';
+
+  head.forEach((h, j) => {
+    html += '<th data-col="' + j + '" title="Drag right edge to resize, click × to hide"><div class="th-content">';
+    html += '<span class="th-title">' + inline(h, ctx) + '</span>';
+    html += '<div class="col-resize" data-table="' + tableId + '" data-col="' + j + '"></div>';
+    html += '<button class="col-toggle" data-table="' + tableId + '" data-col="' + j + '" title="Hide column">×</button>';
+    html += '</div></th>';
+  });
   html += "</tr></thead><tbody>";
 
   let i = start + 2;
@@ -1468,7 +1505,7 @@ function table(lines, start, ctx) {
     for (let j = 0; j < head.length; j++) html += cell(cells[j] || "", "td", j);
     html += "</tr>";
   }
-  return { html: html + "</tbody></table></div>", next: i };
+  return { html: html + "</tbody></table></div></div>", next: i };
 }
 
 function defList(lines, start, ctx) {
@@ -1965,6 +2002,7 @@ function render() {
     const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
     if (target) target.scrollIntoView();
   }
+  initTableInteractivity();
 }
 
 function buildToc(headings) {
@@ -3447,6 +3485,198 @@ els.tocList.addEventListener("click", (e) => {
     history.replaceState(null, "", "#" + a.dataset.id);
   }
 });
+
+function initTableInteractivity() {
+  const tableState = JSON.parse(localStorage.getItem("mdv:tables") || "{}");
+  const columnNames = {};
+
+  function getVisibleCols(table) {
+    const state = tableState[table.id];
+    const colCount = Number(table.dataset.cols);
+    const visible = [];
+    for (let j = 0; j < colCount; j++) {
+      if (!state || !state.hidden || !state.hidden.includes(j)) visible.push(j);
+    }
+    return visible;
+  }
+
+  function getColName(table, colIdx) {
+    if (!columnNames[table.id]) {
+      columnNames[table.id] = {};
+      const headers = table.querySelectorAll("th");
+      headers.forEach((th) => {
+        const col = th.dataset.col;
+        if (col !== undefined) {
+          columnNames[table.id][col] = th.querySelector(".th-title")?.textContent?.trim() || "Column";
+        }
+      });
+    }
+    return columnNames[table.id][colIdx] || "Column";
+  }
+
+  function updateHiddenBadges(table) {
+    const state = tableState[table.id];
+    const hidden = state && state.hidden ? [...state.hidden].sort((a, b) => a - b) : [];
+    const visible = getVisibleCols(table);
+
+    table.querySelectorAll("th").forEach((th) => {
+      const badge = th.querySelector(".col-hidden-badge");
+      if (badge) badge.remove();
+    });
+
+    hidden.forEach((hiddenIdx) => {
+      const nextVisibleIdx = visible.find((v) => v > hiddenIdx);
+      const targetHeader = nextVisibleIdx !== undefined
+        ? table.querySelector(`th[data-col="${nextVisibleIdx}"]`)
+        : visible.length > 0
+          ? table.querySelector(`th[data-col="${visible[visible.length - 1]}"]`)
+          : null;
+
+      if (targetHeader) {
+        const colName = getColName(table, hiddenIdx);
+        const badge = document.createElement("span");
+        badge.className = "col-hidden-badge";
+        badge.title = `Click to show: ${colName}`;
+        badge.innerHTML = `<span class="col-hidden-badge-icon">${hiddenIdx > nextVisibleIdx - 1 ? "→" : "←"}</span>${colName}`;
+        badge.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (!tableState[table.id]) tableState[table.id] = { hidden: [] };
+          const idx = tableState[table.id].hidden.indexOf(hiddenIdx);
+          if (idx >= 0) tableState[table.id].hidden.splice(idx, 1);
+          localStorage.setItem("mdv:tables", JSON.stringify(tableState));
+          updateTableDisplay(table, tableState[table.id]);
+        });
+        targetHeader.querySelector(".th-content").appendChild(badge);
+      }
+    });
+  }
+
+  function updateTableDisplay(table, state) {
+    if (!table) return;
+    const colCount = Number(table.dataset.cols);
+    for (let j = 0; j < colCount; j++) {
+      const hidden = state && state.hidden && state.hidden.includes(j);
+      table.querySelectorAll(`th[data-col="${j}"], td[data-col="${j}"]`).forEach((cell) => {
+        cell.classList.toggle("hidden", hidden);
+      });
+      const btn = table.querySelector(`.col-toggle[data-col="${j}"]`);
+      if (btn) btn.textContent = hidden ? "↻" : "×";
+      if (state && state.widths && state.widths[j]) {
+        table.querySelectorAll(`th[data-col="${j}"], td[data-col="${j}"]`).forEach((cell) => {
+          cell.style.width = state.widths[j] + "px";
+        });
+      }
+    }
+    updateHiddenBadges(table);
+  }
+
+  document.addEventListener("input", (e) => {
+    if (!e.target.classList.contains("table-filter-input")) return;
+    const tableId = e.target.dataset.table;
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const filter = e.target.value.toLowerCase();
+    const rows = table.querySelectorAll("tbody tr");
+    rows.forEach((row) => {
+      const text = row.textContent.toLowerCase();
+      row.classList.toggle("hidden", filter && !text.includes(filter));
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (e.target.classList.contains("col-toggle")) {
+      const tableId = e.target.dataset.table;
+      const colIdx = Number(e.target.dataset.col);
+      const table = document.getElementById(tableId);
+      if (!table) return;
+      if (!tableState[tableId]) tableState[tableId] = { hidden: [] };
+      const hidden = tableState[tableId].hidden;
+      const idx = hidden.indexOf(colIdx);
+      if (idx >= 0) {
+        hidden.splice(idx, 1);
+      } else {
+        hidden.push(colIdx);
+      }
+      localStorage.setItem("mdv:tables", JSON.stringify(tableState));
+      updateTableDisplay(table, tableState[tableId]);
+    }
+    if (e.target.classList.contains("table-autofit")) {
+      const tableId = e.target.dataset.table;
+      const table = document.getElementById(tableId);
+      if (!table) return;
+      const visible = getVisibleCols(table);
+      if (!visible.length) return;
+      const scroll = table.closest(".table-scroll");
+      const availWidth = scroll.offsetWidth;
+      const colWidth = Math.max(60, Math.floor(availWidth / visible.length) - 2);
+      if (!tableState[tableId]) tableState[tableId] = { widths: {} };
+      visible.forEach((j) => {
+        tableState[tableId].widths[j] = colWidth;
+        table.querySelectorAll(`th[data-col="${j}"], td[data-col="${j}"]`).forEach((cell) => {
+          cell.style.width = colWidth + "px";
+        });
+      });
+      localStorage.setItem("mdv:tables", JSON.stringify(tableState));
+    }
+    if (e.target.classList.contains("table-showall")) {
+      const tableId = e.target.dataset.table;
+      const table = document.getElementById(tableId);
+      if (!table) return;
+      if (!tableState[tableId] || !tableState[tableId].hidden || !tableState[tableId].hidden.length) return;
+      if (!confirm("Show all " + tableState[tableId].hidden.length + " hidden columns?")) return;
+      tableState[tableId].hidden = [];
+      localStorage.setItem("mdv:tables", JSON.stringify(tableState));
+      updateTableDisplay(table, tableState[tableId]);
+    }
+    if (e.target.classList.contains("table-reset")) {
+      const tableId = e.target.dataset.table;
+      const table = document.getElementById(tableId);
+      if (!table) return;
+      if (!confirm("Reset table to original layout? (Clear column widths and visibility)")) return;
+      delete tableState[tableId];
+      localStorage.setItem("mdv:tables", JSON.stringify(tableState));
+      table.querySelectorAll("th, td").forEach((cell) => {
+        cell.style.width = "";
+        cell.classList.remove("hidden");
+      });
+      table.querySelectorAll(".col-toggle").forEach((btn) => { btn.textContent = "×"; });
+      updateHiddenBadges(table);
+    }
+  });
+
+  document.addEventListener("mousedown", (e) => {
+    if (!e.target.classList.contains("col-resize")) return;
+    const tableId = e.target.dataset.table;
+    const colIdx = Number(e.target.dataset.col);
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const startX = e.clientX;
+    const cells = table.querySelectorAll(`th[data-col="${colIdx}"], td[data-col="${colIdx}"]`);
+    if (!cells.length) return;
+    const startWidth = cells[0].offsetWidth;
+
+    function handleMouseMove(e) {
+      const diff = e.clientX - startX;
+      const newWidth = Math.max(40, startWidth + diff);
+      cells.forEach((cell) => { cell.style.width = newWidth + "px"; });
+    }
+    function handleMouseUp() {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      if (!tableState[tableId]) tableState[tableId] = { widths: {} };
+      tableState[tableId].widths = tableState[tableId].widths || {};
+      tableState[tableId].widths[colIdx] = cells[0].offsetWidth;
+      localStorage.setItem("mdv:tables", JSON.stringify(tableState));
+    }
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  });
+
+  Object.keys(tableState).forEach((tableId) => {
+    const table = document.getElementById(tableId);
+    if (table) updateTableDisplay(table, tableState[tableId]);
+  });
+}
 
 /* ---------- boot ---------- */
 
