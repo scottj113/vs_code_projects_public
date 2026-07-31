@@ -161,6 +161,136 @@ For major updates, download the new version and replace it.
 
 ---
 
+## Getting Data *Into* a `file://` Page
+
+A bookmarked HTML file has no server, no query string from a router, and no way to reach
+the filesystem on its own. Everything it knows has to arrive through one of four doors.
+Northern Lights supports all four and treats them as a priority chain at boot:
+
+```javascript
+(function boot() {
+  // 1. Sidecar global written by an external tool before the page loads.
+  const bs = window.__APP_BOOTSTRAP__;
+  if (bs && typeof bs.text === "string") { load(bs.text, bs.name, bs.path); return; }
+
+  // 2. URL hash payload: #name=<uri-encoded>&data64=<base64, utf-8>
+  const hash = location.hash.slice(1);
+  const payload = hash.match(/(?:^|&)data64=([^&]*)/);
+  if (payload) {
+    const b64 = payload[1].replace(/-/g, "+").replace(/_/g, "/");
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    load(new TextDecoder("utf-8").decode(bytes));
+    history.replaceState(null, "", location.pathname);   // don't leave it in the URL
+    return;
+  }
+
+  // 3. Last session, from localStorage.
+  if (restore()) return;
+
+  // 4. Nothing to show -- render the empty state and wait for a drop or a picker.
+  render();
+})();
+```
+
+**Why the hash and not the query string**: a `file://` URL's `?query` is unreliable across
+browsers, but `#hash` always survives and never hits a network. It's the one channel that
+works when you double-click an HTML file on a machine with no server.
+
+**Two traps in the hash route**, both learned the hard way:
+
+- **Don't use `URLSearchParams`** — it decodes `+` as a space, which silently corrupts
+  base64 from the first `+` onward.
+- **`atob` skips whitespace instead of throwing**, so a malformed payload decodes into
+  plausible-looking garbage rather than failing. Validate, don't trust.
+
+**The sidecar global (route 1)** is how an external tool hands you a file. An editor task
+writes a tiny `bootstrap.js` containing `window.__APP_BOOTSTRAP__ = {...}`, the page
+includes it with a `<script>` tag, and the data is simply *there* at boot. It's also the
+only route that can pass a real filesystem path — drag & drop, the file picker, and paste
+all deliberately withhold it, because browsers never reveal full paths to a page.
+
+**Drag & drop and the file picker** are the two interactive doors, and they're the good
+ones: in Chromium they hand over a *handle*, not just bytes, which is what makes re-reading
+and saving possible at all.
+
+---
+
+## Getting Data *Out*: The Standalone Export
+
+The counterpart to the pattern above, and the thing that makes a single-file app worth
+building: it can emit a **second self-contained HTML file** that needs nothing to open —
+no stylesheet, no font, no script, no viewer, no network.
+
+The trick is freezing the *computed* CSS variables into the export, so it captures the
+theme and text size the user was actually looking at:
+
+```javascript
+function exportHtml() {
+  const vars = getComputedStyle(document.documentElement);
+  const names = ["bg", "fg", "border", "accent", "code-bg", /* ...all of them... */];
+  const frozen = ":root{" +
+    names.map((n) => "--" + n + ":" + vars.getPropertyValue("--" + n).trim() + ";").join("") +
+    "}";
+
+  const body = documentEl.cloneNode(true);                 // clone, never mutate the live DOM
+  for (const b of body.querySelectorAll(".copy-btn")) b.remove();   // strip interactive bits
+
+  const page = '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">' +
+    "<title>" + esc(title) + "</title><style>" + frozen + baseCss + docCss + "</style>" +
+    "</head><body><main>" + body.outerHTML + "</main></body></html>";
+
+  downloadBlob(page, title + ".html", "text/html;charset=utf-8");
+}
+```
+
+**What makes it work:**
+
+- **Freeze computed values, don't copy the stylesheet.** `getComputedStyle` resolves
+  whichever palette is active into literal hex, so you export one theme instead of all
+  twelve plus the switching logic.
+- **Clone the DOM before stripping.** Mutating the live document to prepare an export is
+  how you ship a viewer that visibly breaks when the user clicks Export.
+- **Emit zero `<script>` tags.** This is the whole point: the output opens on a locked-down
+  machine, pastes into a wiki or SharePoint, survives a mail gateway, and renders
+  identically forever. Anything dynamic must be pre-rendered — diagrams become inline SVG,
+  interactive tables become plain tables.
+- **Inline everything, reference nothing.** One file, no sibling assets to lose.
+
+---
+
+## Print Is an Output Target, Not an Afterthought
+
+`Ctrl+P` is free PDF export — every browser has it — but only if you write the print
+stylesheet. The rule: **screen reading preferences must not leak onto paper.**
+
+```css
+@media print {
+  :root { color-scheme: light; }
+  body  { background: #fff; overflow: visible; }
+
+  /* Chrome is furniture. */
+  #toolbar, #sidebar, #toast, #dropzone { display: none !important; }
+
+  /* Undo the app shell's fixed/scrolling layout or you print page 1 only. */
+  #shell    { position: static; display: block; }
+  #scroller { overflow: visible; }
+
+  /* Reset reading prefs: dark mode, 180% text and bold-all belong on screen. */
+  .doc { color: #000; font-size: 11pt; font-weight: 400; }
+  .doc img { filter: none; }
+
+  /* Respect the page break. */
+  .doc pre, .doc blockquote, .doc table { break-inside: avoid; }
+  .doc h1, .doc h2, .doc h3 { break-after: avoid; }
+}
+```
+
+The one people miss is the **fixed-position app shell**. A `position: fixed` container with
+an inner scroller prints exactly one page — whatever happened to be in the viewport. Reset
+it to static flow and the whole document prints.
+
+---
+
 ## State Management
 
 ### Pattern: Structured Save/Load
@@ -200,6 +330,50 @@ function addItem(item) {
   render();
 }
 ```
+
+### Namespace Your Keys
+
+Prefix every key with the app name (`myapp:theme`, `myapp:state`, `myapp:changes`).
+localStorage is shared across the whole origin, so on `file://` — where *every* local HTML
+file is same-origin in some browsers — unprefixed keys like `"theme"` will collide with
+your other tools.
+
+The prefix also buys you a real reset, which is the first thing to try when a user reports
+something inexplicable:
+
+```javascript
+function clearCache() {
+  if (!confirm("Reset all settings and stored data?")) return;
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("myapp:")) keys.push(k);   // collect first...
+  }
+  keys.forEach((k) => localStorage.removeItem(k));   // ...then delete
+  location.reload();
+}
+```
+
+Collect the keys before deleting any — `localStorage.key(i)` re-indexes as you remove, so
+deleting inside the loop skips half of them.
+
+### Wrap Every Storage Call
+
+`localStorage` throws on quota exhaustion and in some privacy modes. A single unguarded
+`setItem` takes the whole app down:
+
+```javascript
+function persist() {
+  try {
+    if (state.text.length <= PERSIST_LIMIT) {
+      localStorage.setItem("myapp:last", JSON.stringify(state));
+    }
+  } catch (_) { /* quota -- not worth surfacing */ }
+}
+```
+
+Cap what you store, and let persistence fail silently. Losing the convenience of a restored
+session is annoying; a blank screen is a bug report.
 
 ### localStorage Limits
 
@@ -434,6 +608,187 @@ async function watchFile(handle, onchange) {
 
 For cross-browser fallback, offer download/upload instead.
 
+### Writing Safely: Check, Write, Adopt
+
+Never write straight to a handle. Three guards, in order:
+
+```javascript
+async function writeFile(text) {
+  if (!state.handle) return { ok: false, why: "no-handle" };
+  try {
+    // 1. Permission. requestPermission() needs user activation in THIS window --
+    //    from a popup it throws, so the caller must fall back to saveAs().
+    let p = await state.handle.queryPermission({ mode: "readwrite" });
+    if (p !== "granted") {
+      try { p = await state.handle.requestPermission({ mode: "readwrite" }); }
+      catch (e) { return { ok: false, why: "no-activation" }; }
+    }
+    if (p !== "granted") return { ok: false, why: "denied" };
+
+    // 2. Staleness. Someone else may have changed the file since you read it.
+    const before = await state.handle.getFile();
+    if (before.lastModified !== state.lastModified) return { ok: false, why: "stale" };
+
+    const w = await state.handle.createWritable();
+    await w.write(text);
+    await w.close();
+
+    // 3. Adopt your own write, or a watcher sees the new mtime a second later,
+    //    calls it an external change, and reloads your edit back over itself.
+    state.lastModified = (await state.handle.getFile()).lastModified;
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, why: "error", error: e };
+  }
+}
+```
+
+**Report, don't overwrite.** Returning `why: "stale"` lets the UI say *"this file changed
+on disk — reload first"*. Silently winning that race destroys someone's work.
+
+**Step 3 is the non-obvious one.** If you poll for changes (watch mode), your own save
+looks exactly like an external edit. Adopt the mtime immediately or the app fights itself.
+
+**Return a reason, never a bare boolean.** Each failure needs different UI: re-pick the
+file, prompt for permission, offer Save As, warn about staleness.
+
+### Editing Part of a File
+
+When you write back only a section, the rest of the file must come through untouched —
+including its line endings, or a one-line edit shows up as a whole-file diff in git:
+
+```javascript
+const splitLines = (t) => String(t).split(/\r\n|\r|\n/);
+const eolOf = (t) => (/\r\n/.test(t) ? "\r\n" : /\r/.test(t) ? "\r" : "\n");
+
+function spliceSection(text, range, replacement) {
+  const lines = splitLines(text);
+  const body  = String(replacement).replace(/\r\n?/g, "\n").split("\n");
+  return lines.slice(0, range.start)
+              .concat(body, lines.slice(range.end))
+              .join(eolOf(text));          // ← re-join with the file's own EOL
+}
+```
+
+Split on all three line-ending styles, work internally in `\n`, and re-join with whatever
+the file already used. Same principle applies to any partial write: read whole, splice
+precisely, preserve everything you didn't mean to touch.
+
+---
+
+## Degrade, Don't Break
+
+Half these capabilities are Chromium-only. The rule: **feature-detect once, hide what
+isn't there, and make sure the core still works without it.**
+
+```javascript
+const canPick = typeof window.showOpenFilePicker === "function";
+
+if (!canPick) {
+  btnOpenFolder.hidden = true;      // hide, don't disable -- a dead button is worse
+  btnWatch.hidden = true;
+  fileInput.click();                // fall back to <input type="file">
+}
+```
+
+Layer the fallbacks so every browser reaches the same core experience:
+
+| Capability | Best | Fallback |
+|---|---|---|
+| Open a file | `showOpenFilePicker()` → handle, re-readable | `<input type="file">` → bytes only |
+| Open a folder | `showDirectoryPicker()` | multi-select several files |
+| Save | `createWritable()` → writes in place | `<a download>` → lands in Downloads |
+| Auto-backup | directory handle | manual Export button |
+
+**Never silently write a download as a substitute for saving.** A file in Downloads looks
+like a saved file until someone checks the one they meant to edit.
+
+**Also cap any filesystem walk.** A directory picker aimed at a project root will happily
+descend into `node_modules` and appear to hang:
+
+```javascript
+const SKIP_DIR = /^(?:\.|node_modules$|dist$|build$|out$|target$|vendor$|__pycache__$)/i;
+const MAX_FILES = 500;
+const MAX_DEPTH = 8;
+```
+
+---
+
+## Scale the Content, Not the Chrome
+
+Browser zoom (`Ctrl` `+`) magnifies everything — toolbar, sidebar, text — so you end up
+with *fewer* words on screen than you started with. An app can do better by scaling only
+the document, through one CSS variable:
+
+```css
+:root { --doc-size: 15.5px; --doc-zoom: 1; }
+.doc  { font-size: var(--doc-size); }
+.doc h1 { font-size: 2em; }        /* everything inside sized in em -> scales together */
+```
+```javascript
+function setFontSize(px) {
+  root.style.setProperty("--doc-size", px + "px");
+  root.style.setProperty("--doc-zoom", (px / BASE).toFixed(4));
+  localStorage.setItem("myapp:fontSize", px);
+}
+```
+
+Size every element inside the document in `em` and the whole article scales from one
+variable while the furniture stays put.
+
+**The `--doc-zoom` companion** exists for embedded content that can't inherit `em` sizing —
+generated SVG with hard-coded font sizes, for instance. Apply CSS `zoom` to those
+(`zoom: var(--doc-zoom)`), not `transform: scale()`, because `zoom` still reserves the
+correct layout space while `transform` leaves a hole.
+
+**Leave `Ctrl` `+`/`-` alone.** Bind bare `+`/`-` for document scaling so browser zoom stays
+available for the whole interface. Two different jobs, two different keys.
+
+---
+
+## Sanitizing Untrusted HTML
+
+If your app renders content the user didn't type — pasted markup, a dropped file, anything
+with a raw-HTML escape hatch — you need an allow-list. Not a blocklist: those lose.
+
+```javascript
+const OK_TAGS  = new Set("a b blockquote br code dd dl dt em h1 h2 h3 img li ol p pre strong table tbody td th thead tr ul".split(" "));
+const OK_ATTRS = new Set("href src alt title class id colspan rowspan align width height".split(" "));
+const URL_ATTRS = new Set(["href", "src", "cite"]);
+
+function sanitize(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  const doomed = [];
+  let el;
+  while ((el = walker.nextNode())) {
+    if (!OK_TAGS.has(el.tagName.toLowerCase())) { doomed.push(el); continue; }
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      if (!OK_ATTRS.has(name)) { el.removeAttribute(attr.name); continue; }
+      if (URL_ATTRS.has(name)) el.setAttribute(attr.name, safeUrl(attr.value));
+    }
+  }
+  // Unwrap rather than delete, so text inside a merely-unknown tag survives.
+  for (const node of doomed) {
+    if (/^(script|style|iframe|object|embed|form|input|link|meta|base)$/i.test(node.tagName)) node.remove();
+    else node.replaceWith(...node.childNodes);
+  }
+}
+
+const safeUrl = (raw) => /^(?:https?:|mailto:|#|\/|\.{0,2}\/)/i.test(raw.trim()) ? raw : "#";
+```
+
+**Three things that matter:**
+
+- **Allow-list tags *and* attributes.** Stripping `<script>` is not enough — `onclick`,
+  `onerror`, and `javascript:` URLs all execute without one.
+- **Unwrap unknown tags, remove dangerous ones.** An unrecognized `<foo>` wrapping a
+  paragraph should lose the tag, not the paragraph.
+- **Collect while walking, mutate after.** Editing the tree during a `TreeWalker` traversal
+  skips nodes.
+
+Default to escaping, and make raw HTML an explicit opt-in the user has to turn on.
+
 ---
 
 ## Gotcha: Inline `style.display` Toggles
@@ -568,18 +923,64 @@ Cardoo is intentionally simple because it's for **one person** managing **<100 i
 
 To use this pattern in a new single-file HTML project:
 
+**Structure**
 - [ ] One self-contained `.html` file, no external dependencies
-- [ ] Theming via CSS custom properties + `data-*` attributes
-- [ ] Pre-render theme script before CSS to avoid flash
-- [ ] localStorage for state persistence
+- [ ] Inline all CSS/JS; vendor any library as a single file, no package manager
+- [ ] Nothing in the package is executable (no installer, script, or launcher)
+
+**State**
+- [ ] localStorage for persistence, keys namespaced `myapp:`
+- [ ] Every storage call wrapped in `try/catch` (quota, privacy mode)
+- [ ] `state` + `saveState()` + `render()` pattern
 - [ ] **Export / Import to JSON** — never leave the only copy in localStorage
 - [ ] **Staleness meter** if the app holds work worth keeping
-- [ ] Centralized event handlers for keyboard shortcuts
-- [ ] `state` + `saveState()` + `render()` pattern
+- [ ] A "reset everything" that clears the namespace and reloads
+
+**Appearance**
+- [ ] Theming via CSS custom properties + `data-*` attributes
+- [ ] Pre-render theme script before CSS to avoid flash
+- [ ] Scale content via a CSS var, leave `Ctrl` `+`/`-` to browser zoom
+
+**In and out**
+- [ ] Decide your input doors: drop, picker, paste, `#hash`, sidecar global
+- [ ] `@media print` stylesheet — free PDF export, but only if you write it
+- [ ] Standalone HTML export with computed vars frozen and zero `<script>` tags
+
+**Robustness**
+- [ ] Feature-detect capabilities; hide what's missing, keep the core working
+- [ ] File writes: check permission → check staleness → write → adopt mtime
+- [ ] Allow-list sanitizing if any content is untrusted
 - [ ] Show/hide by class or `hidden`, not inline `style.display`
+- [ ] Cap any filesystem walk (skip list, depth, file count)
+
+**Ship**
 - [ ] Test in browser DevTools (no build tools needed)
 - [ ] Document in README.md + DESIGN.md
 
 ---
 
-**Related**: See [Northern Lights MD Viewer](../md_to_html_viewer/) for a more complex example with 60 features in a single file.
+## Where These Came From
+
+Two working apps, both a single bookmarked HTML file:
+
+- **[Cardoo](./cardoo.html)** (~250 lines) — kanban board. Source of the state/render loop,
+  export/import, the staleness meter, and the `style.display` gotcha.
+- **[Northern Lights MD Viewer](../md_to_html_viewer/)** (~4,700 lines, 60 features) —
+  markdown viewer and editor. Source of the `file://` input routes, standalone export,
+  print stylesheet, safe file writes, capability degradation, content scaling, and
+  sanitizing.
+
+The scale gap is the useful part: the same patterns carry a 250-line toy and a 4,700-line
+application without a build step appearing anywhere in between.
+
+**The thesis**: your browser stopped being a document viewer a long time ago. It has a
+rendering engine, a fast JS runtime, storage that persists between visits, and — in
+Chromium — permission to read and write a file once you point it at one. That is
+everything an app needs, and it is already installed. Software with this feature set
+normally ships as a 150 MB Electron bundle whose weight is almost entirely the engine you
+already have.
+
+**The trade is real but narrow.** A page can't run in the background, reach the filesystem
+unprompted, or add itself to a right-click menu. For a reader, a task board, a calculator,
+a log viewer — tools you *open* — that costs nothing. For a file manager or a daemon it
+would be the wrong architecture. Know which one you're building.
