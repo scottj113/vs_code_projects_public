@@ -573,8 +573,11 @@ This has nothing to do with app size or complexity. Northern Lights is ~4,700 li
 has no meter; Cardoo is a few hundred and can't ship without one. Wipe a Northern Lights
 user's localStorage and they reload the `.md` file they still have on disk — worst case, a
 table's column widths or sort order resets, and they re-drag a column border. Wipe
-Cardoo's and every card they've written is gone, full stop, with nothing else to reload it
-from.
+Cardoo's and it's an absolute deal-breaker: every card is gone, full stop, with nothing
+else to reload it from — real inconvenience, real lost time, and for a personal task board
+specifically, the loss isn't only the text. A card is often the only record that some
+half-formed idea existed at all; unlike a `.md` file's content, a forgotten thought doesn't
+come back from human memory just because you're annoyed enough to try.
 
 The mechanism behind that gap: Northern Lights edits a real file, and every `Ctrl+S`
 writes straight to it, so the save event *is* the backup — there's nothing to accumulate
