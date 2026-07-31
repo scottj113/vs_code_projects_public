@@ -7,12 +7,13 @@ A practical guide to reading, editing, and exporting Markdown with Northern Ligh
 2. [Opening Documents](#opening-documents)
 3. [Reading and Navigation](#reading-and-navigation)
 4. [Appearance and Comfort](#appearance-and-comfort)
-5. [Editing Markdown](#editing-markdown)
-6. [Live Reload and Watching](#live-reload-and-watching)
-7. [Exporting and Sharing](#exporting-and-sharing)
-8. [VS Code Integration](#vs-code-integration)
-9. [Projects and Multiple Files](#projects-and-multiple-files)
-10. [Troubleshooting](#troubleshooting)
+5. [Working with Tables](#working-with-tables)
+6. [Editing Markdown](#editing-markdown)
+7. [Live Reload and Watching](#live-reload-and-watching)
+8. [Exporting and Sharing](#exporting-and-sharing)
+9. [VS Code Integration](#vs-code-integration)
+10. [Projects and Multiple Files](#projects-and-multiple-files)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -136,6 +137,60 @@ When enabled, bold text (`**text**`) stays visibly heavier than the body.
 ### Dark Mode and Images
 
 In dark mode, the viewer automatically **dims and desaturates images**. This prevents bright white backgrounds (like screenshots) from being a flashbulb when you're reading in the dark. Diagrams re-render in their own dark theme.
+
+---
+
+## Working with Tables
+
+Tables in markdown are powerful but can be hard to read when they're wide or contain many columns. Northern Lights gives you full control.
+
+### Adjusting Column Width
+
+**Drag to resize:**
+- Hover over any column header
+- A thin resize handle appears on the right edge
+- Drag left or right to adjust the column width
+- Width is saved automatically
+
+**Auto-fit columns:**
+- Click the **Auto-fit** button above the table
+- Distributes all visible columns evenly across available width
+- Useful when you've adjusted widths and want them balanced
+
+### Hiding and Showing Columns
+
+**Hide a column:**
+- Click the **×** button on any column header
+- The column disappears
+- A badge appears in an adjacent column showing the hidden column's name (e.g., `Pri...` for Priority)
+
+**Show a hidden column:**
+- Click the badge showing the hidden column name
+- Or use the **↑ Show all** button to restore all hidden columns at once (with confirmation)
+
+### Filtering Rows
+
+**Search within the table:**
+- Type in the **Filter rows...** search box at the top
+- Rows are filtered in real-time as you type
+- Search looks across all columns
+- Leave the box empty to show all rows again
+
+### Resetting a Table
+
+**Clear all customization:**
+- Click the **↻ Reset** button
+- Confirms before proceeding
+- Restores original column widths
+- Shows all hidden columns
+- Clears the filter
+
+### Table Settings Persistence
+
+All your table customizations are saved:
+- Column widths you've adjusted
+- Columns you've hidden
+- Your last filter (cleared on page reload)
 
 ---
 
@@ -429,6 +484,7 @@ Export as standalone HTML and send the `.html` file. Recipients don't need the v
 | `B` | Toggle bold-all text |
 | `D` | Toggle light / dark mode |
 | `Esc` | Close the editor |
+| **Click logo** | Cycle logo mode: auto-animate → color-only → mono-only |
 
 ---
 

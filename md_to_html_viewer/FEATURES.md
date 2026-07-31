@@ -73,10 +73,12 @@ Complete feature inventory with status, timeline, and metadata.
 | Aurora SVG favicon | brand | ✓ | 100% | 7/24 | 7/30 | 3 | low | Brand | Embedded data URI, no separate file |
 | Product rename (md_to_html_viewer → northern-lights) | brand | ✓ | 100% | 7/30 | 7/30 | 2 | medium | Brand | Rebranded with new name |
 | **v2.0 — TABLE FEATURES** | | | | | | | | | |
-| Adjustable column widths | tables | ✓ | 100% | 7/31 | 7/31 | 2 | high | Feature | Drag column headers to resize |
-| Collapsible columns | tables | ✓ | 100% | 7/31 | 7/31 | 2 | high | Feature | Hide/show individual columns |
-| Row filtering/search | tables | ✓ | 100% | 7/31 | 7/31 | 2 | high | Feature | Text match search across all columns |
-| Table state persistence | tables | ✓ | 100% | 7/31 | 7/31 | 2 | medium | UX | Remember column widths and visibility |
+| Adjustable column widths | tables | ✓ | 100% | 7/31 | 8/1 | 2 | high | Feature | Drag column headers to resize, auto-fit to available width |
+| Collapsible columns | tables | ✓ | 100% | 7/31 | 8/1 | 2 | high | Feature | Hide/show columns with smart badges showing hidden names |
+| Row filtering/search | tables | ✓ | 100% | 7/31 | 8/1 | 2 | high | Feature | Text match search across all columns, live filter |
+| Table state persistence | tables | ✓ | 100% | 7/31 | 8/1 | 2 | medium | UX | Remember column widths, visibility, filter state |
+| Show all / Reset controls | tables | ✓ | 100% | 8/1 | 8/1 | 2 | medium | UX | Restore all columns or reset to original layout with confirmation |
+| Three-mode logo | brand | ✓ | 100% | 8/1 | 8/1 | 3 | medium | Feature | Auto-animate, color-only, or mono-only with smooth transitions |
 
 ## Legend: Feature Type Codes
 
@@ -102,15 +104,15 @@ Complete feature inventory with status, timeline, and metadata.
 
 ## Summary Stats
 
-- **Total Features:** 57
-- **Status Breakdown:** 57 ✓ | 0 🔄 | 0 → | 0 ○
+- **Total Features:** 60
+- **Status Breakdown:** 60 ✓ | 0 🔄 | 0 → | 0 ○
 - **Completion:** 100%
-- **v1.0 Features:** 54
-- **v2.0 Features:** 3 (table enhancements)
-- **Development Timeline:** ~1 week (7/24–7/31)
-- **Architecture:** Single-file HTML application (~3,400 LOC)
-- **Dependencies:** Mermaid (vendored)
-- **Installation:** None required
+- **v1.0 Features:** 54 (7/24–7/31)
+- **v2.0 Features:** 6 (table enhancements + logo modes, 7/31–8/1)
+- **Development Timeline:** ~9 days (7/24–8/1)
+- **Architecture:** Single-file HTML application (~3,500 LOC)
+- **Dependencies:** Mermaid (vendored, MIT licensed)
+- **Installation:** None required — bookmark the HTML file
 
 ## Next Steps (Backlog)
 

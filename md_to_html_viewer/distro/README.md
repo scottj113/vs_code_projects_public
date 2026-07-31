@@ -220,6 +220,9 @@ restriction, not a bug — see below.
 
 - **GitHub-Flavored Markdown** — tables, task lists, strikethrough, autolinks, fenced
   code, plus footnotes, definition lists, and YAML front matter.
+- **Interactive tables** — drag column headers to resize, click × to hide columns,
+  filter rows by text, auto-fit columns to available width, reset to original layout.
+  All customizations are remembered.
 - **Mermaid diagrams** — ` ```mermaid ` fences render as diagrams, offline.
 - **Syntax highlighting** for JS/TS, Python, HTML/XML, CSS, JSON, Bash, SQL, YAML,
   TOML/INI, and diffs.
