@@ -12,9 +12,14 @@
     a bookmarks bar actually renders. Colors are fixed, not theme-driven, so
     the mark stays recognizable in a tab strip regardless of which palette
     the document itself is showing. "#" must be percent-encoded in a data URI.
+
+    Three identical cards, each offset +4x/-4y from the one in front, drawn
+    back-to-front. The front card fully covers the lower-left of the one
+    behind it, so each card behind only ever shows as an upper-right corner
+    and a right edge -- that's geometry, not three separately-drawn slivers.
   -->
   <link rel="icon" type="image/svg+xml"
-        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232d2454'/><rect x='4' y='26' width='24' height='2' rx='1' fill='rgba(255,255,255,.18)'/><rect x='6' y='18' width='5' height='8' rx='1.5' fill='%23ff6b5b'/><rect x='13' y='12' width='5' height='14' rx='1.5' fill='%23ffd23f'/><rect x='20' y='8' width='5' height='18' rx='1.5' fill='%234ecdc4'/></svg>">
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232d2454'/><rect x='15' y='2' width='14' height='18' rx='2.5' fill='%234ecdc4'/><rect x='11' y='6' width='14' height='18' rx='2.5' fill='%23ffd23f' stroke='%232d2454' stroke-width='1'/><rect x='7' y='10' width='14' height='18' rx='2.5' fill='%23ff6b5b' stroke='%232d2454' stroke-width='1'/></svg>">
 
   <script>
     try {
@@ -139,10 +144,9 @@
   <div class="toolbar">
     <svg class="toolbar-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" title="Cardoo — Personal Kanban">
       <rect width="32" height="32" rx="7" fill="#2d2454"/>
-      <rect x="4" y="26" width="24" height="2" rx="1" fill="rgba(255,255,255,.18)"/>
-      <rect x="6" y="18" width="5" height="8" rx="1.5" fill="#ff6b5b"/>
-      <rect x="13" y="12" width="5" height="14" rx="1.5" fill="#ffd23f"/>
-      <rect x="20" y="8" width="5" height="18" rx="1.5" fill="#4ecdc4"/>
+      <rect x="15" y="2" width="14" height="18" rx="2.5" fill="#4ecdc4"/>
+      <rect x="11" y="6" width="14" height="18" rx="2.5" fill="#ffd23f" stroke="#2d2454" stroke-width="1"/>
+      <rect x="7" y="10" width="14" height="18" rx="2.5" fill="#ff6b5b" stroke="#2d2454" stroke-width="1"/>
     </svg>
     <button onclick="exportState()">📥 Export</button>
     <button onclick="importState()">📤 Import</button>
