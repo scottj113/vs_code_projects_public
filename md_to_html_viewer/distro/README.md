@@ -154,28 +154,27 @@ like a hang. The walk stops at 8 levels deep or 500 documents, whichever comes f
 
 ### From VS Code
 
-`.vscode/tasks.json` in this repo defines an **Open in MD Viewer** task that opens
-whatever file is in the active editor tab. Bind it in your user `keybindings.json`:
+`.vscode/tasks.json` defines an **Open in MD Viewer** task. When you press the keybinding,
+your current file opens in the viewer (read-only). Edit in VS Code, then click **Refresh**
+in the viewer to see your changes.
 
+**Setup:**
+
+1. Copy `.vscode/` from this repo into your project folder
+2. Bind the task in your keybindings.json:
 ```json
 { "key": "ctrl+m down", "command": "workbench.action.tasks.runTask",
   "args": "Open in MD Viewer" }
 ```
 
-That is a **chord**: press `Ctrl+M`, release, then `Down`. Only `Ctrl`, `Shift` and
-`Alt` can combine with a key in a single stroke, so `m` and `Down` cannot both be
-part of one press. It also takes over `Ctrl+M`, which VS Code otherwise uses to
-toggle tab focus mode.
+**Using it:**
+- Press `Ctrl+M` then `Down` to open the current file
+- Edit in VS Code
+- Click **↻ Refresh** (Ctrl+R) in the viewer to see changes  
+- **Optional:** Click **Watch** for auto-refresh (asks you to pick the file once)
 
-The task is workspace-scoped. To use it in any folder — an Obsidian vault, say —
-copy the task into your user-level tasks file via **Ctrl+Shift+P → Tasks: Open User
-Tasks**.
-
-The task runs a short PowerShell command inline, so nothing executable has to be
-installed or trusted. The document arrives without re-read access, so
-live reload starts disarmed and each press opens a new tab. If you'd rather stay on
-one file and watch it, dragging the file from VS Code's Explorer onto the viewer
-window arms live reload automatically and replaces the current document instead.
+**For editing directly in the viewer:** Drag the file from VS Code's Explorer onto
+the viewer window instead—then `Ctrl+E` and `Ctrl+S` work normally.
 
 **Arming live reload quickly.** Clicking **Enable live reload** copies the source
 path to your clipboard before opening the dialog, so you can paste it straight into

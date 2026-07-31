@@ -180,9 +180,9 @@ The section means the heading, its text, and all its subsections. Editing `## Se
 - Press **Ctrl+S**
 - Choose where to save, or download as a file instead
 
-### Project Folder Path (VS Code Task)
+### Project Folder Path (When Editing)
 
-When opening from VS Code (see section below), the editor may ask for your project folder path the first time you save.
+When you edit a section (via **drag-and-drop**, not VS Code task), the editor may ask for your project folder path the first time you save.
 
 1. Paste your project folder path into the prompt
 2. The path is saved for future sessions
@@ -286,23 +286,14 @@ In VS Code, you can open any file directly in the viewer with a single keypress.
 ### Using It
 
 1. **Open any `.md` file** in VS Code
-2. **Press Ctrl+M then Down**
-3. Viewer opens in your default browser with that file loaded
+2. **Press Ctrl+M then Down** (the keybinding you added)
+3. Viewer opens in your browser with the file displayed
+4. **The viewer is read-only** — a popup explains the workflow
+5. **Edit in VS Code** as normal
+6. **Press Ctrl+R** in the viewer to refresh and see your changes
+7. **Optional:** Click **Watch** for auto-refresh (you pick the file once)
 
-### First Time Editing
-
-When you first try to save an edit from the VS Code flow:
-
-1. The editor asks: "Where is your project folder?"
-2. Paste your project folder path
-3. Click **📋 Select file** (or the "Open file" button)
-4. Choose the Markdown file in the picker
-5. Press **Ctrl+S** to save
-6. Future saves go straight to disk — no dialog
-
-### Changing Your Project Folder
-
-If you switch projects, click the **📁 folder icon** in the editor to update your stored project path.
+For editing directly in the viewer, use **drag-and-drop** instead (see [Editing Markdown](#editing-markdown) above).
 
 ---
 
