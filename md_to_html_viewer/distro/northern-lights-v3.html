@@ -811,9 +811,14 @@ body.dragging #drop { display: flex; }
 
 /* Data tables (v3) */
 .data-table-wrap { margin: 0 0 1.15em; }
-.data-table-filters { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.data-table-controls { display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+.data-table-filters { display: flex; gap: 8px; flex-wrap: wrap; }
 .data-table-filters input { padding: 5px 8px; font-size: 12px; border: 1px solid var(--border-strong);
   background: var(--code-bg); color: var(--fg); border-radius: 4px; width: 150px; }
+.data-table-export { display: flex; gap: 6px; }
+.data-export-csv, .data-export-json { appearance: none; border: 1px solid var(--border-strong); background: var(--code-bg);
+  color: var(--fg-muted); padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.data-export-csv:hover, .data-export-json:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .data-table-scroll { overflow-x: auto; }
 .data-table { border-collapse: collapse; font-size: .94em; width: 100%; }
 .data-table th, .data-table td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
@@ -897,6 +902,35 @@ body.dragging #drop { display: flex; }
 </head>
 
 <body class="blank">
+
+<!-- V3 Test Dataset: Sales Data -->
+<script type="application/json" data-id="sales_q3">
+{
+  "schema": {
+    "name": "Q3 2026 Sales",
+    "fields": [
+      {"name": "Date", "type": "date", "sortable": true, "filterable": true},
+      {"name": "Product", "type": "string", "sortable": true, "filterable": true},
+      {"name": "Region", "type": "string", "sortable": true, "filterable": true},
+      {"name": "Revenue", "type": "number", "sortable": true, "filterable": false, "format": "currency"},
+      {"name": "Units", "type": "number", "sortable": true, "filterable": false},
+      {"name": "Status", "type": "string", "sortable": true, "filterable": true}
+    ]
+  },
+  "data": [
+    {"Date": "2026-07-01", "Product": "Widget A", "Region": "North", "Revenue": 5200, "Units": 52, "Status": "Completed"},
+    {"Date": "2026-07-02", "Product": "Widget B", "Region": "South", "Revenue": 3850, "Units": 35, "Status": "Completed"},
+    {"Date": "2026-07-03", "Product": "Widget A", "Region": "East", "Revenue": 6100, "Units": 61, "Status": "Completed"},
+    {"Date": "2026-07-04", "Product": "Gadget X", "Region": "West", "Revenue": 8900, "Units": 45, "Status": "Pending"},
+    {"Date": "2026-07-05", "Product": "Widget B", "Region": "North", "Revenue": 4200, "Units": 42, "Status": "Completed"},
+    {"Date": "2026-07-06", "Product": "Gadget X", "Region": "South", "Revenue": 7600, "Units": 38, "Status": "Completed"},
+    {"Date": "2026-07-07", "Product": "Widget A", "Region": "East", "Revenue": 5800, "Units": 58, "Status": "In Progress"},
+    {"Date": "2026-07-08", "Product": "Gadget X", "Region": "North", "Revenue": 9200, "Units": 46, "Status": "Completed"},
+    {"Date": "2026-07-09", "Product": "Widget B", "Region": "West", "Revenue": 4100, "Units": 41, "Status": "Completed"},
+    {"Date": "2026-07-10", "Product": "Widget A", "Region": "South", "Revenue": 5500, "Units": 55, "Status": "Completed"}
+  ]
+}
+</script>
 
 <div id="bar">
   <svg id="bar-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" title="Northern Lights MD Viewer">
@@ -3924,13 +3958,19 @@ function renderDataTable(datasetId) {
   const fields = schema.fields;
   let html = `<div class="data-table-wrap" data-dataset="${datasetId}">`;
 
-  // Filters row
+  // Controls row (filters + export)
+  html += '<div class="data-table-controls">';
   html += '<div class="data-table-filters">';
   fields.forEach((field) => {
     if (field.filterable) {
       html += `<input type="text" class="data-filter" data-field="${field.name}" placeholder="Filter ${field.name}..." />`;
     }
   });
+  html += '</div>';
+  html += `<div class="data-table-export">
+    <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV ↓</button>
+    <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON ↓</button>
+  </div>`;
   html += '</div>';
 
   // Table
@@ -4002,6 +4042,32 @@ function initDataTableInteractivity() {
     DataSystem.filter(datasetId, fieldName, e.target.value);
     render(); // Re-render with filtered data
   });
+
+  // Export buttons
+  document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('data-export-csv')) {
+      e.stopPropagation();
+      const datasetId = e.target.dataset.dataset;
+      const csv = DataSystem.exportCSV(datasetId);
+      downloadFile(csv, datasetId + '.csv', 'text/csv');
+    }
+    if (e.target.classList.contains('data-export-json')) {
+      e.stopPropagation();
+      const datasetId = e.target.dataset.dataset;
+      const json = DataSystem.exportJSON(datasetId);
+      downloadFile(json, datasetId + '.json', 'application/json');
+    }
+  });
+
+  function downloadFile(content, filename, type) {
+    const blob = new Blob([content], { type: type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 }
 
 (function boot() {
