@@ -3741,6 +3741,156 @@ for (const btn of $("#seg-bumpers").querySelectorAll("button")) {
 if (state.bumpers > 0) $("#page").className = `bumper-${state.bumpers}`;
 updateSync();
 
+/* ============================================================================
+   V3 DATA SYSTEM — Embedded datasets, schemas, sorting, filtering, export
+   ============================================================================ */
+
+const DataSystem = {
+  datasets: {},
+  schemas: {},
+  dataState: {},
+
+  // Load all embedded datasets from <script type="application/json" data-id="...">
+  loadDatasets() {
+    const scripts = document.querySelectorAll('script[type="application/json"][data-id]');
+    scripts.forEach((script) => {
+      const id = script.dataset.id;
+      try {
+        const data = JSON.parse(script.textContent);
+        if (data.schema && data.data) {
+          this.schemas[id] = data.schema;
+          this.datasets[id] = data.data;
+          this.dataState[id] = {
+            sorted: [],
+            filtered: [],
+            sortBy: null,
+            sortAsc: true,
+            filterBy: {}
+          };
+        }
+      } catch (e) {
+        console.error(`Failed to parse dataset "${id}":`, e);
+      }
+    });
+  },
+
+  // Validate data against schema
+  validateData(data, schema) {
+    const errors = [];
+    const fields = schema.fields || [];
+
+    data.forEach((row, idx) => {
+      fields.forEach((field) => {
+        const value = row[field.name];
+        if (value === null || value === undefined) {
+          if (field.required) errors.push(`Row ${idx}: ${field.name} is required`);
+          return;
+        }
+        switch (field.type) {
+          case "number":
+            if (isNaN(Number(value))) errors.push(`Row ${idx}: ${field.name} must be a number`);
+            break;
+          case "date":
+            if (isNaN(Date.parse(value))) errors.push(`Row ${idx}: ${field.name} must be a valid date`);
+            break;
+        }
+      });
+    });
+    return errors;
+  },
+
+  // Sort data by column
+  sort(datasetId, fieldName, ascending = true) {
+    if (!this.datasets[datasetId]) return;
+    const data = this.datasets[datasetId];
+    const schema = this.schemas[datasetId];
+    const field = schema.fields.find(f => f.name === fieldName);
+
+    if (!field || !field.sortable) return;
+
+    const sorted = [...data].sort((a, b) => {
+      let aVal = a[fieldName];
+      let bVal = b[fieldName];
+
+      if (field.type === "number") {
+        aVal = Number(aVal);
+        bVal = Number(bVal);
+      } else if (field.type === "date") {
+        aVal = new Date(aVal);
+        bVal = new Date(bVal);
+      }
+
+      if (aVal < bVal) return ascending ? -1 : 1;
+      if (aVal > bVal) return ascending ? 1 : -1;
+      return 0;
+    });
+
+    this.dataState[datasetId].sorted = sorted;
+    this.dataState[datasetId].sortBy = fieldName;
+    this.dataState[datasetId].sortAsc = ascending;
+  },
+
+  // Filter data by field and value
+  filter(datasetId, fieldName, matchText) {
+    if (!this.datasets[datasetId]) return;
+    const data = this.datasets[datasetId];
+    const schema = this.schemas[datasetId];
+    const field = schema.fields.find(f => f.name === fieldName);
+
+    if (!field || !field.filterable) return;
+
+    const state = this.dataState[datasetId];
+    state.filterBy[fieldName] = matchText.toLowerCase();
+
+    const filtered = data.filter((row) => {
+      for (const [fname, query] of Object.entries(state.filterBy)) {
+        if (query && !String(row[fname]).toLowerCase().includes(query)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    state.filtered = filtered;
+  },
+
+  // Get display data (sorted/filtered)
+  getDisplayData(datasetId) {
+    const state = this.dataState[datasetId];
+    const base = state.filtered.length > 0 ? state.filtered : this.datasets[datasetId];
+    return state.sorted.length > 0 ? state.sorted : base;
+  },
+
+  // Export to CSV
+  exportCSV(datasetId) {
+    const data = this.getDisplayData(datasetId);
+    const schema = this.schemas[datasetId];
+    const fields = schema.fields;
+
+    const rows = [
+      fields.map(f => f.name).join(","),
+      ...data.map(row =>
+        fields.map(f => {
+          const val = row[f.name];
+          return typeof val === "string" && val.includes(",") ? `"${val}"` : val;
+        }).join(",")
+      )
+    ];
+    return rows.join("\n");
+  },
+
+  // Export to JSON
+  exportJSON(datasetId) {
+    return JSON.stringify({
+      schema: this.schemas[datasetId],
+      data: this.getDisplayData(datasetId)
+    }, null, 2);
+  }
+};
+
+// Load datasets on page load
+DataSystem.loadDatasets();
+
 (function boot() {
   // 1. Sidecar written by the VS Code task.
   const bs = window.__MD_BOOTSTRAP__;
