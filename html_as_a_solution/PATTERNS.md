@@ -565,6 +565,15 @@ The problem with export/import is purely human: it works perfectly and nobody re
 do it. A modal that interrupts you gets dismissed on reflex. The fix is an ambient signal —
 something that sits in the toolbar and slowly changes while you work.
 
+**When this applies has nothing to do with app size or complexity, and everything to do
+with where the data actually lives.** Northern Lights is ~4,700 lines and has no meter;
+Cardoo is a few hundred and can't ship without one. The difference: Northern Lights edits
+a real file on disk, and every `Ctrl+S` writes straight to it — the save event *is* the
+backup, so there's nothing to accumulate risk on. Cardoo has no file. localStorage isn't a
+cache of something else there; it's the only copy. **If localStorage is the only home your
+data has, you need this. If every action already writes through to a real file, you
+don't.**
+
 ### Implementation
 
 Count every mutation. Reset the count on export.
@@ -1241,7 +1250,8 @@ To use this pattern in a new single-file HTML project:
 - [ ] Every storage call wrapped in `try/catch` (quota, privacy mode)
 - [ ] `state` + `saveState()` + `render()` pattern
 - [ ] **Export / Import to JSON** — never leave the only copy in localStorage
-- [ ] **Staleness meter** if the app holds work worth keeping
+- [ ] **Staleness meter** if localStorage is the *only* home the data has — skip it if
+      every action already writes through to a real file
 - [ ] **Undo/redo** for whichever actions are easy to fat-finger — as recorded intent,
       scoped to those actions, not a full-state snapshot of everything
 - [ ] A "reset everything" that clears the namespace and reloads
