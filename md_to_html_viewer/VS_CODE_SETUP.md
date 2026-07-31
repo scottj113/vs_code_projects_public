@@ -1,13 +1,15 @@
 # VS Code Integration Setup
 
-This guide shows how to set up the Eye Love Markdown Viewer to open directly from VS Code with editing support.
+Open any markdown file in VS Code as a live preview in the viewer with one keystroke.
 
 ## What It Does
 
-Press **Ctrl+M then Down** (a keyboard chord) to open the current markdown file in the viewer. The file is loaded with full editing capability, so you can:
-- Edit sections with Ctrl+E
-- Save edits directly back to the file with Ctrl+S
-- Watch the file for live reload
+Press **Ctrl+M then Down** to open the current file in the Eye Love Markdown Viewer. The viewer is **read-only**—edit in VS Code, then refresh to see changes:
+
+1. **Ctrl+M Down** → File opens in viewer
+2. **Edit in VS Code** (your text editor)
+3. **Ctrl+R** (or click Refresh) → See your changes
+4. **Optional:** Click **Watch** for auto-refresh as you save
 
 ## Prerequisites
 
@@ -48,6 +50,13 @@ The task is defined in `.vscode/tasks.json` in this repo. To use it:
 2. Press **Ctrl+M** then **Down**
 3. The viewer opens in your default browser with that file loaded
 
+### Alternative: Without the Task
+
+If you prefer not to use the PowerShell task:
+- **Open the viewer** (`md_to_html_viewer.html`) in your browser
+- **Drag your markdown file** onto the viewer
+- **Edit in VS Code**, then click **Refresh** (Ctrl+R) to see changes
+
 ## How It Works
 
 The PowerShell script (`open-in-viewer.ps1`):
@@ -62,13 +71,13 @@ The bootstrap data is embedded *inline*, not in a separate `.js` file, so it wor
 
 ## Using It
 
-When you open a file from VS Code:
-
-1. The file loads with its path and content
-2. Edit sections with **Ctrl+E**
-3. Press **Ctrl+S** to save
-4. If you haven't saved this file before, a picker opens to confirm the location
-5. Future saves go straight to disk
+1. Open a markdown file in VS Code
+2. Press **Ctrl+M** then **Down** 
+3. Viewer opens in your browser with the file displayed
+4. **A popup explains the workflow** — dismiss it or follow along
+5. Edit the file in VS Code as normal
+6. Click **Refresh** (Ctrl+R) in the viewer to see your changes
+7. **Optional:** Click **Watch** to enable auto-refresh (it'll ask you to pick the file once)
 
 ## Using From Other Folders
 
@@ -84,36 +93,29 @@ To use this from a different project or folder:
 ## Troubleshooting
 
 **Task doesn't run:**
-- Make sure PowerShell 5.1+ is available (check `pwsh --version` in terminal)
+- Make sure PowerShell 5.1+ is available (already included with Windows 10+)
 - Check VS Code's Terminal panel for error messages
 - Verify the `.vscode/open-in-viewer.ps1` file exists
 
 **Viewer opens but file is empty:**
-- Check that your markdown file is saved (unsaved files cannot be read by the script)
-- Try opening the file directly with drag-and-drop instead to test
+- Check that your markdown file is saved (unsaved files cannot be read)
+- Try drag-and-drop to test if the viewer works in general
 
-**Editing doesn't work:**
-- Make sure you pick a file location when first saving (the picker appears once)
-- After picking, future saves should work without the picker
-- Check the editor status line — it tells you what Ctrl+S will do
+**Watch/auto-refresh doesn't work:**
+- The viewer needs to re-read the file, which requires file permission
+- Click **Enable live reload** (if shown) or **Watch**, then select the file in the picker
+- Once selected, auto-refresh will work for future changes
 
-**Live reload isn't working after opening from VS Code:**
-- Click **Enable live reload** in the toolbar
-- Select the file again in the picker
-- Now Refresh (Ctrl+R) and Watch will work
-
-## Keyboard Reference
+## Keyboard Shortcuts (From VS Code)
 
 | Key | Action |
 |-----|--------|
 | `Ctrl+M Down` | Open current file in viewer |
-| `Ctrl+E` | Edit the current section |
-| `Ctrl+S` | Save the edit |
-| `Ctrl+R` | Reload the file from disk |
-| `B` | Toggle bold all text |
-| `D` | Toggle dark mode |
+| `Ctrl+R` | Refresh (reload file from disk) |
 
-See [HOW_TO.md](HOW_TO.md) for the complete keyboard reference.
+For editing, drag-and-drop the file instead—then you get `Ctrl+E` (edit section) and `Ctrl+S` (save).
+
+See [HOW_TO.md](HOW_TO.md) for all keyboard shortcuts.
 
 ## Technical Details
 
