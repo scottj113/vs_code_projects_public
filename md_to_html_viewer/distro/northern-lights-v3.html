@@ -4561,6 +4561,15 @@ function initDataTableInteractivity() {
     modal.innerHTML = `
       <button class="filter-help-close">×</button>
       <h3>Filter Syntax</h3>
+      <p><strong>Multiple filters logic:</strong></p>
+      <div style="margin: 12px 0; padding: 12px; background: var(--code-bg); border-radius: 4px;">
+        <label style="display: block; margin: 6px 0;">
+          <input type="radio" name="filter-mode" value="AND" checked> <strong>AND (default)</strong> — all filters must match
+        </label>
+        <label style="display: block; margin: 6px 0;">
+          <input type="radio" name="filter-mode" value="OR"> <strong>OR</strong> — any filter can match
+        </label>
+      </div>
       <p><strong>Use text prefixes to control filtering:</strong></p>
       <ul>
         <li><strong>token</strong> — Keep rows containing token</li>
@@ -4573,15 +4582,6 @@ function initDataTableInteractivity() {
         <li>Type "+Completed" → shows only Completed status</li>
         <li>Type "-Pending" → removes all Pending rows</li>
       </ul>
-      <p><strong>Multiple filters logic:</strong></p>
-      <div style="margin: 12px 0;">
-        <label style="display: block; margin: 6px 0;">
-          <input type="radio" name="filter-mode" value="AND" checked> AND (default) — all filters must match
-        </label>
-        <label style="display: block; margin: 6px 0;">
-          <input type="radio" name="filter-mode" value="OR"> OR — any filter can match
-        </label>
-      </div>
       <p style="font-size: 12px; color: var(--fg-muted);">Example: Region "West" + Status "Completed"</p>
       <ul style="font-size: 12px; margin: 6px 0;">
         <li><strong>AND:</strong> Shows Completed rows from West only</li>
