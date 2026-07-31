@@ -82,6 +82,8 @@
     .toolbar-logo { width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; margin-right: 4px; }
     .toolbar button { background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--fg); padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
     .toolbar button:hover { background: var(--bg-lane); border-color: var(--fg-muted); }
+    .toolbar button:disabled { opacity: 0.35; cursor: default; }
+    .toolbar button:disabled:hover { background: var(--bg-card); border-color: var(--border-strong); }
     .container { display: flex; gap: 16px; padding: 20px; max-width: 1400px; margin: 0 auto; overflow-x: auto; min-height: 100vh; }
     .lane { background: var(--bg-lane); border-radius: 8px; padding: 12px; min-width: 300px; flex-shrink: 0; display: flex; flex-direction: column; }
     .lane-title { font-weight: 600; margin-bottom: 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-muted); }
@@ -148,6 +150,8 @@
       <rect x="11" y="6" width="14" height="18" rx="2.5" fill="#ffd23f" stroke="#2d2454" stroke-width="1"/>
       <rect x="7" y="10" width="14" height="18" rx="2.5" fill="#ff6b5b" stroke="#2d2454" stroke-width="1"/>
     </svg>
+    <button id="undoBtn" onclick="undoMove()" title="Undo move (Ctrl+Z)" disabled>↶ Undo</button>
+    <button id="redoBtn" onclick="redoMove()" title="Redo move (Ctrl+R)" disabled>↷ Redo</button>
     <button onclick="exportState()">📥 Export</button>
     <button onclick="importState()">📤 Import</button>
     <button onclick="cycleTheme()">🎨 Theme</button>
@@ -210,6 +214,9 @@
     let wasRed = false;
     let toastTimer = null;
     let currentTheme = 'blue-dark';
+    let moveUndoStack = [];
+    let moveRedoStack = [];
+    const MAX_MOVE_HISTORY = 50;
 
     function initData() {
       const stored = localStorage.getItem('cardoo');
@@ -356,8 +363,11 @@
 
       const cardId = card.dataset.id;
       const fromLane = card.dataset.lane;
+      if (fromLane === toLane) return;
       const cardData = data.cards[fromLane].find(c => c.id === cardId);
       const cardText = cardData.text;
+
+      pushMoveHistory({ cardId, from: fromLane, to: toLane });
 
       // Remove from old lane
       data.cards[fromLane] = data.cards[fromLane].filter(c => c.id !== cardId);
@@ -374,6 +384,74 @@
       render();
       e.currentTarget.classList.remove('drag-over');
     }
+
+    // Moves are recorded as { cardId, from, to } rather than full-board
+    // snapshots, so undo/redo only ever touches the one card that moved --
+    // an add or delete elsewhere in between doesn't get silently reverted.
+    function moveCard(cardId, fromLane, toLane) {
+      const cardData = data.cards[fromLane]?.find(c => c.id === cardId);
+      if (!cardData) return false;
+      data.cards[fromLane] = data.cards[fromLane].filter(c => c.id !== cardId);
+      data.laneOrder[fromLane] = data.laneOrder[fromLane].filter(id => id !== cardId);
+      if (!data.cards[toLane]) data.cards[toLane] = [];
+      if (!data.laneOrder[toLane]) data.laneOrder[toLane] = [];
+      data.cards[toLane].push(cardData);
+      data.laneOrder[toLane].push(cardId);
+      return true;
+    }
+
+    function pushMoveHistory(move) {
+      moveUndoStack.push(move);
+      if (moveUndoStack.length > MAX_MOVE_HISTORY) moveUndoStack.shift();
+      moveRedoStack = [];
+      updateMoveButtons();
+    }
+
+    function undoMove() {
+      const move = moveUndoStack.pop();
+      if (!move) return;
+      if (moveCard(move.cardId, move.to, move.from)) {
+        moveRedoStack.push(move);
+        saveData();
+        updateChangeCount();
+        render();
+        toast('↶ Undo move');
+      }
+      updateMoveButtons();
+    }
+
+    function redoMove() {
+      const move = moveRedoStack.pop();
+      if (!move) return;
+      if (moveCard(move.cardId, move.from, move.to)) {
+        moveUndoStack.push(move);
+        saveData();
+        updateChangeCount();
+        render();
+        toast('↷ Redo move');
+      }
+      updateMoveButtons();
+    }
+
+    function updateMoveButtons() {
+      document.getElementById('undoBtn').disabled = moveUndoStack.length === 0;
+      document.getElementById('redoBtn').disabled = moveRedoStack.length === 0;
+    }
+
+    document.addEventListener('keydown', (e) => {
+      const tag = (document.activeElement && document.activeElement.tagName) || '';
+      const inField = tag === 'INPUT' || tag === 'TEXTAREA';
+
+      if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        if (inField) return; // let the browser's native undo handle text editing
+        e.preventDefault();
+        undoMove();
+      }
+      if (e.ctrlKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault(); // always override the browser's page-reload binding
+        redoMove();
+      }
+    });
 
     function openInput(lane) {
       currentLaneForInput = lane;
