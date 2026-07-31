@@ -398,11 +398,16 @@ body {
   border-bottom: 1px solid var(--border);
 }
 #bar-logo {
-  width: 28px; height: 28px; flex: none; opacity: .85; transition: opacity .12s, filter .3s;
-  cursor: pointer;
+  width: 28px; height: 28px; flex: none; opacity: .85; cursor: pointer;
+  transition: opacity .12s;
 }
 #bar-logo:hover { opacity: 1; }
 #bar-logo.mono { filter: grayscale(1) brightness(var(--fg-brightness, 1)); }
+#bar-logo.auto { animation: logo-pulse 4s ease-in-out infinite; }
+@keyframes logo-pulse {
+  0%, 100% { filter: grayscale(0); }
+  50% { filter: grayscale(1) brightness(var(--fg-brightness, 1)); }
+}
 #bar .name {
   appearance: none; border: 1px solid transparent; background: none;
   color: inherit; font: inherit; font-weight: 600; font-size: 13.5px;
@@ -3500,18 +3505,33 @@ els.tocList.addEventListener("click", (e) => {
   }
 });
 
-// Logo toggle: color ⟷ monochrome (night mode)
+// Logo modes: auto-animate ⟷ color-only ⟷ mono-only (cycle on click)
+const logoModes = ["auto", "color", "mono"];
+let logoMode = Number(localStorage.getItem("mdv:logo-mode") || "0");
+
+function setLogoMode(mode) {
+  logoMode = mode % logoModes.length;
+  const logo = $("#bar-logo");
+  logo.classList.remove(...logoModes);
+  if (logoMode === 0) {
+    logo.classList.add("auto");
+    logo.title = "Logo mode: Auto (click to freeze on color)";
+  } else if (logoMode === 1) {
+    logo.title = "Logo mode: Color (click to freeze on mono)";
+  } else {
+    logo.classList.add("mono");
+    logo.title = "Logo mode: Mono (click to auto-animate)";
+  }
+  localStorage.setItem("mdv:logo-mode", logoMode);
+}
+
 $("#bar-logo").addEventListener("click", (e) => {
   e.stopPropagation();
-  const logo = $("#bar-logo");
-  const isMonochrome = logo.classList.toggle("mono");
-  localStorage.setItem("mdv:logo-mono", isMonochrome ? "1" : "0");
+  setLogoMode(logoMode + 1);
 });
 
-// Restore logo preference
-if (localStorage.getItem("mdv:logo-mono") === "1") {
-  $("#bar-logo").classList.add("mono");
-}
+// Restore logo mode preference
+setLogoMode(logoMode);
 
 function initTableInteractivity() {
   const tableState = JSON.parse(localStorage.getItem("mdv:tables") || "{}");
