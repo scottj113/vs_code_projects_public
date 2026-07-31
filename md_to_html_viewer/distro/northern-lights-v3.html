@@ -2048,6 +2048,9 @@ function render() {
   els.doc.innerHTML = html;
   if (state.rawHtml) sanitize(els.doc);
 
+  // Replace <table data-source="..."> with rendered data tables
+  renderEmbeddedDataTables();
+
   document.body.classList.remove("blank");
   buildToc(ctx.headings);
   wireCodeCopy();
@@ -3580,6 +3583,15 @@ $("#bar-logo").addEventListener("click", (e) => {
 
 // Restore logo mode preference
 setLogoMode(logoMode);
+
+function renderEmbeddedDataTables() {
+  const tables = els.doc.querySelectorAll("table[data-source]");
+  tables.forEach((emptyTable) => {
+    const datasetId = emptyTable.dataset.source;
+    const html = renderDataTable(datasetId);
+    emptyTable.outerHTML = html;
+  });
+}
 
 function initTableInteractivity() {
   const tableState = JSON.parse(localStorage.getItem("mdv:tables") || "{}");
