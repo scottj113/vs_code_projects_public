@@ -29,6 +29,7 @@ their fallbacks where cheap, but Chrome/Edge is the assumption.
 - [State Management](#state-management) — the save/render loop, key hygiene
 - [Durable State: Export / Import](#durable-state-export--import) — survive a cleared cache
 - [The Staleness Meter](#the-staleness-meter) — make unsaved work visible
+- [Undo/Redo: Record Intent, Not Snapshots](#undoredo-record-intent-not-snapshots)
 
 **Interface**
 - [UI Primitives](#ui-primitives) — toast, clipboard, drag & drop, blob URLs, scroll-spy
@@ -612,6 +613,95 @@ where the cost of forgetting is high and the cost of acting is one click.
 
 ---
 
+## Undo/Redo: Record Intent, Not Snapshots
+
+The obvious way to build undo is snapshotting the whole state before every mutation and
+popping backward through the list. It works, and it's the wrong default for most of these
+apps: it's all-or-nothing (undo *anything* means undo *everything* since, in order), it
+grows one full copy of the state per action, and once you decide undo should only cover
+*some* kinds of change, snapshots can't express that at all.
+
+**The alternative: record what happened, not what everything looked like.**
+
+```javascript
+let undoStack = [];
+let redoStack = [];
+const MAX_HISTORY = 50;
+
+function pushHistory(action) {
+  undoStack.push(action);                    // e.g. { cardId, from: "To Do", to: "Done" }
+  if (undoStack.length > MAX_HISTORY) undoStack.shift();
+  redoStack = [];                             // a new action invalidates the old future
+  updateButtons();
+}
+
+function undo() {
+  const action = undoStack.pop();
+  if (!action) return;
+  if (applyInverse(action)) {                 // look the target up fresh; don't trust position
+    redoStack.push(action);
+    saveData();
+    render();
+  }
+  updateButtons();
+}
+
+function redo() {
+  const action = redoStack.pop();
+  if (!action) return;
+  if (applyForward(action)) {
+    undoStack.push(action);
+    saveData();
+    render();
+  }
+  updateButtons();
+}
+```
+
+**Why this beats a snapshot stack here:**
+
+- **It scopes naturally.** Cardoo's undo covers drag-and-drop moves only, not
+  add/delete/edit — those already have their own affordances (an × button, an edit
+  dialog with its own save step), and a move is the one action people fat-finger. A
+  snapshot stack can't express "undo *this kind* of change" at all; a recorded action can
+  simply not be pushed for the kinds you've decided don't need it.
+- **It's cheap.** A move record is three fields. A full-board snapshot is the whole JSON
+  document, once per action, forever (until capped).
+- **It degrades safely.** Look the target up by id at undo time — `applyInverse` finds the
+  card fresh in the current data rather than trusting a remembered position — so if
+  something else deleted it in between, the undo is just a no-op instead of corrupting
+  state or resurrecting a stale copy.
+
+**When a snapshot stack is still the right call**: if "undo" needs to mean *everything*,
+uniformly, with no per-action-type scoping — a text editor undoing keystrokes, for
+instance. Reach for recorded intent first; fall back to snapshots when the domain
+genuinely doesn't factor into discrete, invertible actions.
+
+### The `Ctrl+Z` Focus Guard
+
+Binding `Ctrl+Z` globally breaks the browser's own undo inside any `<input>` or
+`<textarea>` on the page — typing a correction into a text field and hitting `Ctrl+Z`
+should erase the last few characters, not revert application state out from under you.
+
+```javascript
+document.addEventListener("keydown", (e) => {
+  const tag = document.activeElement?.tagName || "";
+  const inField = tag === "INPUT" || tag === "TEXTAREA";
+
+  if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "z") {
+    if (inField) return;          // let the browser handle text-editing undo
+    e.preventDefault();
+    undo();
+  }
+});
+```
+
+`Ctrl+R` has no native text-editing meaning, so redo bound to it can stay unconditional —
+just `e.preventDefault()` to stop the browser's page-reload binding, the same precedent
+Northern Lights already set for `Ctrl+R` as an in-app action.
+
+---
+
 ## UI Primitives
 
 The handful of components every one of these apps ends up needing. All proven in both
@@ -1152,6 +1242,8 @@ To use this pattern in a new single-file HTML project:
 - [ ] `state` + `saveState()` + `render()` pattern
 - [ ] **Export / Import to JSON** — never leave the only copy in localStorage
 - [ ] **Staleness meter** if the app holds work worth keeping
+- [ ] **Undo/redo** for whichever actions are easy to fat-finger — as recorded intent,
+      scoped to those actions, not a full-state snapshot of everything
 - [ ] A "reset everything" that clears the namespace and reloads
 
 **Appearance**
