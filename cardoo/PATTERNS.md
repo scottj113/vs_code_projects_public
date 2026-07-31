@@ -640,7 +640,6 @@ function toast(msg, isError) {
   el.classList.toggle("err", !!isError);
   el.classList.add("show");
   clearTimeout(toastTimer);                      // reset the clock on every call
-  el.style.visibility = "visible";
   toastTimer = setTimeout(() => el.classList.remove("show"), isError ? 10400 : 4800);
 }
 ```
