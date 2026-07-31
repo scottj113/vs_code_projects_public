@@ -105,7 +105,7 @@
     .detail-content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
     .detail-text { background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; padding: 12px; margin-bottom: 12px;
       flex: 1; overflow-y: auto; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
-    .detail-edit { width: 100%; flex: 1; padding: 10px; background: var(--bg-card); border: 1px solid var(--border);
+    .detail-edit { width: 100%; flex: 1; min-height: 0; padding: 10px; background: var(--bg-card); border: 1px solid var(--border);
       border-radius: 4px; color: var(--fg); font-family: monospace; font-size: 13px; display: none; resize: none; margin-bottom: 12px; }
     .detail-buttons { display: flex; gap: 8px; }
     .detail-buttons button { flex: 1; padding: 8px; background: var(--bg-card); border: 1px solid var(--border-strong);
@@ -530,7 +530,12 @@
     function toggleDetailEdit() {
       const editArea = document.getElementById('detailEdit');
       const detailText = document.getElementById('detailText');
-      if (editArea.style.display === 'none') {
+      const isHidden = editArea.style.display === 'none' || !editArea.style.display;
+      if (isHidden) {
+        // Textareas don't reliably stretch via flex-grow in all browsers,
+        // so pin the height to match the sibling it's replacing.
+        const h = detailText.getBoundingClientRect().height;
+        editArea.style.height = h + 'px';
         editArea.style.display = 'block';
         detailText.style.display = 'none';
         editArea.focus();
