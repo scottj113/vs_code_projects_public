@@ -15,12 +15,22 @@ This table contains Q3 2026 sales data with the following features:
 - **Export as CSV** — Download filtered/sorted data as `.csv`
 - **Export as JSON** — Download filtered/sorted data as `.json`
 
-### Examples
+### Filter Syntax
 
-Try filtering for:
-- **Region:** Type "West" to see only West region sales
-- **Status:** Type "Completed" to see completed transactions
-- **Product:** Type "Widget" to filter by product name
+Use prefixes to control filtering behavior:
+
+- **No prefix or `+token`** — Keep rows matching the token
+  - Type: `West` or `+West` → shows only West region
+  - Type: `Completed` → shows only Completed status
+  
+- **`-token`** — Remove rows matching the token (inverted filter)
+  - Type: `-East` → shows everything except East region
+  - Type: `-Pending` → removes all Pending rows
+  
+- **Multiple filters** — AND logic across columns
+  - Region: `-East` AND Status: `Completed` → Completed rows that aren't East
+
+### Sort Examples
 
 Or sort by:
 - **Revenue** (highest sales first)
