@@ -3534,10 +3534,11 @@ function initTableInteractivity() {
 
       if (targetHeader) {
         const colName = getColName(table, hiddenIdx);
+        const truncated = colName.length > 6 ? colName.substring(0, 3) + "..." : colName;
         const badge = document.createElement("span");
         badge.className = "col-hidden-badge";
         badge.title = `Click to show: ${colName}`;
-        badge.innerHTML = `<span class="col-hidden-badge-icon">${hiddenIdx > nextVisibleIdx - 1 ? "→" : "←"}</span>${colName}`;
+        badge.innerHTML = `<span class="col-hidden-badge-icon">${hiddenIdx > nextVisibleIdx - 1 ? "→" : "←"}</span>${truncated}`;
         badge.addEventListener("click", (e) => {
           e.stopPropagation();
           if (!tableState[table.id]) tableState[table.id] = { hidden: [] };
