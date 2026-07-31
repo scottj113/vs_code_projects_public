@@ -827,6 +827,31 @@ body.dragging #drop { display: flex; }
 .data-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--bg-sunk) 55%, transparent); }
 .data-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 12%, var(--bg-sunk)); }
 
+/* Markdown table to interactive v3 table conversion */
+.md-table-wrapper { margin: 0 0 1.15em; }
+.md-table-menubar { display: flex; align-items: center; gap: 12px; padding: 10px; background: var(--bg-sunk);
+  border: 1px solid var(--border); border-radius: 4px 4px 0 0; }
+.md-table-toggle { appearance: none; background: var(--code-bg); border: 1px solid var(--border-strong);
+  color: var(--fg); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px; }
+.md-table-toggle:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.md-table-toggle.open { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.toggle-icon { display: inline-block; width: 10px; text-align: center; }
+.md-table-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.md-table-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.md-table-filters input { padding: 5px 8px; font-size: 12px; border: 1px solid var(--border-strong);
+  background: var(--code-bg); color: var(--fg); border-radius: 4px; width: 120px; }
+.md-table-source { border: 1px solid var(--border); border-top: none; border-radius: 0 0 4px 4px; }
+.md-table-interactive { border: 1px solid var(--border); border-top: none; border-radius: 0 0 4px 4px; }
+.md-filter-row { display: flex; gap: 8px; align-items: center; }
+.md-filter-column { appearance: none; background: var(--code-bg); border: 1px solid var(--border-strong);
+  color: var(--fg); padding: 5px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+.md-filter-input { padding: 5px 8px; font-size: 12px; border: 1px solid var(--border-strong);
+  background: var(--code-bg); color: var(--fg); border-radius: 4px; flex: 1; max-width: 150px; }
+.md-table-showall, .md-table-reset { appearance: none; border: 1px solid var(--border-strong); background: var(--code-bg);
+  color: var(--fg-muted); padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.md-table-showall:hover, .md-table-reset:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
 .md dl { margin: 0 0 1.05em; }
 .md dt { font-weight: 650; margin-top: .8em; }
 .md dd { margin: .2em 0 .2em 1.5em; color: var(--fg-muted); }
@@ -2045,15 +2070,8 @@ function render() {
   // rather than cached anywhere longer-lived.
   state.headings = ctx.headings;
 
-  // Unescape data-table placeholders (safe because we control this syntax)
-  // Format: &lt;table data-source=&quot;datasetId&quot;&gt;&lt;/table&gt;
-  html = html.replace(/&lt;table\s+data-source=&quot;([^&]+)&quot;&gt;&lt;\/table&gt;/g, '<table data-source="$1"></table>');
-
   els.doc.innerHTML = html;
   if (state.rawHtml) sanitize(els.doc);
-
-  // Replace <table data-source="..."> with rendered data tables
-  renderEmbeddedDataTables();
 
   document.body.classList.remove("blank");
   buildToc(ctx.headings);
@@ -2075,7 +2093,8 @@ function render() {
     const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
     if (target) target.scrollIntoView();
   }
-  initTableInteractivity();
+  convertMarkdownTablesToDataTables();
+  // initTableInteractivity(); // Disabled - using v3 interactive tables instead
   initDataTableInteractivity();
 }
 
@@ -3588,13 +3607,324 @@ $("#bar-logo").addEventListener("click", (e) => {
 // Restore logo mode preference
 setLogoMode(logoMode);
 
-function renderEmbeddedDataTables() {
-  const tables = els.doc.querySelectorAll("table[data-source]");
-  tables.forEach((emptyTable) => {
-    const datasetId = emptyTable.dataset.source;
-    const html = renderDataTable(datasetId);
-    emptyTable.outerHTML = html;
+// Convert markdown tables to interactive v3 data tables with toggle menu
+function convertMarkdownTablesToDataTables() {
+  const tables = els.doc.querySelectorAll('table');
+  tables.forEach((mdTable, idx) => {
+    // Skip if already converted
+    if (mdTable.classList.contains('md-table-source')) return;
+
+    // Extract data from markdown table
+    const schema = extractTableSchema(mdTable);
+    const data = extractTableData(mdTable);
+
+    if (!schema || !data || data.length === 0) return;
+
+    const datasetId = `md-table-${idx}`;
+
+    // Store in DataSystem
+    DataSystem.schemas[datasetId] = schema;
+    DataSystem.datasets[datasetId] = data;
+    DataSystem.dataState[datasetId] = {
+      sorted: [],
+      filtered: [],
+      sortBy: null,
+      sortAsc: true,
+      filterBy: {}
+    };
+
+    // Find and remove v2 table controls (they're inserted by initTableInteractivity before the table)
+    let v2Controls = mdTable.previousElementSibling;
+    if (v2Controls && v2Controls.classList.contains('table-controls')) {
+      v2Controls.remove();
+    }
+
+    // Create wrapper to contain: menu + table + v3 table (no v2 controls)
+    const wrapper = document.createElement('div');
+    wrapper.className = 'md-table-wrapper';
+    wrapper.innerHTML = createTableMenuBar(datasetId);
+
+    // Insert wrapper before table
+    mdTable.parentNode.insertBefore(wrapper, mdTable);
+
+    // Move table into wrapper
+    wrapper.appendChild(mdTable);
+    mdTable.classList.add('md-table-source');
+    mdTable.dataset.tableId = datasetId;
+    mdTable.style.display = 'block'; // Initially visible
+
+    // Render v3 table (initially hidden) and add to wrapper
+    const v3Table = document.createElement('div');
+    v3Table.className = 'md-table-interactive';
+    v3Table.dataset.tableId = datasetId;
+    v3Table.style.display = 'none';
+    v3Table.innerHTML = renderDataTable(datasetId, true);
+    wrapper.appendChild(v3Table);
+
+    // Wire up menu toggle
+    const toggleBtn = wrapper.querySelector('.md-table-toggle');
+    toggleBtn.addEventListener('click', () => toggleTableView(datasetId, wrapper));
   });
+}
+
+// Extract column headers and infer schema
+function extractTableSchema(table) {
+  const headers = Array.from(table.querySelectorAll('thead th, tbody tr:first-child th'));
+  if (headers.length === 0) {
+    headers.push(...Array.from(table.querySelectorAll('tbody tr:first-child td')));
+  }
+
+  if (headers.length === 0) return null;
+
+  const fields = headers.map((th) => {
+    // Extract text from .th-title if it exists (v2 table styling), otherwise use textContent
+    let name = '';
+    const titleSpan = th.querySelector('.th-title');
+    if (titleSpan) {
+      name = titleSpan.textContent.trim();
+    } else {
+      name = th.textContent.trim();
+    }
+    // Clean up any trailing × or other control characters
+    name = name.replace(/[×✕]/g, '').trim();
+    return {
+      name: name,
+      type: 'string',
+      sortable: true,
+      filterable: true
+    };
+  });
+
+  return {
+    name: `Table ${new Date().getTime()}`,
+    fields: fields
+  };
+}
+
+// Extract all table rows as data
+function extractTableData(table) {
+  // Try to get headers from <thead th> first
+  let headerElements = Array.from(table.querySelectorAll('thead th'));
+  let dataRows = Array.from(table.querySelectorAll('tbody tr'));
+
+  // If no thead, treat first row as headers
+  if (headerElements.length === 0) {
+    const firstRow = table.querySelector('tbody tr');
+    if (firstRow) {
+      headerElements = Array.from(firstRow.querySelectorAll('th, td'));
+      dataRows = dataRows.slice(1); // Skip first row (it's headers)
+    }
+  }
+
+  if (headerElements.length === 0 || dataRows.length === 0) return [];
+
+  // Extract header names, cleaning up × and other control characters
+  const headers = headerElements.map((th) => {
+    const titleSpan = th.querySelector('.th-title');
+    let name = titleSpan ? titleSpan.textContent : th.textContent;
+    name = name.trim().replace(/[×✕]/g, '').trim();
+    return name;
+  });
+
+  // Extract data rows
+  return dataRows.map(tr => {
+    const cells = Array.from(tr.querySelectorAll('td, th'));
+    const obj = {};
+    headers.forEach((header, idx) => {
+      obj[header] = (cells[idx]?.textContent || '').trim();
+    });
+    return obj;
+  });
+}
+
+// Create collapsed menu bar
+function createTableMenuBar(datasetId) {
+  return `
+    <div class="md-table-menubar" data-table-id="${datasetId}">
+      <button class="md-table-toggle" title="Toggle interactive table">
+        <span class="toggle-icon">▶</span> Interactive Mode
+      </button>
+      <div class="md-table-controls" style="display: none;">
+        <div class="md-table-filters"></div>
+        <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV ↓</button>
+        <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON ↓</button>
+      </div>
+    </div>
+  `;
+}
+
+// Toggle between markdown table and v3 interactive table
+function toggleTableView(datasetId, wrapper) {
+  const mdTable = wrapper.querySelector(`.md-table-source[data-table-id="${datasetId}"]`);
+  const v3Table = wrapper.querySelector(`.md-table-interactive[data-table-id="${datasetId}"]`);
+  const toggleBtn = wrapper.querySelector('.md-table-toggle');
+  const controls = wrapper.querySelector('.md-table-controls');
+  const toggleIcon = toggleBtn.querySelector('.toggle-icon');
+  const v2Controls = wrapper.querySelector('.table-controls');
+
+  const isOpen = v3Table.style.display !== 'none';
+
+  if (isOpen) {
+    // Close: show markdown table & v2 controls, hide v3 table & interactive controls
+    mdTable.style.display = 'block';
+    if (v2Controls) v2Controls.style.display = 'flex';
+    v3Table.style.display = 'none';
+    controls.style.display = 'none';
+    toggleIcon.textContent = '▶';
+    toggleBtn.classList.remove('open');
+  } else {
+    // Open: hide markdown table & v2 controls, show v3 table & interactive controls
+    mdTable.style.display = 'none';
+    if (v2Controls) v2Controls.style.display = 'none';
+    v3Table.style.display = 'block';
+    controls.style.display = 'flex';
+    toggleIcon.textContent = '▼';
+    toggleBtn.classList.add('open');
+
+    // Populate filters on first open
+    populateTableFilters(datasetId, wrapper);
+  }
+}
+
+// Add 3-column filter UI with dropdowns to menu bar
+function populateTableFilters(datasetId, menuBar) {
+  const filtersDiv = menuBar.querySelector('.md-table-filters');
+  if (filtersDiv.children.length > 0) return; // Already populated
+
+  const schema = DataSystem.schemas[datasetId];
+  const filterableFields = schema.fields.filter(f => f.filterable);
+
+  if (filterableFields.length === 0) return;
+
+  // Create column dropdown options
+  const columnOptions = filterableFields
+    .map(f => `<option value="${f.name}">${f.name}</option>`)
+    .join('');
+
+  // 3 filter rows with column dropdown + search box
+  let html = '';
+  for (let i = 0; i < 3; i++) {
+    const defaultCol = i < filterableFields.length ? filterableFields[i].name : filterableFields[0].name;
+    html += `
+      <div class="md-filter-row">
+        <select class="md-filter-column" data-dataset="${datasetId}" data-filter-idx="${i}">
+          ${columnOptions}
+        </select>
+        <input type="text" class="md-filter-input" data-dataset="${datasetId}" data-filter-idx="${i}" placeholder="Search...">
+      </div>
+    `;
+  }
+
+  filtersDiv.innerHTML = html;
+
+  // Set default column selections
+  const selects = filtersDiv.querySelectorAll('.md-filter-column');
+  selects.forEach((select, i) => {
+    if (i < filterableFields.length) {
+      select.value = filterableFields[i].name;
+    }
+  });
+
+  // Wire up filter events
+  filtersDiv.querySelectorAll('.md-filter-input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const idx = e.target.dataset.filterIdx;
+      const columnSelect = filtersDiv.querySelector(`[data-filter-idx="${idx}"].md-filter-column`);
+      const fieldName = columnSelect.value;
+      DataSystem.filter(datasetId, fieldName, e.target.value);
+      updateDataTableContent(datasetId);
+    });
+  });
+
+  filtersDiv.querySelectorAll('.md-filter-column').forEach(select => {
+    select.addEventListener('change', (e) => {
+      const idx = e.target.dataset.filterIdx;
+      const input = filtersDiv.querySelector(`[data-filter-idx="${idx}"].md-filter-input`);
+      const fieldName = e.target.value;
+      // Clear filter for previous field
+      const prevValue = input.value;
+      if (prevValue) {
+        DataSystem.filter(datasetId, fieldName, prevValue);
+        updateDataTableContent(datasetId);
+      }
+    });
+  });
+
+  // Add Show All and Reset buttons (only if not already added)
+  const controls = menuBar.querySelector('.md-table-controls');
+  let exportDiv = controls.querySelector('.md-table-export');
+  if (!exportDiv) {
+    exportDiv = document.createElement('div');
+    exportDiv.className = 'md-table-export';
+    controls.appendChild(exportDiv);
+    exportDiv.innerHTML = `
+      <button class="md-table-showall" data-dataset="${datasetId}" title="Show all rows">Show All</button>
+      <button class="md-table-reset" data-dataset="${datasetId}" title="Reset filters and sort">Reset</button>
+      <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV ↓</button>
+      <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON ↓</button>
+    `;
+  }
+
+  // Wire up Show All and Reset buttons
+  controls.querySelector('.md-table-showall')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Clear all filters
+    DataSystem.dataState[datasetId].filterBy = {};
+    filtersDiv.querySelectorAll('.md-filter-input').forEach(input => input.value = '');
+    updateDataTableContent(datasetId);
+  });
+
+  controls.querySelector('.md-table-reset')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // Clear filters and sort
+    DataSystem.dataState[datasetId].filterBy = {};
+    DataSystem.dataState[datasetId].sorted = [];
+    DataSystem.dataState[datasetId].sortBy = null;
+    DataSystem.dataState[datasetId].sortAsc = true;
+    filtersDiv.querySelectorAll('.md-filter-input').forEach(input => input.value = '');
+    updateDataTableContent(datasetId);
+  });
+}
+
+// Update just the data table rows (for filter/sort without full re-render)
+function updateDataTableContent(datasetId) {
+  const wrap = document.querySelector(`.data-table-wrap[data-dataset="${datasetId}"]`);
+  if (!wrap) return;
+
+  const schema = DataSystem.schemas[datasetId];
+  const data = DataSystem.getDisplayData(datasetId);
+  if (!schema || !data) return;
+
+  const fields = schema.fields;
+  const state = DataSystem.dataState[datasetId];
+
+  // Update headers with sort indicators
+  const thead = wrap.querySelector('thead tr');
+  if (thead) {
+    thead.innerHTML = fields.map((field) => {
+      const isActive = state.sortBy === field.name;
+      const sortIcon = isActive ? (state.sortAsc ? ' ↑' : ' ↓') : '';
+      const sortClass = isActive ? 'sorted' : '';
+      const cursor = field.sortable ? 'pointer' : 'default';
+      return `<th data-field="${field.name}" class="${sortClass}" style="cursor: ${cursor};">${field.name}${sortIcon}</th>`;
+    }).join('');
+  }
+
+  // Update rows with current filtered/sorted data
+  const tbody = wrap.querySelector('tbody');
+  if (tbody) {
+    tbody.innerHTML = data.map((row) => {
+      return '<tr>' + fields.map((field) => {
+        let val = row[field.name];
+        if (field.type === 'date') {
+          val = new Date(val).toLocaleDateString();
+        } else if (field.type === 'number' && field.format === 'currency') {
+          val = Number(val).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+        }
+        return `<td>${val || ''}</td>`;
+      }).join('') + '</tr>';
+    }).join('');
+  }
 }
 
 function initTableInteractivity() {
@@ -3966,7 +4296,7 @@ const DataSystem = {
 DataSystem.loadDatasets();
 
 // Render data-driven table from dataset
-function renderDataTable(datasetId) {
+function renderDataTable(datasetId, skipControls = false) {
   const schema = DataSystem.schemas[datasetId];
   const data = DataSystem.getDisplayData(datasetId);
   if (!schema || !data) return '';
@@ -3974,20 +4304,22 @@ function renderDataTable(datasetId) {
   const fields = schema.fields;
   let html = `<div class="data-table-wrap" data-dataset="${datasetId}">`;
 
-  // Controls row (filters + export)
-  html += '<div class="data-table-controls">';
-  html += '<div class="data-table-filters">';
-  fields.forEach((field) => {
-    if (field.filterable) {
-      html += `<input type="text" class="data-filter" data-field="${field.name}" placeholder="Filter ${field.name}..." />`;
-    }
-  });
-  html += '</div>';
-  html += `<div class="data-table-export">
-    <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV ↓</button>
-    <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON ↓</button>
-  </div>`;
-  html += '</div>';
+  // Controls row (filters + export) - skip for markdown tables (handled in menubar)
+  if (!skipControls) {
+    html += '<div class="data-table-controls">';
+    html += '<div class="data-table-filters">';
+    fields.forEach((field) => {
+      if (field.filterable) {
+        html += `<input type="text" class="data-filter" data-field="${field.name}" placeholder="Filter ${field.name}..." />`;
+      }
+    });
+    html += '</div>';
+    html += `<div class="data-table-export">
+      <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV ↓</button>
+      <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON ↓</button>
+    </div>`;
+    html += '</div>';
+  }
 
   // Table
   html += '<div class="data-table-scroll"><table class="data-table">';
@@ -4045,7 +4377,7 @@ function initDataTableInteractivity() {
         const state = DataSystem.dataState[datasetId];
         const ascending = state.sortBy === fieldName ? !state.sortAsc : true;
         DataSystem.sort(datasetId, fieldName, ascending);
-        render(); // Re-render with sorted data
+        updateDataTableContent(datasetId); // Update table without full re-render
       }
     }
   });
@@ -4056,7 +4388,7 @@ function initDataTableInteractivity() {
     const datasetId = e.target.closest('.data-table-wrap').dataset.dataset;
     const fieldName = e.target.dataset.field;
     DataSystem.filter(datasetId, fieldName, e.target.value);
-    render(); // Re-render with filtered data
+    updateDataTableContent(datasetId); // Update table without full re-render
   });
 
   // Export buttons
