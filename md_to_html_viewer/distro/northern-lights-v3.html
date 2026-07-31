@@ -820,7 +820,7 @@ body.dragging #drop { display: flex; }
   color: var(--fg-muted); padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 .data-export-csv:hover, .data-export-json:hover, .data-filter-help:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .filter-help-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg); border: 1px solid var(--border-strong);
-  border-radius: 6px; padding: 20px; max-width: 500px; z-index: 10000; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); }
+  border-radius: 6px; padding: 20px; max-width: 500px; max-height: 80vh; overflow-y: auto; z-index: 10000; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); }
 .filter-help-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.3); z-index: 9999; }
 .filter-help-close { float: right; background: none; border: none; color: var(--fg-muted); cursor: pointer; font-size: 20px; padding: 0; width: 24px; height: 24px; }
 .filter-help-close:hover { color: var(--fg); }
