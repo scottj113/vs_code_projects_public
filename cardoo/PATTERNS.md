@@ -1,6 +1,52 @@
-# Reusable Patterns
+# HTML as a Solution — Pattern Library
 
-This document captures design patterns from Cardoo and Northern Lights that are portable to other single-file HTML projects.
+Proven, reusable patterns for building real applications as **a single local HTML file**,
+opened by double-click and bookmarked like an app. No installer, no Electron, no Node, no
+build step, no server.
+
+Everything here is extracted from working software — [Cardoo](./cardoo.html) and
+[Northern Lights MD Viewer](../md_to_html_viewer/) — not from theory. If a pattern is
+listed, it shipped.
+
+**Target: Chromium (Chrome / Edge.)** The File System Access API is what makes this
+architecture capable rather than merely convenient, and it is Chromium-only. Patterns note
+their fallbacks where cheap, but Chrome/Edge is the assumption.
+
+## Contents
+
+**Foundations**
+- [Theming System](#theming-system) — palettes, persistence, no flash on load
+- [Single-File Deployment](#single-file-deployment) — inlining, embedding, vendoring
+- [The `file://` Contract](#the-file-contract) — what this origin can and cannot do
+
+**Data in and out**
+- [Getting Data *Into* a `file://` Page](#getting-data-into-a-file-page) — four input doors
+- [Getting Data *Out*: The Standalone Export](#getting-data-out-the-standalone-export)
+- [Print Is an Output Target](#print-is-an-output-target-not-an-afterthought) — free PDF
+- [File I/O](#file-io-chromium-only) — read, write safely, watch, partial writes
+
+**State**
+- [State Management](#state-management) — the save/render loop, key hygiene
+- [Durable State: Export / Import](#durable-state-export--import) — survive a cleared cache
+- [The Staleness Meter](#the-staleness-meter) — make unsaved work visible
+
+**Interface**
+- [UI Primitives](#ui-primitives) — toast, clipboard, drag & drop, blob URLs, scroll-spy
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Scale the Content, Not the Chrome](#scale-the-content-not-the-chrome)
+
+**Robustness**
+- [Degrade, Don't Break](#degrade-dont-break) — feature detection and fallbacks
+- [Sanitizing Untrusted HTML](#sanitizing-untrusted-html)
+- [Gotcha: Inline `style.display` Toggles](#gotcha-inline-styledisplay-toggles)
+
+**Practice**
+- [Testing & Development](#testing--development)
+- [Scalability Limits](#scalability-limits) — when to stop using this architecture
+- [Checklist: Ports to New Projects](#checklist-ports-to-new-projects)
+- [Where These Came From](#where-these-came-from)
+
+---
 
 ## Theming System
 
@@ -158,6 +204,39 @@ Load it locally:
 - One `.js` file to manage
 
 For major updates, download the new version and replace it.
+
+---
+
+## The `file://` Contract
+
+Everything here assumes the page is opened by double-clicking it, not served. That origin
+is more restricted than `http://localhost`, and the restrictions are not obvious. Know
+them before you design around them.
+
+**Blocked outright:**
+
+| Thing | Why it matters |
+|---|---|
+| `<script type="module">` | ES modules are fetched under CORS, which `file://` fails. **Vendor libraries as classic scripts.** This is the single most common way a local HTML app breaks. |
+| `fetch()` / `XHR` on local files | You cannot load a sibling `.json` or `.css` at runtime. Inline it, or make the user hand it to you. |
+| IndexedDB | Blocked in Chromium on `file://`. localStorage still works — which is why file handles can't be persisted across a refresh. |
+| Service workers | No offline layer, no background anything. |
+| Full filesystem paths | A page is never told where a dropped file lives. Only an external tool (see the sidecar route below) can supply a real path. |
+
+**Works fine:** localStorage, `<script src="vendor/lib.js">` (classic), relative `<img>`,
+CSS, `showOpenFilePicker` / `showDirectoryPicker` and the handles they return, drag & drop,
+clipboard, Blob downloads, `window.open`, print.
+
+**Design consequences:**
+
+- **Vendor, don't import.** One `vendor/lib.min.js` next to the HTML, loaded with a plain
+  `<script>` tag. No bundler, no package manager, no lockfile. Update by downloading the
+  new dist file over the old one.
+- **A relative path is a hard dependency.** If your HTML loads `vendor/mermaid.min.js`,
+  moving the HTML file alone silently breaks diagrams. Say so in the README.
+- **Permission is per-session.** A refresh drops every file handle, because there's nowhere
+  to persist it. Re-arming after reload is a browser restriction, not a bug — tell the user
+  that plainly instead of letting it look broken.
 
 ---
 
@@ -530,6 +609,145 @@ the user resets out of mild satisfaction rather than alarm.
 
 Generalizes past backups: unsent changes, unsynced records, undeployed edits — anything
 where the cost of forgetting is high and the cost of acting is one click.
+
+---
+
+## UI Primitives
+
+The handful of components every one of these apps ends up needing. All proven in both
+Cardoo and Northern Lights.
+
+### Toast
+
+The workhorse. One element, one function, no library:
+
+```css
+#toast {
+  position: fixed; left: 50%; top: 62px; transform: translate(-50%, -8px);
+  z-index: 100; background: var(--bg-raised); color: var(--fg);
+  border: 1px solid var(--border-strong); border-radius: 8px;
+  padding: 9px 15px; font-size: 13px; max-width: 70vw;
+  opacity: 0; pointer-events: none; transition: opacity .16s, transform .16s;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+#toast.err  { border-color: #d9534f; color: #d9534f; }
+```
+```javascript
+let toastTimer = null;
+function toast(msg, isError) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;                          // textContent, never innerHTML
+  el.classList.toggle("err", !!isError);
+  el.classList.add("show");
+  clearTimeout(toastTimer);                      // reset the clock on every call
+  el.style.visibility = "visible";
+  toastTimer = setTimeout(() => el.classList.remove("show"), isError ? 10400 : 4800);
+}
+```
+
+**Details that came from use, not theory:**
+
+- **Put it under the toolbar, not bottom-right.** These messages answer toolbar clicks;
+  instructions like *"paste the path into the dialog"* are missed entirely in a corner.
+- **Errors stay roughly twice as long.** Northern Lights ended up at 4.8s / 10.4s after the
+  original 2.4s / 5.2s left instructions gone before they were read.
+- **`pointer-events: none`** so it never eats a click meant for what's underneath.
+- **`clearTimeout` every call**, or a second toast inherits the first one's remaining time.
+
+### Copy to Clipboard, With a Real Fallback
+
+`navigator.clipboard` rejects when the browser withholds permission. Handle it:
+
+```javascript
+navigator.clipboard.writeText(text).then(
+  () => { btn.textContent = "Copied"; setTimeout(() => (btn.textContent = "Copy"), 1200); },
+  () => toast("Clipboard blocked by the browser", true)
+);
+```
+
+Confirm on the button itself — the user's eyes are already there.
+
+### Drag & Drop, Including Folders
+
+The non-obvious part: **a dropped folder never appears in `dataTransfer.files`.** It only
+arrives as a directory handle, so you must check for that *before* reading files:
+
+```javascript
+dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("over"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("over"));
+dropZone.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  dropZone.classList.remove("over");
+
+  const items = Array.from(e.dataTransfer.items || []);
+  const handlePromises = items
+    .filter((i) => i.kind === "file" && i.getAsFileSystemHandle)
+    .map((i) => i.getAsFileSystemHandle());
+
+  let handles = [];
+  try { handles = (await Promise.all(handlePromises)).filter(Boolean); }
+  catch (_) { handles = []; }                  // older engine, or a non-file drag source
+
+  const dir = handles.find((h) => h.kind === "directory");
+  if (dir) return loadDirectory(dir);          // ← must come first
+
+  loadFiles(Array.from(e.dataTransfer.files), handles);
+});
+```
+
+**`e.preventDefault()` on `dragover` is mandatory** — without it the drop never fires and
+the browser navigates away to the file instead, which looks exactly like a crash.
+
+**Prefer `getAsFileSystemHandle()` over `dataTransfer.files`.** Both give you the bytes,
+but only the handle carries permission to *re-read* the file later, which is what makes
+refresh and watch mode possible. Drop is the only route that arms live reload for free.
+
+### Blob URL Lifecycle
+
+Any `URL.createObjectURL()` holds its file in memory until you revoke it. Track them and
+release as a set when the document changes:
+
+```javascript
+function releaseAssets() {
+  if (!state.assets) return;
+  for (const url of state.assets.values()) URL.revokeObjectURL(url);
+  state.assets = null;
+}
+```
+
+Call it before loading anything new. For one-shot downloads, revoke on a timer *after* the
+click has been serviced (`setTimeout(..., 4000)`) — revoking immediately can cancel the
+download in some builds.
+
+### Scroll-Spy With `IntersectionObserver`
+
+Highlight the section currently being read. No scroll handler, no throttling:
+
+```javascript
+let observer = null;
+function observeHeadings(ids) {
+  if (observer) observer.disconnect();          // always tear down before rebuilding
+  if (!ids.length) return;
+
+  const visible = new Set();
+  observer = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) visible.add(e.target.id); else visible.delete(e.target.id);
+    }
+    const first = ids.find((id) => visible.has(id));   // document order, not observer order
+    links.forEach((a, id) => a.classList.toggle("active", id === first));
+  }, { rootMargin: "-58px 0px -70% 0px", threshold: 0 });
+
+  ids.forEach((id) => { const el = document.getElementById(id); if (el) observer.observe(el); });
+}
+```
+
+**`rootMargin` does the real work.** `-58px` at the top discounts a fixed toolbar; `-70%`
+at the bottom shrinks the detection band to the upper third of the viewport, so "current
+section" means what you're reading rather than anything merely on screen.
+
+**Resolve ties in document order.** Several headings are visible at once; picking the first
+by `ids` order keeps the highlight from jumping around.
 
 ---
 
@@ -925,8 +1143,9 @@ To use this pattern in a new single-file HTML project:
 
 **Structure**
 - [ ] One self-contained `.html` file, no external dependencies
-- [ ] Inline all CSS/JS; vendor any library as a single file, no package manager
+- [ ] Inline all CSS/JS; vendor any library as a **classic** script (no ES modules)
 - [ ] Nothing in the package is executable (no installer, script, or launcher)
+- [ ] No `fetch`/XHR of local files — nothing loads at runtime that isn't inlined
 
 **State**
 - [ ] localStorage for persistence, keys namespaced `myapp:`
@@ -940,6 +1159,11 @@ To use this pattern in a new single-file HTML project:
 - [ ] Theming via CSS custom properties + `data-*` attributes
 - [ ] Pre-render theme script before CSS to avoid flash
 - [ ] Scale content via a CSS var, leave `Ctrl` `+`/`-` to browser zoom
+
+**UI**
+- [ ] Toast for transient feedback (under the toolbar, errors last longer)
+- [ ] Drag & drop with `preventDefault` on `dragover`, folders checked first
+- [ ] Revoke every `createObjectURL` you make
 
 **In and out**
 - [ ] Decide your input doors: drop, picker, paste, `#hash`, sidecar global
