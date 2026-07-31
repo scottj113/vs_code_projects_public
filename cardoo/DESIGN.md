@@ -27,7 +27,7 @@ A task board normally arrives as a 150 MB Electron bundle. Nearly all that weigh
 ## Architecture
 
 ```
-index.html  —  entire application (HTML + CSS + JS)
+cardoo.html  —  entire application (HTML + CSS + JS)
               no external dependencies
               ~200 lines of code
 ```
@@ -83,7 +83,7 @@ All mutations flow through `saveData()` → `render()`, keeping state and DOM in
 
 ### Add a New Lane
 
-In `index.html`, modify the `LANES` array:
+In `cardoo.html`, modify the `LANES` array:
 
 ```javascript
 const LANES = ['Pondering', 'To Do', 'In Progress', 'Review', 'Done'];

@@ -4,7 +4,7 @@ A minimal Kanban board for personal task management. One HTML file, no installat
 
 ## Quick Start 
 
-1. Open `index.html` in your browser
+1. Open `cardoo.html` in your browser
 2. Bookmark it in your toolbar
 3. Start moving cards between lanes
 
