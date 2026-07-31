@@ -849,9 +849,9 @@ body.dragging #drop { display: flex; }
   color: var(--fg); padding: 5px 8px; font-size: 12px; cursor: pointer; }
 .md-filter-input { padding: 5px 8px; font-size: 12px; border: none;
   background: var(--code-bg); color: var(--fg); flex: 1; min-width: 120px; }
-.md-table-showall, .md-table-reset { appearance: none; border: 1px solid var(--border-strong); background: var(--code-bg);
+.md-table-reset { appearance: none; border: 1px solid var(--border-strong); background: var(--code-bg);
   color: var(--fg-muted); padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
-.md-table-showall:hover, .md-table-reset:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.md-table-reset:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .data-table-pillbox { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--bg-sunk);
   border-bottom: 1px solid var(--border); }
 .pillbox-label { font-size: 12px; font-weight: 600; color: var(--fg-muted); }
@@ -3862,29 +3862,21 @@ function populateTableFilters(datasetId, menuBar) {
     exportDiv.className = 'md-table-export';
     controls.appendChild(exportDiv);
     exportDiv.innerHTML = `
-      <button class="md-table-showall" data-dataset="${datasetId}" title="Show all rows">Show All</button>
-      <button class="md-table-reset" data-dataset="${datasetId}" title="Reset filters and sort">Reset</button>
+      <button class="md-table-reset" data-dataset="${datasetId}" title="Reset filters, sort, and columns">Reset</button>
       <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV ↓</button>
       <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON ↓</button>
     `;
   }
 
-  // Wire up Show All and Reset buttons
-  controls.querySelector('.md-table-showall')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    // Clear all filters
-    DataSystem.dataState[datasetId].filterBy = {};
-    filtersDiv.querySelectorAll('.md-filter-input').forEach(input => input.value = '');
-    updateDataTableContent(datasetId);
-  });
-
+  // Wire up Reset button
   controls.querySelector('.md-table-reset')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    // Clear filters and sort
+    // Clear filters, sort, and hidden columns
     DataSystem.dataState[datasetId].filterBy = {};
     DataSystem.dataState[datasetId].sorted = [];
     DataSystem.dataState[datasetId].sortBy = null;
     DataSystem.dataState[datasetId].sortAsc = true;
+    DataSystem.dataState[datasetId].hiddenColumns = [];
     filtersDiv.querySelectorAll('.md-filter-input').forEach(input => input.value = '');
     updateDataTableContent(datasetId);
   });
