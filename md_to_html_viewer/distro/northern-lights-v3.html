@@ -816,9 +816,17 @@ body.dragging #drop { display: flex; }
 .data-table-filters input { padding: 5px 8px; font-size: 12px; border: 1px solid var(--border-strong);
   background: var(--code-bg); color: var(--fg); border-radius: 4px; width: 150px; }
 .data-table-export { display: flex; gap: 6px; }
-.data-export-csv, .data-export-json { appearance: none; border: 1px solid var(--border-strong); background: var(--code-bg);
+.data-export-csv, .data-export-json, .data-filter-help { appearance: none; border: 1px solid var(--border-strong); background: var(--code-bg);
   color: var(--fg-muted); padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
-.data-export-csv:hover, .data-export-json:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.data-export-csv:hover, .data-export-json:hover, .data-filter-help:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.filter-help-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg); border: 1px solid var(--border-strong);
+  border-radius: 6px; padding: 20px; max-width: 500px; z-index: 10000; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); }
+.filter-help-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.3); z-index: 9999; }
+.filter-help-close { float: right; background: none; border: none; color: var(--fg-muted); cursor: pointer; font-size: 20px; padding: 0; width: 24px; height: 24px; }
+.filter-help-close:hover { color: var(--fg); }
+.filter-help-modal h3 { margin-top: 0; margin-bottom: 12px; }
+.filter-help-modal ul { margin: 8px 0; padding-left: 20px; }
+.filter-help-modal li { margin: 6px 0; }
 .data-table-scroll { overflow-x: auto; }
 .data-table { border-collapse: collapse; font-size: .94em; width: 100%; }
 .data-table th, .data-table td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
@@ -3865,6 +3873,7 @@ function populateTableFilters(datasetId, menuBar) {
       <button class="md-table-reset" data-dataset="${datasetId}" title="Reset filters, sort, and columns">Reset</button>
       <button class="data-export-csv" data-dataset="${datasetId}" title="Export to CSV">CSV ↓</button>
       <button class="data-export-json" data-dataset="${datasetId}" title="Export to JSON">JSON ↓</button>
+      <button class="data-filter-help" data-dataset="${datasetId}" title="Filter syntax help">?</button>
     `;
   }
 
@@ -4498,6 +4507,16 @@ function initDataTableInteractivity() {
       const json = DataSystem.exportJSON(datasetId);
       downloadFile(json, datasetId + '.json', 'application/json');
     }
+    if (e.target.classList.contains('data-filter-help')) {
+      e.stopPropagation();
+      showFilterHelp();
+    }
+    if (e.target.classList.contains('filter-help-close') || e.target.classList.contains('filter-help-modal-overlay')) {
+      const modal = document.querySelector('.filter-help-modal');
+      const overlay = document.querySelector('.filter-help-modal-overlay');
+      if (modal) modal.remove();
+      if (overlay) overlay.remove();
+    }
   });
 
   function downloadFile(content, filename, type) {
@@ -4508,6 +4527,37 @@ function initDataTableInteractivity() {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function showFilterHelp() {
+    const overlay = document.createElement('div');
+    overlay.className = 'filter-help-modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'filter-help-modal';
+    modal.innerHTML = `
+      <button class="filter-help-close">×</button>
+      <h3>Filter Syntax</h3>
+      <p><strong>Use text prefixes to control filtering:</strong></p>
+      <ul>
+        <li><strong>token</strong> — Keep rows containing token</li>
+        <li><strong>+token</strong> — Same as above (explicit)</li>
+        <li><strong>-token</strong> — Remove rows containing token</li>
+      </ul>
+      <p><strong>Examples:</strong></p>
+      <ul>
+        <li>Type "West" → shows only West region</li>
+        <li>Type "+Completed" → shows only Completed status</li>
+        <li>Type "-Pending" → removes all Pending rows</li>
+      </ul>
+      <p><strong>Multiple filters:</strong> AND logic across columns</p>
+      <ul>
+        <li>Region: "-East" + Status: "Completed" → Completed rows that aren't East</li>
+      </ul>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(modal);
   }
 }
 
