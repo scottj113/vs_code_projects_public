@@ -809,6 +809,19 @@ body.dragging #drop { display: flex; }
 .md .col-hidden-badge:hover { background: var(--accent); color: var(--bg-raised); }
 .md .col-hidden-badge-icon { margin-right: 3px; }
 
+/* Data tables (v3) */
+.data-table-wrap { margin: 0 0 1.15em; }
+.data-table-filters { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.data-table-filters input { padding: 5px 8px; font-size: 12px; border: 1px solid var(--border-strong);
+  background: var(--code-bg); color: var(--fg); border-radius: 4px; width: 150px; }
+.data-table-scroll { overflow-x: auto; }
+.data-table { border-collapse: collapse; font-size: .94em; width: 100%; }
+.data-table th, .data-table td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+.data-table th { background: var(--bg-sunk); font-weight: 650; cursor: pointer; -webkit-user-select: none; user-select: none; }
+.data-table th.sorted { background: var(--accent-soft); color: var(--accent); }
+.data-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--bg-sunk) 55%, transparent); }
+.data-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 12%, var(--bg-sunk)); }
+
 .md dl { margin: 0 0 1.05em; }
 .md dt { font-weight: 650; margin-top: .8em; }
 .md dd { margin: .2em 0 .2em 1.5em; color: var(--fg-muted); }
@@ -2022,6 +2035,7 @@ function render() {
     if (target) target.scrollIntoView();
   }
   initTableInteractivity();
+  initDataTableInteractivity();
 }
 
 function buildToc(headings) {
@@ -3890,6 +3904,95 @@ const DataSystem = {
 
 // Load datasets on page load
 DataSystem.loadDatasets();
+
+// Render data-driven table from dataset
+function renderDataTable(datasetId) {
+  const schema = DataSystem.schemas[datasetId];
+  const data = DataSystem.getDisplayData(datasetId);
+  if (!schema || !data) return '';
+
+  const fields = schema.fields;
+  let html = `<div class="data-table-wrap" data-dataset="${datasetId}">`;
+
+  // Filters row
+  html += '<div class="data-table-filters">';
+  fields.forEach((field) => {
+    if (field.filterable) {
+      html += `<input type="text" class="data-filter" data-field="${field.name}" placeholder="Filter ${field.name}..." />`;
+    }
+  });
+  html += '</div>';
+
+  // Table
+  html += '<div class="data-table-scroll"><table class="data-table">';
+
+  // Headers with sort
+  html += '<thead><tr>';
+  fields.forEach((field) => {
+    const sortClass = DataSystem.dataState[datasetId].sortBy === field.name ? 'sorted' : '';
+    const sortIcon = DataSystem.dataState[datasetId].sortAsc ? '↑' : '↓';
+    const cursor = field.sortable ? 'pointer' : 'default';
+    html += `<th data-field="${field.name}" class="${sortClass}" style="cursor: ${cursor};">`;
+    html += field.name;
+    if (field.sortable && DataSystem.dataState[datasetId].sortBy === field.name) {
+      html += ` ${sortIcon}`;
+    }
+    html += '</th>';
+  });
+  html += '</tr></thead>';
+
+  // Data rows
+  html += '<tbody>';
+  data.forEach((row) => {
+    html += '<tr>';
+    fields.forEach((field) => {
+      let val = row[field.name];
+      if (field.type === 'date') {
+        val = new Date(val).toLocaleDateString();
+      } else if (field.type === 'number' && field.format === 'currency') {
+        val = '$' + Number(val).toFixed(2);
+      }
+      html += `<td>${val}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+
+  html += '</table></div>';
+  html += '</div>';
+  return html;
+}
+
+// Wire up data table interactions
+function initDataTableInteractivity() {
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.data-table-wrap')) return;
+
+    // Column header click = sort
+    if (e.target.tagName === 'TH') {
+      const datasetId = e.target.closest('.data-table-wrap').dataset.dataset;
+      const fieldName = e.target.dataset.field;
+      const schema = DataSystem.schemas[datasetId];
+      const field = schema.fields.find(f => f.name === fieldName);
+
+      if (field && field.sortable) {
+        const state = DataSystem.dataState[datasetId];
+        const ascending = state.sortBy === fieldName ? !state.sortAsc : true;
+        DataSystem.sort(datasetId, fieldName, ascending);
+        render(); // Re-render with sorted data
+      }
+    }
+  });
+
+  // Filter input = filter
+  document.addEventListener('input', (e) => {
+    if (!e.target.classList.contains('data-filter')) return;
+    const datasetId = e.target.closest('.data-table-wrap').dataset.dataset;
+    const fieldName = e.target.dataset.field;
+    DataSystem.filter(datasetId, fieldName, e.target.value);
+    render(); // Re-render with filtered data
+  });
+}
 
 (function boot() {
   // 1. Sidecar written by the VS Code task.
