@@ -71,7 +71,12 @@ Your choice persists across sessions. Themes load instantly without flash.
 |-----|--------|
 | `Enter` | Save card text in the input dialog |
 | `Escape` | Cancel card input |
+| `Ctrl+Z` | Undo the last card move |
+| `Ctrl+R` | Redo a move you just undid |
 | Click × | Delete card |
+
+Undo/redo covers **drag-and-drop moves only** — not adding, deleting, or editing cards.
+Move a card three times and you can undo all three, then redo all three, in order.
 
 ## Backup & Recovery
 
