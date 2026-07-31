@@ -4265,11 +4265,32 @@ const DataSystem = {
     if (!field || !field.filterable) return;
 
     const state = this.dataState[datasetId];
-    state.filterBy[fieldName] = matchText.toLowerCase();
+
+    // Parse inverted filter: -token = exclude, +token or token = include
+    let isInverted = false;
+    let query = matchText.toLowerCase();
+    if (query.startsWith('-')) {
+      isInverted = true;
+      query = query.slice(1);
+    } else if (query.startsWith('+')) {
+      query = query.slice(1);
+    }
+
+    state.filterBy[fieldName] = { query, isInverted };
 
     const filtered = data.filter((row) => {
-      for (const [fname, query] of Object.entries(state.filterBy)) {
-        if (query && !String(row[fname]).toLowerCase().includes(query)) {
+      for (const [fname, filterSpec] of Object.entries(state.filterBy)) {
+        if (!filterSpec || !filterSpec.query) continue;
+
+        const rowValue = String(row[fname]).toLowerCase();
+        const matches = rowValue.includes(filterSpec.query);
+
+        // For inverted filters, exclude matching rows
+        if (filterSpec.isInverted && matches) {
+          return false;
+        }
+        // For normal filters, exclude non-matching rows
+        if (!filterSpec.isInverted && !matches) {
           return false;
         }
       }
