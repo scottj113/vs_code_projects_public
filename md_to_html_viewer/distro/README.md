@@ -116,7 +116,7 @@ cost nothing: you hand it a file, it shows you the file. That's why the approach
 
 1. Download this folder (GitHub → **Code → Download ZIP**, or `git clone`), or unzip
    the package someone sent you.
-2. Double-click `md_to_html_viewer.html`. It opens in your browser.
+2. Double-click `northern-lights.html`. It opens in your browser.
 3. Get a document in by any of:
    - **Drag & drop** a `.md` anywhere on the window. Drop the Markdown *and* its
      images together and relative image links resolve.
@@ -309,7 +309,7 @@ https://unpkg.com/mermaid@11/dist/mermaid.min.js
 ## Layout
 
 ```
-md_to_html_viewer.html    the whole viewer — parser, highlighter, UI
+northern-lights.html    the whole viewer — parser, highlighter, UI
 vendor/mermaid.min.js     vendored Mermaid (MIT)
 README.md  LICENSE
 ```

@@ -21,7 +21,7 @@ A practical guide to reading, editing, and exporting Markdown with Northern Ligh
 ### Installation (No Setup Required!)
 
 1. **Download** the viewer from GitHub, or unzip the package you received
-2. **Double-click** `md_to_html_viewer.html` in your browser
+2. **Double-click** `northern-lights.html` in your browser
 3. **Bookmark** the page in your toolbar — it behaves like a built-in app
 
 That's it. No install, no permissions, no accounts. It runs entirely in your browser.

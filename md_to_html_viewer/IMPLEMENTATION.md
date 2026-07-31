@@ -20,7 +20,7 @@ Instead of loading bootstrap data from an external file, the data is now **embed
 
 2. **PowerShell Script** (`open-in-viewer.ps1`):
    - Reads the markdown file content
-   - Finds the viewer HTML (`distro/md_to_html_viewer.html`)
+   - Finds the viewer HTML (`distro/northern-lights.html`)
    - Copies vendor files (Mermaid) to temp directory
    - Manually builds a JSON object with: `{name, path, text, autoConnect}`
    - Escapes JSON special characters safely
@@ -28,7 +28,7 @@ Instead of loading bootstrap data from an external file, the data is now **embed
    - Writes the modified HTML to a temp file
    - Opens the temp HTML in the default browser
 
-3. **Viewer HTML** (`md_to_html_viewer.html`):
+3. **Viewer HTML** (`northern-lights.html`):
    - Boot function checks for `window.__MD_BOOTSTRAP__` (set by the embedded script)
    - If present, loads the file content and path immediately
    - Shows the VS Code welcome popup (since `state.path` is set)
@@ -76,7 +76,7 @@ Escaping order matters:
    - Now calls the PowerShell script instead of inline command
    - Added explanatory comments
 
-3. **`distro/md_to_html_viewer.html`** (minimal change)
+3. **`distro/northern-lights.html`** (minimal change)
    - Replaced `<script src="md-bootstrap.js">` with a comment
    - No functional change to viewer itself (already supported embedded bootstrap)
 

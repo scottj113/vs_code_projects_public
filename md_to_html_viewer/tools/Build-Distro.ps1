@@ -24,7 +24,7 @@ $distro = Join-Path $proj 'distro'
 if (-not $Out) { $Out = $proj }
 
 $expected = @(
-  'md_to_html_viewer.html'
+  'northern-lights.html'
   'README.md'
   'LICENSE'
   'vendor\mermaid.min.js'
@@ -62,7 +62,7 @@ foreach ($r in ($rel | Sort-Object)) {
 # BODIES are stripped first, keeping the opening tags so <script src=...> is
 # still seen: the app's own JavaScript builds HTML by concatenation, and those
 # fragments look exactly like real src="..." attributes to a regex.
-$html = [IO.File]::ReadAllText((Join-Path $distro 'md_to_html_viewer.html'))
+$html = [IO.File]::ReadAllText((Join-Path $distro 'northern-lights.html'))
 $markup = [regex]::Replace($html, '(?s)(<script\b[^>]*>).*?(</script>)', '$1$2')
 
 # Written by the VS Code task at run time, into a staging copy.

@@ -14,8 +14,8 @@ $fileContent = Get-Content -Path $filePath -Raw -Encoding UTF8
 
 # Find the viewer HTML (probe both the workspace and its parent)
 $candidates = @(
-    (Join-Path $workspaceFolder "distro\md_to_html_viewer.html"),
-    (Join-Path $workspaceFolder "md_to_html_viewer\distro\md_to_html_viewer.html")
+    (Join-Path $workspaceFolder "distro\northern-lights.html"),
+    (Join-Path $workspaceFolder "md_to_html_viewer\distro\northern-lights.html")
 )
 $viewerHtml = $null
 foreach ($path in $candidates) {
@@ -26,7 +26,7 @@ foreach ($path in $candidates) {
 }
 
 if (-not $viewerHtml) {
-    Write-Host "Error: Could not find md_to_html_viewer.html in $workspaceFolder or $($candidates[1])" -ForegroundColor Red
+    Write-Host "Error: Could not find northern-lights.html in $workspaceFolder or $($candidates[1])" -ForegroundColor Red
     exit 1
 }
 

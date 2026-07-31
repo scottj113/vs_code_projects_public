@@ -1,5 +1,5 @@
 # Generates and contrast-validates the 12 palettes, then writes them into
-# md_to_html_viewer.html between the PALETTES markers.
+# northern-lights.html between the PALETTES markers.
 #
 #   light : white | beige        dark : blue | slate
 #   levels: 1 lightest -> 3 darkest, within the chosen family
@@ -21,7 +21,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$viewer = Join-Path (Split-Path -Parent $PSScriptRoot) 'distro\md_to_html_viewer.html'
+$viewer = Join-Path (Split-Path -Parent $PSScriptRoot) 'distro\northern-lights.html'
 
 # ---------------------------------------------------------------- colour math
 function ConvertFrom-Hex([string] $h) {
@@ -241,7 +241,7 @@ foreach ($name in $tuned.Keys) {
 }
 $css = $sb.ToString().TrimEnd()
 
-if (-not $Write) { ''; 'Run with -Write to inject into md_to_html_viewer.html'; exit 0 }
+if (-not $Write) { ''; 'Run with -Write to inject into northern-lights.html'; exit 0 }
 
 $startMark = '/* >>> BEGIN GENERATED PALETTES -- tools/Build-Palettes.ps1 -- do not hand-edit <<< */'
 $endMark   = '/* >>> END GENERATED PALETTES <<< */'

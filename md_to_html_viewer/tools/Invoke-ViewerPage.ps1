@@ -1,4 +1,4 @@
-# Loads md_to_html_viewer.html in headless Edge with a probe script injected,
+# Loads northern-lights.html in headless Edge with a probe script injected,
 # then returns whatever the probe wrote into <pre id="probe">.
 #
 # Everything runs inside a real browser page, so assertions see real computed
@@ -34,7 +34,7 @@ Copy-Item (Join-Path $proj 'vendor\mermaid.min.js') (Join-Path $stage 'vendor\me
 # Inject before the LAST </body>. exportHtml() builds a page string containing a
 # literal </body>, so matching the first one drops the harness into the middle
 # of the app's own JavaScript and the page silently half-loads.
-$html  = [IO.File]::ReadAllText((Join-Path $proj 'md_to_html_viewer.html'))
+$html  = [IO.File]::ReadAllText((Join-Path $proj 'northern-lights.html'))
 $close = $html.LastIndexOf('</body>')
 if ($close -lt 0) { throw 'no closing body tag' }
 $page = Join-Path $stage 'page.html'
