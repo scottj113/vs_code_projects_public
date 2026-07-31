@@ -4332,7 +4332,10 @@ const DataSystem = {
   // Get display data (sorted/filtered)
   getDisplayData(datasetId) {
     const state = this.dataState[datasetId];
-    const base = state.filtered.length > 0 ? state.filtered : this.datasets[datasetId];
+    // Check if there are any active filters (non-empty queries)
+    const hasActiveFilters = Object.keys(state.filterBy).some(k => state.filterBy[k]?.query);
+    // Use filtered data if filters are active, otherwise use original dataset
+    const base = hasActiveFilters ? state.filtered : this.datasets[datasetId];
     return state.sorted.length > 0 ? state.sorted : base;
   },
 
