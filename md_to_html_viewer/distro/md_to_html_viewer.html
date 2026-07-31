@@ -493,6 +493,7 @@ body.no-toc #toc { display: none; }
 
 #scroller { flex: 1; overflow: auto; scroll-behavior: smooth; }
 #page { max-width: 860px; margin: 0 auto; padding: 34px 40px 55vh; }
+#page.full-width { max-width: none; margin: 0; padding: 34px 20px 55vh; }
 
 /* ---------- empty state ---------- */
 #empty { display: none; padding: 6vh 24px 24px; }
@@ -913,6 +914,7 @@ body.dragging #drop { display: flex; }
             aria-haspopup="true" aria-expanded="false">&#8942;</button>
     <div class="pop pop-menu" id="pop-more" hidden>
       <label class="pop-check"><input type="checkbox" id="chk-raw"> Allow raw HTML <span class="hint">sanitized</span></label>
+      <label class="pop-check"><input type="checkbox" id="chk-fullwidth"> Full-width mode</label>
       <hr>
       <button type="button" class="mi" id="mi-edit" disabled>Edit this section&hellip; <kbd>Ctrl+E</kbd></button>
       <button type="button" class="mi" id="mi-export" disabled>Export standalone HTML&hellip;</button>
@@ -1742,6 +1744,7 @@ const state = {
   mermaidSources: [],
   headings: [],      // last render's headings, carrying source line numbers
   rawHtml: localStorage.getItem("mdv:rawHtml") === "1",
+  fullwidth: localStorage.getItem("mdv:fullwidth") === "1",
   showToc: localStorage.getItem("mdv:toc") !== "0",
   fontSize: Number(localStorage.getItem("mdv:fontSize")) || 15.5,
   bold: localStorage.getItem("mdv:bold") === "1",
@@ -3151,6 +3154,13 @@ $("#chk-raw").addEventListener("change", (e) => {
   toast(state.rawHtml ? "Raw HTML on (sanitized allow-list)" : "Raw HTML off — tags shown as text");
 });
 
+$("#chk-fullwidth").addEventListener("change", (e) => {
+  state.fullwidth = e.target.checked;
+  localStorage.setItem("mdv:fullwidth", state.fullwidth ? "1" : "0");
+  $("#page").classList.toggle("full-width", state.fullwidth);
+  toast(state.fullwidth ? "Full-width mode on" : "Full-width mode off");
+});
+
 /* ---------- popovers ---------- */
 
 const POPS = [["#btn-display", "#pop-display"], ["#btn-more", "#pop-more"],
@@ -3348,6 +3358,8 @@ applyDocStyle();
 document.body.classList.toggle("no-toc", !state.showToc);
 $("#btn-toc").setAttribute("aria-pressed", String(state.showToc));
 $("#chk-raw").checked = state.rawHtml;
+$("#chk-fullwidth").checked = state.fullwidth;
+$("#page").classList.toggle("full-width", state.fullwidth);
 updateSync();
 
 (function boot() {
