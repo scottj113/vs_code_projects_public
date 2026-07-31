@@ -4,7 +4,7 @@ Open any markdown file in VS Code as a live preview in the viewer with one keyst
 
 ## What It Does
 
-Press **Ctrl+M then Down** to open the current file in the Eye Love Markdown Viewer. The viewer is **read-only**—edit in VS Code, then refresh to see changes:
+Press **Ctrl+M then Down** to open the current file in the Northern Lights MD Viewer. The viewer is **read-only**—edit in VS Code, then refresh to see changes:
 
 1. **Ctrl+M Down** → File opens in viewer
 2. **Edit in VS Code** (your text editor)

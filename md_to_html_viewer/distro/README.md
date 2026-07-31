@@ -1,7 +1,6 @@
-# Eye Love Markdown Viewer
+# Northern Lights MD Viewer
 
-*The most powerful light Markdown viewer in the world. One HTML file, ~92 KB, nothing
-to install.*
+*The most beautiful Markdown viewer. One HTML file, ~92 KB, nothing to install.*
 
 **Every other Markdown viewer is built to render the file. This one is built so you
 can read it.**

@@ -1,6 +1,6 @@
-# How to Use Eye Love Markdown Viewer
+# How to Use Northern Lights MD Viewer
 
-A practical guide to reading, editing, and exporting Markdown with Eye Love Markdown Viewer.
+A practical guide to reading, editing, and exporting Markdown with Northern Lights MD Viewer.
 
 ## Table of Contents
 1. [Getting Started](#getting-started)
