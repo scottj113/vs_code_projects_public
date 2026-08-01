@@ -14,13 +14,16 @@ That's it.
 
 - **Four lanes**: Pondering → To Do → In Progress → Done
 - **Drag & drop**: Move cards between lanes with your mouse
+- **Hold-to-reorder**: Hold a dragged card between two others for ~1s to drop it in that exact spot
 - **Add/delete cards**: Click "+ Add card" in any lane, or use the delete button (×)
-- **Card details**: Click any card to view/edit with highlight support
+- **Card details**: Click any card to view/edit — same large editor for adding and editing
 - **Highlights**: Use `<<text>>` to mark important parts with yellow background
+- **Undo/redo**: `Ctrl+Z` / `Ctrl+Y` for card moves
 - **Persistence**: All changes save to browser storage automatically
 - **Four themes**: Blue Dark, Slate Dark, White Light, Beige Light (click 🎨 to cycle)
 - **Fire meter**: Visual alarm showing unsaved changes (green → yellow → red)
-- **Auto-export**: Option to save backups automatically to a local folder (Chrome/Edge)
+- **Recovery Backup**: Optional automatic backups to a local folder (Chrome/Edge), every 20 changes or 20 minutes
+- **Help**: Click ❓ Help for a quick in-app reference to all of this
 
 ## Card Details & Highlights
 
@@ -69,8 +72,6 @@ Your choice persists across sessions. Themes load instantly without flash.
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Save card text in the input dialog |
-| `Escape` | Cancel card input |
 | `Ctrl+Z` | Undo the last card move |
 | `Ctrl+Y` | Redo a move you just undid |
 | Click × | Delete card |
@@ -86,7 +87,7 @@ Move a card three times and you can undo all three, then redo all three, in orde
 
 **Import**: Click 📤 **Import** to restore from a previously exported backup file.
 
-**Auto-Export Config** (Chrome/Edge only): Click ⚙️ **Config** and select a local folder. Once armed, Cardoo writes a timestamped backup file there automatically — either after every 20 changes, or after 20 minutes if there's at least one change still unsaved, whichever comes first. The 20-minute timer means a handful of edits followed by walking away still gets backed up instead of sitting unprotected indefinitely. Each save gets its own uniquely-named file (down to the second), so nothing overwrites an earlier backup — you can restore from any point, not just the most recent save.
+**Recovery Backup Config** (Chrome/Edge only): Click ⚙️ **Config** and select a local folder. Once armed, Cardoo writes a timestamped backup file there automatically — either after every 20 changes, or after 20 minutes if there's at least one change still unsaved, whichever comes first. The 20-minute timer means a handful of edits followed by walking away still gets backed up instead of sitting unprotected indefinitely. Each save gets its own uniquely-named file (down to the second), so nothing overwrites an earlier backup — you can restore from any point, not just the most recent save.
 
 If you ever clear your browser cache, import your backup to recover all your cards instantly.
 
@@ -106,7 +107,7 @@ See [DESIGN.md](DESIGN.md) for information about extending the theme, adding lan
 ## Browser Support
 
 - **All browsers**: Drag & drop, add/delete, export/import, fire meter
-- **Chrome/Edge**: Auto-export to local folder (uses File System Access API)
+- **Chrome/Edge**: Recovery Backup to a local folder (uses File System Access API)
 
 ---
 
