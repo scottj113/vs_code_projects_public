@@ -157,9 +157,10 @@ Northern Lights proves that single-file HTML applications can ship production-gr
 ## Reusable Patterns
 
 The portable parts of Cardoo — theming, the state/render loop, export/import, the
-staleness meter, the UI primitives — are documented in the shared library:
+staleness meter, the UI primitives — are documented in [Photon](../photon/), the shared
+"HTML as a Solution" pattern library:
 
-**[../html_as_a_solution/PATTERNS.md](../html_as_a_solution/PATTERNS.md)**
+**[../photon/PATTERNS.md](../photon/PATTERNS.md)**
 
 Cardoo is one of its two reference implementations. When something here is proven to work
 and would carry to another single-file app, it belongs in that library rather than in this

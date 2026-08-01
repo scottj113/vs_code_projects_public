@@ -1,6 +1,7 @@
-# HTML as a Solution — Pattern Library
+# Photon — Pattern Library
 
-Proven, reusable patterns for building real applications as **a single local HTML file**,
+*HTML as a Solution.* Proven, reusable patterns for building real applications as **a
+single local HTML file**,
 opened by double-click and bookmarked like an app. No installer, no Electron, no Node, no
 build step, no server.
 

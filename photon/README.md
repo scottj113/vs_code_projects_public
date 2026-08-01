@@ -1,7 +1,7 @@
-# HTML as a Solution
+# Photon
 
-*Real applications as a single local HTML file. No installer, no Electron, no Node, no
-build step, no server.*
+*HTML as a Solution — real applications as a single local HTML file. No installer, no
+Electron, no Node, no build step, no server.*
 
 You double-click the file. It opens in your browser. You bookmark it to the toolbar and it
 behaves like an app — because it is one.
@@ -16,6 +16,10 @@ application needs, and it is already installed on the machine.
 Software with this feature set normally ships as a 150 MB Electron bundle: an installer, an
 auto-updater, and a private copy of Chromium. Nearly all of that weight is the engine. You
 already have the engine. This is only the part that would have been wrapped inside it.
+
+Electron carries mass — a whole second browser, bundled and shipped, every time. An app
+built this way carries none: no duplicated engine, nothing installed that wasn't already
+running. Hence the name.
 
 ## What it buys
 
