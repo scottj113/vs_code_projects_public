@@ -173,7 +173,7 @@
     </div>
     <div class="autosave-indicator" id="autoSaveIndicator">
       <span class="autosave-dot"></span>
-      <span class="autosave-text">Autosaved</span>
+      <span class="autosave-text" id="autoSaveText">Autosaved</span>
     </div>
   </div>
   <div class="container" id="board"></div>
@@ -225,6 +225,8 @@
     let changeCount = 0;
     let folderHandle = null;
     let autoExportEnabled = false;
+    let autoSaveCounter = 0;
+    const AUTO_SAVE_EVERY = 20;
     let wasRed = false;
     let toastTimer = null;
     let currentTheme = 'blue-dark';
@@ -302,7 +304,24 @@
       localStorage.setItem('cardoo:changes', changeCount);
       updateFireMeter();
       if (autoExportEnabled && folderHandle) {
-        autoExportToFolder();
+        // Writes once every AUTO_SAVE_EVERY changes, not on every single one --
+        // a card-by-card autosave meant a folder full of near-duplicate files
+        // after any real editing session. This trades "always current" for
+        // "current within 20 changes," so the indicator text says how far
+        // behind the folder copy actually is instead of implying it's always
+        // live -- hiding that gap once it can exist would be dishonest.
+        autoSaveCounter++;
+        if (autoSaveCounter >= AUTO_SAVE_EVERY) {
+          autoSaveCounter = 0;
+          autoExportToFolder();
+        } else {
+          // Ascending, not a countdown -- every visible counter in this app
+          // only ever goes up, same as the fire meter. A "N remaining" framing
+          // reads as subtracting on every move and undo alike, which looks
+          // exactly like the bug we already ruled out changeCount having.
+          document.getElementById('autoSaveText').textContent =
+            autoSaveCounter + '/' + AUTO_SAVE_EVERY + ' since last autosave';
+        }
       }
     }
 
@@ -642,13 +661,24 @@
       render();
     }
 
+    // Second-level granularity, not day-level: autosave can fire many times
+    // in one day, and a shared per-day filename meant every save that day
+    // overwrote the last one -- no restore points, just whatever the most
+    // recent write happened to be, good or bad. Colons aren't valid in
+    // Windows filenames, so swap them for dashes; milliseconds are dropped
+    // since they add nothing a human would ever pick a backup by.
+    function backupFilename() {
+      const stamp = new Date().toISOString().replace(/:/g, '-').replace(/\.\d{3}Z$/, '');
+      return 'cardoo-backup-' + stamp + '.json';
+    }
+
     function exportState() {
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const filename = 'cardoo-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+      const filename = backupFilename();
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
@@ -660,7 +690,7 @@
     async function autoExportToFolder() {
       if (!folderHandle) return;
       try {
-        const filename = 'cardoo-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+        const filename = backupFilename();
         const fileHandle = await folderHandle.getFileHandle(filename, { create: true });
         const writable = await fileHandle.createWritable();
         await writable.write(JSON.stringify(data, null, 2));
@@ -673,6 +703,7 @@
         changeCount = 0;
         localStorage.setItem('cardoo:changes', '0');
         updateFireMeter();
+        document.getElementById('autoSaveText').textContent = 'Autosaved';
         flashAutoSaveDot();
       } catch (err) {
         console.warn('Auto-export failed:', err);
@@ -756,6 +787,8 @@
         autoExportEnabled = true;
         localStorage.setItem('cardoo:autoExport', 'true');
         document.getElementById('resumeAutoSaveBtn').style.display = 'none';
+        autoSaveCounter = 0;
+        document.getElementById('autoSaveText').textContent = 'Autosaved';
         updateFireMeterVisibility();
         toast('Auto-export armed for "' + name + '"');
       } catch (err) {
