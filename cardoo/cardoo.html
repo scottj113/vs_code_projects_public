@@ -93,6 +93,9 @@
     .card:hover { background: var(--bg-lane); border-color: var(--border-strong); }
     .card.dragging { opacity: 0.5; }
     .card.drag-over { background: var(--bg-lane); border-color: var(--border-strong); }
+    .card-gap-placeholder { height: 0; flex-shrink: 0; overflow: hidden; border-radius: 6px;
+      border: 2px dashed var(--border-strong); background: var(--bg-lane); transition: height 0.35s ease; }
+    .card-gap-placeholder.open { height: 52px; }
     .card-text { font-size: 14px; line-height: 1.4; word-wrap: break-word; }
     .card-delete { float: right; cursor: pointer; color: var(--fg-faint); font-size: 16px; margin-left: 8px; }
     .card-delete:hover { color: #f00; }
@@ -229,6 +232,18 @@
     let moveRedoStack = [];
     const MAX_MOVE_HISTORY = 50;
 
+    // Hold-to-reorder: hovering between two cards for GAP_HOLD_MS opens a
+    // placeholder gap at that exact position. holdLane/holdIndex track what's
+    // currently being timed; gapLane/gapIndex/gapPlaceholder track a gap that
+    // has actually opened (hold completed) and is live for the next drop.
+    const GAP_HOLD_MS = 3000;
+    let holdTimer = null;
+    let holdLane = null;
+    let holdIndex = null;
+    let gapLane = null;
+    let gapIndex = null;
+    let gapPlaceholder = null;
+
     function initData() {
       const stored = localStorage.getItem('cardoo');
       if (stored) {
@@ -346,6 +361,43 @@
       toastTimer = setTimeout(() => el.classList.remove('show'), isAlert ? 9600 : 4800);
     }
 
+    // Index the dragged card would land at among a lane's OTHER cards, based
+    // on comparing pointer Y against each card's vertical midpoint. Excludes
+    // .dragging so the result is already relative to the post-removal array
+    // -- the same index works whether this is a same-lane reorder or a
+    // cross-lane move, with no off-by-one adjustment needed either way.
+    function getCardInsertIndex(cardsDiv, y) {
+      const cards = Array.from(cardsDiv.querySelectorAll('.card:not(.dragging)'));
+      for (let i = 0; i < cards.length; i++) {
+        const rect = cards[i].getBoundingClientRect();
+        if (y < rect.top + rect.height / 2) return i;
+      }
+      return cards.length;
+    }
+
+    function clearGapHold() {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+      holdLane = null;
+      holdIndex = null;
+      if (gapPlaceholder) gapPlaceholder.remove();
+      gapPlaceholder = null;
+      gapLane = null;
+      gapIndex = null;
+    }
+
+    function openGap(lane, cardsDiv, index) {
+      const cards = Array.from(cardsDiv.querySelectorAll('.card:not(.dragging)'));
+      const placeholder = document.createElement('div');
+      placeholder.className = 'card-gap-placeholder';
+      cardsDiv.insertBefore(placeholder, cards[index] || cardsDiv.querySelector('.add-card'));
+      void placeholder.offsetHeight; // force reflow so the height transition actually animates
+      placeholder.classList.add('open');
+      gapLane = lane;
+      gapIndex = index;
+      gapPlaceholder = placeholder;
+    }
+
     function render() {
       const board = document.getElementById('board');
       board.innerHTML = '';
@@ -362,9 +414,28 @@
         const cardsDiv = document.createElement('div');
         cardsDiv.className = 'cards';
         cardsDiv.dataset.lane = lane;
-        cardsDiv.ondragover = (e) => e.preventDefault();
+        cardsDiv.ondragover = (e) => {
+          e.preventDefault();
+          const index = getCardInsertIndex(cardsDiv, e.clientY);
+          const cardCount = cardsDiv.querySelectorAll('.card:not(.dragging)').length;
+          const isBetweenCards = index > 0 && index < cardCount;
+
+          if (holdLane === lane && holdIndex === index) return; // already timing this exact gap
+
+          clearGapHold();
+          if (isBetweenCards) {
+            holdLane = lane;
+            holdIndex = index;
+            holdTimer = setTimeout(() => openGap(lane, cardsDiv, index), GAP_HOLD_MS);
+          }
+        };
         cardsDiv.ondrop = (e) => handleDrop(e, lane);
-        cardsDiv.ondragleave = (e) => e.currentTarget.classList.remove('drag-over');
+        cardsDiv.ondragleave = (e) => {
+          e.currentTarget.classList.remove('drag-over');
+          // dragleave also fires when moving between child elements -- only
+          // treat it as actually leaving the lane, not just crossing a card.
+          if (!cardsDiv.contains(e.relatedTarget)) clearGapHold();
+        };
 
         const cardOrder = data.laneOrder[lane] || [];
         cardOrder.forEach(cardId => {
@@ -380,7 +451,10 @@
               e.dataTransfer.effectAllowed = 'move';
               e.currentTarget.classList.add('dragging');
             };
-            card.ondragend = (e) => e.currentTarget.classList.remove('dragging');
+            card.ondragend = (e) => {
+              e.currentTarget.classList.remove('dragging');
+              clearGapHold(); // covers a drag abandoned without a drop
+            };
 
             const text = document.createElement('span');
             text.className = 'card-text';
@@ -413,45 +487,54 @@
     function handleDrop(e, toLane) {
       e.preventDefault();
       const card = document.querySelector('.card.dragging');
-      if (!card) return;
+      if (!card) { clearGapHold(); return; }
 
       const cardId = card.dataset.id;
       const fromLane = card.dataset.lane;
-      if (fromLane === toLane) return;
-      const cardData = data.cards[fromLane].find(c => c.id === cardId);
-      const cardText = cardData.text;
+      const fromIndex = (data.laneOrder[fromLane] || []).indexOf(cardId);
+      if (fromIndex === -1) { clearGapHold(); return; }
 
-      pushMoveHistory({ cardId, from: fromLane, to: toLane });
+      // A gap held open in THIS lane wins; otherwise keep the original
+      // default of appending to the bottom, unchanged from before this
+      // feature existed.
+      const usingGap = gapLane === toLane && gapIndex !== null;
+      const toIndex = usingGap ? gapIndex : (data.laneOrder[toLane] || []).length;
 
-      // Remove from old lane
-      data.cards[fromLane] = data.cards[fromLane].filter(c => c.id !== cardId);
-      data.laneOrder[fromLane] = data.laneOrder[fromLane].filter(id => id !== cardId);
-
-      // Add to new lane
-      if (!data.cards[toLane]) data.cards[toLane] = [];
-      if (!data.laneOrder[toLane]) data.laneOrder[toLane] = [];
-      data.cards[toLane].push({ id: cardId, text: cardText });
-      data.laneOrder[toLane].push(cardId);
+      pushMoveHistory({ cardId, fromLane, fromIndex, toLane, toIndex });
+      moveCard(cardId, fromLane, toLane, toIndex);
 
       saveData();
       updateChangeCount();
+      clearGapHold();
       render();
       e.currentTarget.classList.remove('drag-over');
     }
 
-    // Moves are recorded as { cardId, from, to } rather than full-board
-    // snapshots, so undo/redo only ever touches the one card that moved --
-    // an add or delete elsewhere in between doesn't get silently reverted.
-    function moveCard(cardId, fromLane, toLane) {
-      const cardData = data.cards[fromLane]?.find(c => c.id === cardId);
-      if (!cardData) return false;
-      data.cards[fromLane] = data.cards[fromLane].filter(c => c.id !== cardId);
-      data.laneOrder[fromLane] = data.laneOrder[fromLane].filter(id => id !== cardId);
+    // Moves are recorded as { cardId, fromLane, fromIndex, toLane, toIndex }
+    // rather than full-board snapshots, so undo/redo only ever touches the
+    // one card that moved -- an add or delete elsewhere in between doesn't
+    // get silently reverted. toIndex is always relative to the lane's state
+    // with the card already removed (see getCardInsertIndex), so splice
+    // works directly with no off-by-one adjustment for the same-lane case.
+    function moveCard(cardId, fromLane, toLane, toIndex) {
+      const fromIndex = (data.laneOrder[fromLane] || []).indexOf(cardId);
+      if (fromIndex === -1) return null;
+      const cardData = data.cards[fromLane][fromIndex];
+
+      data.cards[fromLane].splice(fromIndex, 1);
+      data.laneOrder[fromLane].splice(fromIndex, 1);
+
       if (!data.cards[toLane]) data.cards[toLane] = [];
       if (!data.laneOrder[toLane]) data.laneOrder[toLane] = [];
-      data.cards[toLane].push(cardData);
-      data.laneOrder[toLane].push(cardId);
-      return true;
+      // Clamp rather than trust the caller's index -- if cards were added or
+      // removed in toLane since toIndex was computed (e.g. an old undo
+      // entry), splice would otherwise insert at a stale position instead of
+      // degrading safely to the nearest valid one.
+      const insertAt = Math.min(toIndex ?? data.laneOrder[toLane].length, data.laneOrder[toLane].length);
+      data.cards[toLane].splice(insertAt, 0, cardData);
+      data.laneOrder[toLane].splice(insertAt, 0, cardId);
+
+      return fromIndex;
     }
 
     function pushMoveHistory(move) {
@@ -464,7 +547,7 @@
     function undoMove() {
       const move = moveUndoStack.pop();
       if (!move) return;
-      if (moveCard(move.cardId, move.to, move.from)) {
+      if (moveCard(move.cardId, move.toLane, move.fromLane, move.fromIndex) !== null) {
         moveRedoStack.push(move);
         saveData();
         updateChangeCount();
@@ -477,7 +560,7 @@
     function redoMove() {
       const move = moveRedoStack.pop();
       if (!move) return;
-      if (moveCard(move.cardId, move.from, move.to)) {
+      if (moveCard(move.cardId, move.fromLane, move.toLane, move.toIndex) !== null) {
         moveUndoStack.push(move);
         saveData();
         updateChangeCount();
