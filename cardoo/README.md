@@ -72,7 +72,7 @@ Your choice persists across sessions. Themes load instantly without flash.
 | `Enter` | Save card text in the input dialog |
 | `Escape` | Cancel card input |
 | `Ctrl+Z` | Undo the last card move |
-| `Ctrl+R` | Redo a move you just undid |
+| `Ctrl+Y` | Redo a move you just undid |
 | Click × | Delete card |
 
 Undo/redo covers **drag-and-drop moves only** — not adding, deleting, or editing cards.
@@ -86,7 +86,7 @@ Move a card three times and you can undo all three, then redo all three, in orde
 
 **Import**: Click 📤 **Import** to restore from a previously exported backup file.
 
-**Auto-Export Config** (Chrome/Edge only): Click ⚙️ **Config** and select a local folder. Backups will automatically save to that folder whenever you make changes. Useful for continuous protection without manual exports.
+**Auto-Export Config** (Chrome/Edge only): Click ⚙️ **Config** and select a local folder. Once armed, Cardoo writes a timestamped backup file there automatically — either after every 20 changes, or after 20 minutes if there's at least one change still unsaved, whichever comes first. The 20-minute timer means a handful of edits followed by walking away still gets backed up instead of sitting unprotected indefinitely. Each save gets its own uniquely-named file (down to the second), so nothing overwrites an earlier backup — you can restore from any point, not just the most recent save.
 
 If you ever clear your browser cache, import your backup to recover all your cards instantly.
 

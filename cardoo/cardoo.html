@@ -159,7 +159,7 @@
       <rect x="7" y="10" width="14" height="18" rx="2.5" fill="#ff6b5b" stroke="#2d2454" stroke-width="1"/>
     </svg>
     <button id="undoBtn" onclick="undoMove()" title="Undo move (Ctrl+Z)" disabled>↶ Undo</button>
-    <button id="redoBtn" onclick="redoMove()" title="Redo move (Ctrl+R)" disabled>↷ Redo</button>
+    <button id="redoBtn" onclick="redoMove()" title="Redo move (Ctrl+Y)" disabled>↷ Redo</button>
     <button onclick="exportState()">📥 Export</button>
     <button onclick="importState()">📤 Import</button>
     <button onclick="cycleTheme()">🎨 Theme</button>
@@ -227,6 +227,13 @@
     let autoExportEnabled = false;
     let autoSaveCounter = 0;
     const AUTO_SAVE_EVERY = 20;
+    // null means "no autosave yet this session" -- e.g. just armed, or a
+    // fresh page load, since folderHandle never survives a refresh anyway.
+    // Treated as infinitely stale, so the time trigger fires on the very
+    // first pending change rather than waiting a full 20 minutes from a
+    // baseline that was never real.
+    let lastAutoSaveTime = null;
+    const AUTO_SAVE_MAX_AGE_MS = 20 * 60 * 1000;
     let wasRed = false;
     let toastTimer = null;
     let currentTheme = 'blue-dark';
@@ -312,8 +319,7 @@
         // live -- hiding that gap once it can exist would be dishonest.
         autoSaveCounter++;
         if (autoSaveCounter >= AUTO_SAVE_EVERY) {
-          autoSaveCounter = 0;
-          autoExportToFolder();
+          autoExportToFolder(); // resets autoSaveCounter itself on success
         } else {
           // Ascending, not a countdown -- every visible counter in this app
           // only ever goes up, same as the fire meter. A "N remaining" framing
@@ -607,6 +613,18 @@
       }
     });
 
+    // Backstop for the count trigger: 20 changes might never arrive in a
+    // session, so a handful of edits followed by walking away could
+    // otherwise sit unwritten indefinitely. Runs continuously rather than
+    // only checking on the next edit, since there may never be one --
+    // checking once a minute is plenty against a 20-minute threshold.
+    setInterval(() => {
+      if (!autoExportEnabled || !folderHandle) return;
+      if (autoSaveCounter === 0) return; // nothing pending, nothing to protect
+      const stale = lastAutoSaveTime === null || (Date.now() - lastAutoSaveTime) >= AUTO_SAVE_MAX_AGE_MS;
+      if (stale) autoExportToFolder();
+    }, 60 * 1000);
+
     document.addEventListener('keydown', (e) => {
       const tag = (document.activeElement && document.activeElement.tagName) || '';
       const inField = tag === 'INPUT' || tag === 'TEXTAREA';
@@ -616,8 +634,9 @@
         e.preventDefault();
         undoMove();
       }
-      if (e.ctrlKey && e.key.toLowerCase() === 'r') {
-        e.preventDefault(); // always override the browser's page-reload binding
+      if (e.ctrlKey && e.key.toLowerCase() === 'y') {
+        if (inField) return; // Ctrl+Y is also native text-field redo -- same guard as undo
+        e.preventDefault();
         redoMove();
       }
     });
@@ -703,13 +722,28 @@
         changeCount = 0;
         localStorage.setItem('cardoo:changes', '0');
         updateFireMeter();
+        // Reset here, not in the caller -- both the count trigger and the
+        // time trigger call this function, and a successful write means
+        // "nothing owed" regardless of which one caused it.
+        autoSaveCounter = 0;
+        lastAutoSaveTime = Date.now();
         document.getElementById('autoSaveText').textContent = 'Autosaved';
         flashAutoSaveDot();
       } catch (err) {
         console.warn('Auto-export failed:', err);
         // This IS worth a toast -- the meter is hidden while armed, so a
-        // failed write has no other visible signal without this.
-        toast('⚠ Autosave failed -- your changes are not backed up', true);
+        // failed write has no other visible signal without this. But a
+        // SecurityError specifically means "no user activation" -- expected
+        // from the timer trigger if the permission grant ever needs
+        // reconfirming, and self-healing: the very next real action (a card
+        // move, a click) carries activation and will succeed. That's a
+        // materially different, less urgent situation than a write that's
+        // actually failing, so it gets a calmer message, not the alarm.
+        if (err.name === 'SecurityError') {
+          toast('Autosave paused until your next action');
+        } else {
+          toast('⚠ Autosave failed -- your changes are not backed up', true);
+        }
       }
     }
 
@@ -774,6 +808,14 @@
         // it, so the dialog reopens already pointed at the right place
         // instead of defaulting back to Downloads every time.
         folderHandle = await window.showDirectoryPicker({ id: 'cardoo-autosave-folder' });
+
+        // Confirm readwrite explicitly, right now, while this click still
+        // carries user activation. Writes later triggered with no activation
+        // of their own -- specifically the timer-based autosave, which never
+        // has any -- throw SecurityError from getFileHandle() if the grant
+        // was only ever implicit from the picker and never explicitly locked in.
+        await folderHandle.requestPermission({ mode: 'readwrite' });
+
         const name = folderHandle.name || 'Selected folder';
         document.getElementById('folderStatus').textContent = '✓ Folder: ' + name;
         localStorage.setItem('cardoo:folderName', name);
@@ -788,6 +830,7 @@
         localStorage.setItem('cardoo:autoExport', 'true');
         document.getElementById('resumeAutoSaveBtn').style.display = 'none';
         autoSaveCounter = 0;
+        lastAutoSaveTime = null;
         document.getElementById('autoSaveText').textContent = 'Autosaved';
         updateFireMeterVisibility();
         toast('Auto-export armed for "' + name + '"');

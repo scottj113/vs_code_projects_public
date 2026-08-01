@@ -699,11 +699,14 @@ uniformly, with no per-action-type scoping — a text editor undoing keystrokes,
 instance. Reach for recorded intent first; fall back to snapshots when the domain
 genuinely doesn't factor into discrete, invertible actions.
 
-### The `Ctrl+Z` Focus Guard
+### The Undo/Redo Focus Guard
 
 Binding `Ctrl+Z` globally breaks the browser's own undo inside any `<input>` or
 `<textarea>` on the page — typing a correction into a text field and hitting `Ctrl+Z`
 should erase the last few characters, not revert application state out from under you.
+**The same is true of `Ctrl+Y`** — it's the native Windows/Chrome redo shortcut inside a
+text field, not just an app-level binding, so it needs the identical guard or it fights
+the browser the same way an unguarded `Ctrl+Z` would.
 
 ```javascript
 document.addEventListener("keydown", (e) => {
@@ -715,12 +718,20 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     undo();
   }
+  if (e.ctrlKey && e.key.toLowerCase() === "y") {
+    if (inField) return;          // Ctrl+Y is also native text-field redo
+    e.preventDefault();
+    redo();
+  }
 });
 ```
 
-`Ctrl+R` has no native text-editing meaning, so redo bound to it can stay unconditional —
-just `e.preventDefault()` to stop the browser's page-reload binding, the same precedent
-Northern Lights already set for `Ctrl+R` as an in-app action.
+If `Ctrl+R` is used for redo instead of `Ctrl+Y`, the guard becomes unnecessary for that
+key specifically — `Ctrl+R` has no native text-editing meaning, so it can stay
+unconditional, just `e.preventDefault()` to stop the browser's page-reload binding
+(the precedent Northern Lights set for `Ctrl+R` as an in-app action). But `Ctrl+Y` is the
+more standard redo binding, and it needs the guard — don't assume every redo key is as
+safe to bind globally as `Ctrl+R` happens to be.
 
 ---
 
