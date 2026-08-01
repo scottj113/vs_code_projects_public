@@ -80,7 +80,7 @@ Two working apps, deliberately different in scale, to show the patterns carry bo
 
 - **[Cardoo](../cardoo/)** — ~250 lines. Kanban board: drag & drop, card details with
   highlights, four themes, export/import, staleness meter.
-- **[Northern Lights MD Viewer](../md_to_html_viewer/)** — ~4,700 lines, 60 features.
+- **[Northern Lights MD Viewer](../northern-lights/)** — ~4,700 lines, 60 features.
   Markdown viewer and editor: full GFM parser, syntax highlighting, Mermaid diagrams,
   twelve contrast-validated palettes, section editing that writes back to disk, live
   reload, folder browsing, standalone HTML and PDF export.

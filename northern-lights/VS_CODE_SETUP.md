@@ -61,7 +61,7 @@ If you prefer not to use the PowerShell task:
 
 The PowerShell script (`open-in-viewer.ps1`):
 
-1. Finds the viewer HTML file (in either `distro/` or `md_to_html_viewer/distro/`)
+1. Finds the viewer HTML file (in either `distro/` or `northern-lights/distro/`)
 2. Reads your markdown file
 3. Embeds the content directly in the HTML (bypassing `file://` URL restrictions)
 4. Copies vendor files (Mermaid) to the temp folder
@@ -86,7 +86,7 @@ To use this from a different project or folder:
 1. Copy `.vscode/tasks.json` and `.vscode/open-in-viewer.ps1` to your project's `.vscode/` folder
 2. Make sure `md_to_html_viewer.html` is accessible from your project root:
    - Either at `./distro/md_to_html_viewer.html`
-   - Or at `../md_to_html_viewer/distro/md_to_html_viewer.html` (if the viewer is a sibling folder)
+   - Or at `../northern-lights/distro/md_to_html_viewer.html` (if the viewer is a sibling folder)
 3. Add the keyboard shortcut to your `keybindings.json` if you haven't already
 4. Now **Ctrl+M then Down** works in this folder too
 

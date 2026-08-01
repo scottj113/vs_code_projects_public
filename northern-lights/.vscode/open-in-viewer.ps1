@@ -1,4 +1,4 @@
-# Open markdown file in Eye Love Markdown Viewer with editing support
+# Open markdown file in Northern Lights MD Viewer with editing support
 # This script embeds the file content directly in the HTML to avoid browser security restrictions
 
 param(

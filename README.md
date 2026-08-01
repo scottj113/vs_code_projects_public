@@ -4,7 +4,7 @@ Public projects, one folder each. Each carries its own README and license.
 
 ---
 
-## [Eye Love Markdown Viewer](md_to_html_viewer/)
+## [Northern Lights MD Viewer](northern-lights/)
 
 *The most powerful light Markdown viewer in the world. One HTML file, ~92 KB, nothing
 to install.*
@@ -21,5 +21,4 @@ to install.*
 
 Double-click it. Drop a `.md` on it. Bookmark it.
 
-[Full docs →](md_to_html_viewer/distro/README.md) ·
-[Download →](md_to_html_viewer/md_to_html_viewer.zip)
+[Full docs →](northern-lights/distro/README.md)

@@ -6,7 +6,7 @@ opened by double-click and bookmarked like an app. No installer, no Electron, no
 build step, no server.
 
 Everything here is extracted from working software — [Cardoo](../cardoo/) and
-[Northern Lights MD Viewer](../md_to_html_viewer/) — not from theory. If a pattern is
+[Northern Lights MD Viewer](../northern-lights/) — not from theory. If a pattern is
 listed, it shipped.
 
 **Target: Chromium (Chrome / Edge.)** The File System Access API is what makes this
@@ -1314,7 +1314,7 @@ Two working apps, both a single bookmarked HTML file:
 
 - **[Cardoo](../cardoo/)** (~250 lines) — kanban board. Source of the state/render loop,
   export/import, the staleness meter, and the `style.display` gotcha.
-- **[Northern Lights MD Viewer](../md_to_html_viewer/)** (~4,700 lines, 60 features) —
+- **[Northern Lights MD Viewer](../northern-lights/)** (~4,700 lines, 60 features) —
   markdown viewer and editor. Source of the `file://` input routes, standalone export,
   print stylesheet, safe file writes, capability degradation, content scaling, and
   sanitizing.

@@ -141,7 +141,7 @@ Currently cards have `id` and `text`. To add properties (e.g., priority, tags, d
 
 ## Inspiration: Northern Lights MD Viewer
 
-Cardoo follows the same deployment model as [Northern Lights](../md_to_html_viewer/), a mature single-file Markdown viewer with:
+Cardoo follows the same deployment model as [Northern Lights](../northern-lights/), a mature single-file Markdown viewer with:
 
 - **60 features** shipped in ~9 days
 - **4,700 lines** of well-organized code
