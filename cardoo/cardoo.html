@@ -77,17 +77,21 @@
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-main); color: var(--fg); }
+    html, body { height: 100%; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-main); color: var(--fg);
+      display: flex; flex-direction: column; overflow: hidden; }
     .toolbar { background: var(--bg-toolbar); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; gap: 8px; align-items: center; }
     .toolbar-logo { width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; margin-right: 4px; }
     .toolbar button { background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--fg); padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
     .toolbar button:hover { background: var(--bg-lane); border-color: var(--fg-muted); }
     .toolbar button:disabled { opacity: 0.35; cursor: default; }
     .toolbar button:disabled:hover { background: var(--bg-card); border-color: var(--border-strong); }
-    .container { display: flex; gap: 16px; padding: 20px; max-width: 1400px; margin: 0 auto; overflow-x: auto; min-height: 100vh; }
-    .lane { background: var(--bg-lane); border-radius: 8px; padding: 12px; min-width: 300px; flex-shrink: 0; display: flex; flex-direction: column; }
+    .container { display: flex; gap: 16px; padding: 20px; max-width: 1400px; margin: 0 auto; width: 100%;
+      overflow-x: auto; overflow-y: hidden; flex: 1; min-height: 0; }
+    .lane { background: var(--bg-lane); border-radius: 8px; padding: 12px; min-width: 300px; flex-shrink: 0;
+      display: flex; flex-direction: column; height: 100%; overflow: hidden; }
     .lane-title { font-weight: 600; margin-bottom: 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-muted); }
-    .cards { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .cards { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow-y: auto; }
     .card { background: var(--bg-card); padding: 12px; border-radius: 6px; cursor: move; user-select: none; border: 1px solid var(--border);
       transition: all 0.2s; }
     .card:hover { background: var(--bg-lane); border-color: var(--border-strong); }
@@ -100,16 +104,8 @@
     .card-delete { float: right; cursor: pointer; color: var(--fg-faint); font-size: 16px; margin-left: 8px; }
     .card-delete:hover { color: #f00; }
     .add-card { background: var(--bg-lane); border: 1px dashed var(--border-strong); padding: 8px; border-radius: 6px; cursor: pointer;
-      text-align: center; font-size: 12px; color: var(--fg-faint); transition: all 0.2s; margin-top: auto; }
+      text-align: center; font-size: 12px; color: var(--fg-faint); transition: all 0.2s; margin-top: 8px; flex-shrink: 0; }
     .add-card:hover { background: var(--bg-card); border-color: var(--fg-muted); color: var(--fg-muted); }
-    .input-dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-lane);
-      border: 1px solid var(--border); border-radius: 8px; padding: 20px; z-index: 1000; min-width: 300px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
-    .input-dialog input { width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px;
-      color: var(--fg); font-size: 14px; margin-bottom: 12px; }
-    .input-dialog button { width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 4px;
-      color: var(--fg); cursor: pointer; font-size: 14px; transition: all 0.2s; margin-bottom: 8px; }
-    .input-dialog button:hover { background: var(--bg-lane); }
-    .input-dialog button:last-child { background: var(--border-strong); margin-bottom: 0; }
     .overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 999; }
     .fire-meter { display: flex; align-items: center; gap: 8px; margin-left: auto; }
     .fire-bar { width: 120px; height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
@@ -148,6 +144,21 @@
     .config-modal button { width: 100%; padding: 10px; margin-top: 8px; background: #4a4a4a; border: 1px solid #555; border-radius: 4px; color: #fff; cursor: pointer; font-size: 13px; }
     .config-modal button:hover { background: #5a5a5a; }
     .config-modal button.close { background: #666; }
+    .help-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-lane);
+      border: 1px solid var(--border); border-radius: 8px; padding: 24px; z-index: 1000; width: 85vw; max-width: 672px;
+      max-height: 80vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+    .help-modal h3 { margin-bottom: 16px; font-size: 18px; padding-right: 28px; }
+    .help-modal h4 { margin: 18px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-muted); }
+    .help-modal h4:first-of-type { margin-top: 0; }
+    .help-modal p { font-size: 13px; line-height: 1.6; color: var(--fg); margin-bottom: 4px; }
+    .help-modal code { background: var(--bg-card); padding: 1px 5px; border-radius: 3px; font-family: monospace; font-size: 12px; }
+    .help-modal mark { padding: 0 4px; }
+    .help-modal .help-close-x { position: absolute; top: 14px; right: 14px; width: 26px; height: 26px; border: none;
+      background: transparent; color: var(--fg-muted); font-size: 18px; line-height: 1; cursor: pointer; border-radius: 4px; }
+    .help-modal .help-close-x:hover { background: var(--bg-card); color: var(--fg); }
+    .help-modal button.close { width: 100%; padding: 10px; margin-top: 20px; background: var(--bg-card);
+      border: 1px solid var(--border-strong); border-radius: 4px; color: var(--fg); cursor: pointer; font-size: 13px; }
+    .help-modal button.close:hover { background: var(--border); }
   </style>
 </head>
 <body>
@@ -164,6 +175,7 @@
     <button onclick="importState()">📤 Import</button>
     <button onclick="cycleTheme()">🎨 Theme</button>
     <button onclick="openConfig()">⚙️ Config</button>
+    <button onclick="openHelp()">❓ Help</button>
     <button id="resumeAutoSaveBtn" onclick="selectFolder()" style="display: none;"></button>
     <div class="fire-meter" id="fireMeter">
       <span class="fire-label" id="changeCount">0</span>
@@ -173,16 +185,10 @@
     </div>
     <div class="autosave-indicator" id="autoSaveIndicator">
       <span class="autosave-dot"></span>
-      <span class="autosave-text" id="autoSaveText">Autosaved</span>
+      <span class="autosave-text" id="autoSaveText">Backed up</span>
     </div>
   </div>
   <div class="container" id="board"></div>
-  <div id="overlay" class="overlay" style="display: none;"></div>
-  <div id="dialog" class="input-dialog" style="display: none;">
-    <input type="text" id="input" placeholder="Enter card text..." />
-    <button onclick="saveInput()">Add</button>
-    <button onclick="cancelInput()">Cancel</button>
-  </div>
   <div id="toast"></div>
   <div id="detailOverlay" class="overlay" style="display: none;"></div>
   <div id="detailModal" class="detail-modal" style="display: none;">
@@ -192,14 +198,14 @@
       <textarea id="detailEdit" class="detail-edit"></textarea>
     </div>
     <div class="detail-buttons">
-      <button onclick="toggleDetailEdit()">✏️ Edit</button>
+      <button id="editDetailBtn" onclick="toggleDetailEdit()">✏️ Edit</button>
       <button onclick="saveDetailEdit()">💾 Save</button>
       <button onclick="closeDetail()">Close</button>
     </div>
   </div>
   <div id="configOverlay" class="overlay" style="display: none;"></div>
   <div id="configModal" class="config-modal" style="display: none;">
-    <h3>Backup Config</h3>
+    <h3>Recovery Backup</h3>
     <div class="config-item">
       <label>
         <input type="checkbox" id="autoExportToggle" onchange="toggleAutoExport()" disabled />
@@ -217,11 +223,34 @@
     <button class="close" onclick="closeConfig()">Done</button>
   </div>
 
+  <div id="helpOverlay" class="overlay" style="display: none;"></div>
+  <div id="helpModal" class="help-modal" style="display: none;">
+    <button class="help-close-x" onclick="closeHelp()" title="Close" aria-label="Close">✕</button>
+    <h3>How Cardoo Works</h3>
+
+    <h4>Cards &amp; Lanes</h4>
+    <p>Drag a card between lanes to move it. Click any card to open its full text and edit it — the lane only ever shows the first line, so longer notes stay out of the way until you need them.</p>
+
+    <h4>Reordering</h4>
+    <p>Drag a card and hold it between two others for about a second — a gap opens up between them. Drop there and the card lands in that exact spot instead of at the bottom of the lane.</p>
+
+    <h4>Highlighting</h4>
+    <p>Wrap any text in double angle brackets to highlight it, both in the lane and in the card's full view: <code>&lt;&lt;like this&gt;&gt;</code> becomes <mark>like this</mark>.</p>
+
+    <h4>Save vs. Recovery Backup</h4>
+    <p><strong>Save</strong> is automatic and instant — every change is written to your browser's storage right away. It survives closing the tab or restarting your computer, but <strong>not</strong> clearing your browser's data.</p>
+    <p><strong>Recovery Backup</strong> is a separate, optional safety net: a real copy of your board written to a folder on disk, armed in ⚙️ Config. Once armed, it writes automatically every 20 changes or 20 minutes, whichever comes first — so it survives even a cleared cache. You can also back up manually anytime with 📥 Export, and restore any backup with 📤 Import.</p>
+
+    <h4>Undo &amp; Redo</h4>
+    <p>Card moves can be undone with <code>Ctrl+Z</code> and redone with <code>Ctrl+Y</code>.</p>
+
+    <button class="close" onclick="closeHelp()">Got it</button>
+  </div>
+
   <script>
     const LANES = ['Pondering', 'To Do', 'In Progress', 'Done'];
     const THEMES = ['blue-dark', 'slate-dark', 'white-light', 'beige-light'];
     let data = { cards: {}, laneOrder: {} };
-    let currentLaneForInput = null;
     let changeCount = 0;
     let folderHandle = null;
     let autoExportEnabled = false;
@@ -274,14 +303,14 @@
       const savedFolderName = localStorage.getItem('cardoo:folderName');
       if (savedFolderName && localStorage.getItem('cardoo:autoExport') === 'true') {
         document.getElementById('folderStatus').textContent =
-          'Auto-export was on for "' + savedFolderName + '" — choose it again to resume';
+          'Recovery Backup was on for "' + savedFolderName + '" — choose it again to resume';
         // Surface this in the toolbar too, not just buried in Config -- the
         // picker itself remembers the folder (see the `id` on
         // showDirectoryPicker below), so this is genuinely one click, not a
         // folder hunt.
         const resumeBtn = document.getElementById('resumeAutoSaveBtn');
-        resumeBtn.textContent = '▶ Resume Autosave';
-        resumeBtn.title = 'Resume auto-export to "' + savedFolderName + '"';
+        resumeBtn.textContent = '▶ Resume Backup';
+        resumeBtn.title = 'Resume Recovery Backup to "' + savedFolderName + '"';
         resumeBtn.style.display = 'inline-block';
       }
       document.getElementById('autoExportToggle').checked = false;
@@ -326,7 +355,7 @@
           // reads as subtracting on every move and undo alike, which looks
           // exactly like the bug we already ruled out changeCount having.
           document.getElementById('autoSaveText').textContent =
-            autoSaveCounter + '/' + AUTO_SAVE_EVERY + ' since last autosave';
+            autoSaveCounter + '/' + AUTO_SAVE_EVERY + ' since last backup';
         }
       }
     }
@@ -498,13 +527,17 @@
           }
         });
 
+        laneDiv.appendChild(cardsDiv);
+
+        // Sibling of .cards, not a child inside it -- .cards is the
+        // scrollable region now, and this needs to stay pinned below that
+        // scroll area rather than scrolling away with a long card list.
         const addBtn = document.createElement('div');
         addBtn.className = 'add-card';
         addBtn.textContent = '+ Add card';
         addBtn.onclick = () => openInput(lane);
-        cardsDiv.appendChild(addBtn);
+        laneDiv.appendChild(addBtn);
 
-        laneDiv.appendChild(cardsDiv);
         board.appendChild(laneDiv);
       });
     }
@@ -641,35 +674,25 @@
       }
     });
 
+    // Adding a card reuses the detail modal rather than a separate small
+    // dialog -- one editor, not two. detailCardId === null is what signals
+    // "creating a new card" to saveDetailEdit()/showDetail() below: there's
+    // no existing text to preview, so it opens straight into edit mode with
+    // the Edit toggle hidden (nothing to toggle back to).
     function openInput(lane) {
-      currentLaneForInput = lane;
-      document.getElementById('overlay').style.display = 'block';
-      document.getElementById('dialog').style.display = 'block';
-      document.getElementById('input').value = '';
-      document.getElementById('input').focus();
-    }
+      detailLane = lane;
+      detailCardId = null;
+      document.getElementById('detailTitle').textContent = 'New Card';
+      document.getElementById('editDetailBtn').style.display = 'none';
 
-    function saveInput() {
-      const text = document.getElementById('input').value.trim();
-      if (!text || !currentLaneForInput) return;
+      document.getElementById('detailText').style.display = 'none';
+      const editArea = document.getElementById('detailEdit');
+      editArea.value = '';
+      editArea.style.display = 'block';
 
-      const cardId = Date.now().toString();
-      if (!data.cards[currentLaneForInput]) data.cards[currentLaneForInput] = [];
-      if (!data.laneOrder[currentLaneForInput]) data.laneOrder[currentLaneForInput] = [];
-
-      data.cards[currentLaneForInput].push({ id: cardId, text });
-      data.laneOrder[currentLaneForInput].push(cardId);
-
-      saveData();
-      updateChangeCount();
-      cancelInput();
-      render();
-    }
-
-    function cancelInput() {
-      document.getElementById('overlay').style.display = 'none';
-      document.getElementById('dialog').style.display = 'none';
-      currentLaneForInput = null;
+      document.getElementById('detailOverlay').style.display = 'block';
+      document.getElementById('detailModal').style.display = 'flex';
+      editArea.focus();
     }
 
     function deleteCard(lane, cardId) {
@@ -727,7 +750,7 @@
         // "nothing owed" regardless of which one caused it.
         autoSaveCounter = 0;
         lastAutoSaveTime = Date.now();
-        document.getElementById('autoSaveText').textContent = 'Autosaved';
+        document.getElementById('autoSaveText').textContent = 'Backed up';
         flashAutoSaveDot();
       } catch (err) {
         console.warn('Auto-export failed:', err);
@@ -740,9 +763,9 @@
         // materially different, less urgent situation than a write that's
         // actually failing, so it gets a calmer message, not the alarm.
         if (err.name === 'SecurityError') {
-          toast('Autosave paused until your next action');
+          toast('Recovery Backup paused until your next action');
         } else {
-          toast('⚠ Autosave failed -- your changes are not backed up', true);
+          toast('⚠ Recovery Backup failed -- your changes are not backed up', true);
         }
       }
     }
@@ -783,6 +806,16 @@
     function closeConfig() {
       document.getElementById('configOverlay').style.display = 'none';
       document.getElementById('configModal').style.display = 'none';
+    }
+
+    function openHelp() {
+      document.getElementById('helpOverlay').style.display = 'block';
+      document.getElementById('helpModal').style.display = 'block';
+    }
+
+    function closeHelp() {
+      document.getElementById('helpOverlay').style.display = 'none';
+      document.getElementById('helpModal').style.display = 'none';
     }
 
     function toggleAutoExport() {
@@ -831,9 +864,9 @@
         document.getElementById('resumeAutoSaveBtn').style.display = 'none';
         autoSaveCounter = 0;
         lastAutoSaveTime = null;
-        document.getElementById('autoSaveText').textContent = 'Autosaved';
+        document.getElementById('autoSaveText').textContent = 'Backed up';
         updateFireMeterVisibility();
-        toast('Auto-export armed for "' + name + '"');
+        toast('Recovery Backup armed for "' + name + '"');
       } catch (err) {
         if (err.name !== 'AbortError') {
           alert('Could not select folder: ' + err.message);
@@ -841,13 +874,8 @@
       }
     }
 
-    document.getElementById('input').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') saveInput();
-      if (e.key === 'Escape') cancelInput();
-    });
-
-    document.getElementById('overlay').addEventListener('click', cancelInput);
     document.getElementById('configOverlay').addEventListener('click', closeConfig);
+    document.getElementById('helpOverlay').addEventListener('click', closeHelp);
 
     let detailLane = null;
     let detailCardId = null;
@@ -855,6 +883,11 @@
     function showDetail(lane, cardId, cardText) {
       detailLane = lane;
       detailCardId = cardId;
+      // Reset in case the modal was last used to add a card -- openInput()
+      // hides the Edit toggle and retitles the modal, and both need to come
+      // back for an existing card, which always has something to preview.
+      document.getElementById('detailTitle').textContent = 'Card Details';
+      document.getElementById('editDetailBtn').style.display = '';
       const detailText = document.getElementById('detailText');
       detailText.innerHTML = '';
 
@@ -914,7 +947,24 @@
 
     function saveDetailEdit() {
       const newText = document.getElementById('detailEdit').value.trim();
-      if (!newText || !detailLane || !detailCardId) return;
+      if (!newText || !detailLane) return;
+
+      // detailCardId === null means openInput() opened this modal to create
+      // a card, not edit one -- there's nothing existing to look up.
+      if (detailCardId === null) {
+        const cardId = Date.now().toString();
+        if (!data.cards[detailLane]) data.cards[detailLane] = [];
+        if (!data.laneOrder[detailLane]) data.laneOrder[detailLane] = [];
+        data.cards[detailLane].push({ id: cardId, text: newText });
+        data.laneOrder[detailLane].push(cardId);
+        saveData();
+        updateChangeCount();
+        closeDetail();
+        render();
+        toast('✓ Card added');
+        return;
+      }
+
       const card = data.cards[detailLane].find(c => c.id === detailCardId);
       if (card) {
         card.text = newText;
