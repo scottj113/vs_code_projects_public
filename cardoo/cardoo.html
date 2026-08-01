@@ -112,6 +112,11 @@
     .fire-bar { width: 120px; height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
     .fire-fill { height: 100%; background: #0f0; width: 0%; transition: width 0.2s, background-color 0.2s; }
     .fire-label { font-size: 11px; color: #999; min-width: 40px; text-align: right; }
+    .autosave-indicator { display: none; align-items: center; gap: 6px; margin-left: auto; }
+    .autosave-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; flex-shrink: 0; }
+    .autosave-dot.saving { animation: autosave-fade 0.6s ease-in-out; }
+    @keyframes autosave-fade { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
+    .autosave-text { font-size: 11px; color: var(--fg-faint); }
     #toast { position: fixed; left: 50%; top: 62px; transform: translate(-50%, -8px); z-index: 100; background: #2a2a2a;
       color: #fff; border: 1px solid #555; border-radius: 6px; padding: 10px 14px; font-size: 13px; opacity: 0; pointer-events: none;
       transition: opacity 0.2s, transform 0.2s; max-width: 70vw; }
@@ -156,11 +161,16 @@
     <button onclick="importState()">📤 Import</button>
     <button onclick="cycleTheme()">🎨 Theme</button>
     <button onclick="openConfig()">⚙️ Config</button>
-    <div class="fire-meter">
+    <button id="resumeAutoSaveBtn" onclick="selectFolder()" style="display: none;"></button>
+    <div class="fire-meter" id="fireMeter">
       <span class="fire-label" id="changeCount">0</span>
       <div class="fire-bar">
         <div class="fire-fill" id="fireFill"></div>
       </div>
+    </div>
+    <div class="autosave-indicator" id="autoSaveIndicator">
+      <span class="autosave-dot"></span>
+      <span class="autosave-text">Autosaved</span>
     </div>
   </div>
   <div class="container" id="board"></div>
@@ -189,11 +199,12 @@
     <h3>Backup Config</h3>
     <div class="config-item">
       <label>
-        <input type="checkbox" id="autoExportToggle" onchange="toggleAutoExport()" />
+        <input type="checkbox" id="autoExportToggle" onchange="toggleAutoExport()" disabled />
         Auto-export to local folder (Chrome/Edge only)
       </label>
       <small style="color: #888; display: block; margin-top: 4px;">
-        Select a folder once, then backups save automatically after changes
+        Choose a folder below to arm it -- the browser can't remember folder
+        access across a refresh, so this re-enables each session
       </small>
     </div>
     <div class="config-item" id="folderStatus" style="font-size: 12px; color: #888;">
@@ -230,11 +241,32 @@
         saveData();
       }
       changeCount = localStorage.getItem('cardoo:changes') ? parseInt(localStorage.getItem('cardoo:changes')) : 0;
-      autoExportEnabled = localStorage.getItem('cardoo:autoExport') === 'true';
+
+      // folderHandle can never survive a refresh -- file:// pages can't persist
+      // that permission grant -- so auto-export always starts OFF regardless of
+      // what was saved last session. Trusting the saved flag here is exactly
+      // what let the toggle show "on" while silently writing nothing.
+      autoExportEnabled = false;
+      const savedFolderName = localStorage.getItem('cardoo:folderName');
+      if (savedFolderName && localStorage.getItem('cardoo:autoExport') === 'true') {
+        document.getElementById('folderStatus').textContent =
+          'Auto-export was on for "' + savedFolderName + '" — choose it again to resume';
+        // Surface this in the toolbar too, not just buried in Config -- the
+        // picker itself remembers the folder (see the `id` on
+        // showDirectoryPicker below), so this is genuinely one click, not a
+        // folder hunt.
+        const resumeBtn = document.getElementById('resumeAutoSaveBtn');
+        resumeBtn.textContent = '▶ Resume Autosave';
+        resumeBtn.title = 'Resume auto-export to "' + savedFolderName + '"';
+        resumeBtn.style.display = 'inline-block';
+      }
+      document.getElementById('autoExportToggle').checked = false;
+      document.getElementById('autoExportToggle').disabled = true;
+
       currentTheme = localStorage.getItem('cardoo:theme') || 'blue-dark';
       document.documentElement.setAttribute('data-pal', currentTheme);
-      document.getElementById('autoExportToggle').checked = autoExportEnabled;
       updateFireMeter();
+      updateFireMeterVisibility();
     }
 
     function cycleTheme() {
@@ -284,12 +316,34 @@
       }
     }
 
-    function toast(msg) {
+    // The meter exists to nudge a human into backing up manually. Once
+    // autosave is actually armed and writing on its own, that nudge has
+    // nothing left to do -- showing it anyway is just noise.
+    function updateFireMeterVisibility() {
+      const armed = autoExportEnabled && folderHandle;
+      document.getElementById('fireMeter').style.display = armed ? 'none' : 'flex';
+      document.getElementById('autoSaveIndicator').style.display = armed ? 'flex' : 'none';
+    }
+
+    // Cues an actual write completing, in real time, without a toast on
+    // every change. Re-adding the same class name doesn't retrigger a CSS
+    // animation on its own, so drop it and force a reflow first -- otherwise
+    // two autosaves close together only fade once.
+    function flashAutoSaveDot() {
+      const dot = document.querySelector('#autoSaveIndicator .autosave-dot');
+      if (!dot) return;
+      dot.classList.remove('saving');
+      void dot.offsetWidth;
+      dot.classList.add('saving');
+    }
+
+    function toast(msg, isAlert) {
       const el = document.getElementById('toast');
       el.textContent = msg;
+      el.classList.toggle('alert', !!isAlert);
       el.classList.add('show');
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => el.classList.remove('show'), 4800);
+      toastTimer = setTimeout(() => el.classList.remove('show'), isAlert ? 9600 : 4800);
     }
 
     function render() {
@@ -438,6 +492,19 @@
       document.getElementById('redoBtn').disabled = moveRedoStack.length === 0;
     }
 
+    // Browsers deliberately never let a page block navigation outright, so
+    // this can't prevent a refresh -- only make an accidental one (a
+    // muscle-memory F5) trigger the browser's own "leave site?" confirmation
+    // first, since that's the one way autosave silently disarms itself.
+    // The wording is entirely browser-controlled; setting returnValue is
+    // what triggers the native prompt at all, in every engine that supports it.
+    window.addEventListener('beforeunload', (e) => {
+      if (autoExportEnabled && folderHandle) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
     document.addEventListener('keydown', (e) => {
       const tag = (document.activeElement && document.activeElement.tagName) || '';
       const inField = tag === 'INPUT' || tag === 'TEXTAREA';
@@ -515,8 +582,20 @@
         const writable = await fileHandle.createWritable();
         await writable.write(JSON.stringify(data, null, 2));
         await writable.close();
+        // Only reset on a confirmed write -- a failed autosave must leave the
+        // meter exactly where it was, or a silent write error would tell the
+        // user their work is backed up when it isn't. No success toast: the
+        // green dot in the toolbar already says this continuously, and a
+        // toast on every single change would just be noise on top of it.
+        changeCount = 0;
+        localStorage.setItem('cardoo:changes', '0');
+        updateFireMeter();
+        flashAutoSaveDot();
       } catch (err) {
         console.warn('Auto-export failed:', err);
+        // This IS worth a toast -- the meter is hidden while armed, so a
+        // failed write has no other visible signal without this.
+        toast('⚠ Autosave failed -- your changes are not backed up', true);
       }
     }
 
@@ -559,17 +638,43 @@
     }
 
     function toggleAutoExport() {
-      autoExportEnabled = document.getElementById('autoExportToggle').checked;
+      const checked = document.getElementById('autoExportToggle').checked;
+      if (checked && !folderHandle) {
+        // Shouldn't be reachable -- the box stays disabled until a folder
+        // exists -- but guard anyway rather than trust the checkbox alone.
+        document.getElementById('autoExportToggle').checked = false;
+        toast('Choose a folder first');
+        return;
+      }
+      autoExportEnabled = checked;
       localStorage.setItem('cardoo:autoExport', autoExportEnabled);
+      updateFireMeterVisibility();
     }
 
     async function selectFolder() {
       try {
-        folderHandle = await window.showDirectoryPicker();
+        // A refresh always drops the actual permission grant -- file:// pages
+        // can't use IndexedDB, the only API that can store a directory handle
+        // across a session -- so re-arming can't be automatic. The `id` here
+        // is the next best thing: Chromium remembers the last folder used for
+        // it, so the dialog reopens already pointed at the right place
+        // instead of defaulting back to Downloads every time.
+        folderHandle = await window.showDirectoryPicker({ id: 'cardoo-autosave-folder' });
         const name = folderHandle.name || 'Selected folder';
         document.getElementById('folderStatus').textContent = '✓ Folder: ' + name;
         localStorage.setItem('cardoo:folderName', name);
-        document.getElementById('autoExportToggle').disabled = false;
+
+        // Picking a folder is the one action that arms auto-export -- not a
+        // second, independently-settable checkbox -- so the two can't drift
+        // out of sync the way "enabled but no handle" did before this fix.
+        const toggle = document.getElementById('autoExportToggle');
+        toggle.disabled = false;
+        toggle.checked = true;
+        autoExportEnabled = true;
+        localStorage.setItem('cardoo:autoExport', 'true');
+        document.getElementById('resumeAutoSaveBtn').style.display = 'none';
+        updateFireMeterVisibility();
+        toast('Auto-export armed for "' + name + '"');
       } catch (err) {
         if (err.name !== 'AbortError') {
           alert('Could not select folder: ' + err.message);
