@@ -27,6 +27,8 @@
       if (s) document.documentElement.setAttribute('data-pal', s);
       var hl = localStorage.getItem('cardoo:highlightColor');
       if (hl) document.documentElement.style.setProperty('--highlight-bg', hl);
+      var fz = localStorage.getItem('cardoo:fontZoom');
+      if (fz) document.documentElement.style.setProperty('--card-zoom', fz);
     } catch (e) {}
   </script>
   <style>
@@ -44,6 +46,10 @@
          which of the 4 palettes is active, so it lives outside the
          :root[data-pal="..."] blocks and survives switching between them. */
       --highlight-bg: #ffff00;
+      /* Card/detail/preview text size, independent of theme and independent
+         of browser zoom (which scales the whole page, chrome included). Not
+         per-theme for the same reason --highlight-bg isn't. */
+      --card-zoom: 1;
     }
 
     :root[data-pal="white-light"] {
@@ -92,6 +98,9 @@
     .toolbar button:hover { background: var(--bg-lane); border-color: var(--fg-muted); }
     .toolbar button:disabled { opacity: 0.35; cursor: default; }
     .toolbar button:disabled:hover { background: var(--bg-card); border-color: var(--border-strong); }
+    .font-readout { font-size: 12px; color: var(--fg-muted); min-width: 34px; text-align: center; cursor: pointer;
+      border-radius: 4px; padding: 6px 2px; }
+    .font-readout:hover { background: var(--bg-card); color: var(--fg); }
     .container { display: flex; gap: 16px; padding: 20px; width: 100%;
       overflow-x: auto; overflow-y: hidden; flex: 1; min-height: 0; }
     /* Bumper lanes: percentage side margins for board width/reading comfort,
@@ -132,8 +141,8 @@
       border: 1px dashed var(--border-strong); border-radius: 6px; padding: 12px; width: 320px;
       max-height: 300px; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
       font-size: 13px; line-height: 1.5; color: var(--fg); word-wrap: break-word;
-      pointer-events: none; }
-    .card-text { font-size: 14px; line-height: 1.4; word-wrap: break-word; }
+      pointer-events: none; zoom: var(--card-zoom); }
+    .card-text { font-size: 14px; line-height: 1.4; word-wrap: break-word; zoom: var(--card-zoom); }
     .card-delete { float: right; cursor: pointer; color: var(--fg-faint); font-size: 16px; margin-left: 8px; }
     .card-delete:hover { color: #f00; }
     .add-card { background: var(--bg-lane); border: 1px dashed var(--border-strong); padding: 8px; border-radius: 6px; cursor: pointer;
@@ -144,6 +153,10 @@
     .fire-bar { width: 120px; height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
     .fire-fill { height: 100%; background: #0f0; width: 0%; transition: width 0.2s, background-color 0.2s; }
     .fire-label { font-size: 11px; color: #999; min-width: 40px; text-align: right; }
+    .fire-save { background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--fg);
+      width: 26px; height: 26px; padding: 0; border-radius: 4px; cursor: pointer; font-size: 13px;
+      display: flex; align-items: center; justify-content: center; }
+    .fire-save:hover { background: var(--bg-lane); border-color: var(--fg-muted); }
     .autosave-indicator { display: none; align-items: center; gap: 6px; margin-left: auto; }
     .autosave-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; flex-shrink: 0; }
     .autosave-dot.saving { animation: autosave-fade 0.6s ease-in-out; }
@@ -169,36 +182,47 @@
     .detail-modal h3 { margin-bottom: 12px; font-size: 14px; color: var(--fg-muted); text-transform: uppercase; }
     .detail-content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
     .detail-text { background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; padding: 12px; margin-bottom: 12px;
-      flex: 1; overflow-y: auto; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
+      flex: 1; overflow-y: auto; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; zoom: var(--card-zoom); }
     .detail-edit { width: 100%; flex: 1; min-height: 0; padding: 10px; background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 4px; color: var(--fg); font-family: monospace; font-size: 13px; display: none; resize: none; margin-bottom: 12px; }
+      border-radius: 4px; color: var(--fg); font-family: monospace; font-size: 13px; display: none; resize: none; margin-bottom: 12px;
+      zoom: var(--card-zoom); }
     .detail-log { font-size: 11px; color: var(--fg-faint); margin-bottom: 10px; min-height: 14px; }
     .detail-log strong { color: var(--fg-muted); font-weight: 600; }
     .detail-buttons { display: flex; gap: 8px; }
     .detail-buttons button { flex: 1; padding: 8px; background: var(--bg-card); border: 1px solid var(--border-strong);
       border-radius: 4px; color: var(--fg); cursor: pointer; font-size: 13px; }
     .detail-buttons button:hover { background: var(--bg-lane); }
-    .config-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2a2a2a;
-      border: 1px solid #444; border-radius: 8px; padding: 20px; z-index: 1000; min-width: 400px; max-width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
-    .config-modal h3 { margin-bottom: 16px; font-size: 16px; }
-    .config-item { margin-bottom: 12px; }
-    .config-item label { display: block; font-size: 13px; color: #ccc; margin-bottom: 4px; }
-    .config-item input[type="checkbox"] { margin-right: 6px; }
-    .config-modal button { width: 100%; padding: 10px; margin-top: 8px; background: #4a4a4a; border: 1px solid #555; border-radius: 4px; color: #fff; cursor: pointer; font-size: 13px; }
-    .config-modal button:hover { background: #5a5a5a; }
-    .config-modal button.close { background: #666; }
-    .highlight-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-lane);
-      border: 1px solid var(--border); border-radius: 8px; padding: 20px; z-index: 1000; min-width: 260px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
-    .highlight-modal h3 { margin-bottom: 16px; font-size: 16px; }
-    .highlight-swatches { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-    .highlight-swatches .swatch { width: 42px; height: 42px; border-radius: 6px; border: 2px solid transparent;
+    /* Anchored popups under a toolbar icon -- same idea as Northern Lights'
+       pop-wrap/pop: a handful of top-level icons, each opening a small box
+       of related settings, instead of one toolbar button per setting. Not
+       a centered .overlay modal -- these are quick, revisitable controls
+       (theme, bumpers, text size), not one-time dialogs, so dimming the
+       whole board on every open would be the wrong weight for them. */
+    .pop-wrap { position: relative; }
+    .pop { display: none; position: absolute; top: 100%; left: 0; margin-top: 6px; z-index: 50;
+      background: var(--bg-lane); border: 1px solid var(--border-strong); border-radius: 6px; padding: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4); min-width: 230px; }
+    .pop.show { display: block; }
+    .pop-head { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-muted); margin: 12px 0 6px; }
+    .pop-head #autoBackupStatus { font-size: 13px; text-transform: none; margin-left: 2px; }
+    .pop-head:first-child { margin-top: 0; }
+    .pop-row { display: flex; align-items: center; gap: 8px; }
+    .pop hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+    .pop .hint { font-size: 11px; color: var(--fg-faint); margin: 4px 0 8px; }
+    .pop button { background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--fg);
+      padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .pop button:hover { background: var(--bg-main); border-color: var(--fg-muted); }
+    .pop button:disabled { opacity: 0.35; cursor: default; }
+    .pop button.wide { width: 100%; }
+    .pop-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg); cursor: pointer; }
+    .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+    .seg button { padding: 6px 10px; font-size: 12px; }
+    .seg button.active { background: var(--fg); color: var(--bg-main); border-color: var(--fg); }
+    .highlight-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+    .highlight-swatches .swatch { width: 32px; height: 32px; border-radius: 6px; border: 2px solid transparent;
       cursor: pointer; padding: 0; transition: transform 0.15s ease, border-color 0.15s ease; }
     .highlight-swatches .swatch:hover { transform: scale(1.08); }
     .highlight-swatches .swatch.selected { border-color: var(--fg); }
-    .highlight-modal button.close { width: 100%; padding: 10px; background: var(--bg-card);
-      border: 1px solid var(--border-strong); border-radius: 4px; color: var(--fg); cursor: pointer; font-size: 13px; }
-    .highlight-modal button.close:hover { background: var(--border); }
     .help-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-lane);
       border: 1px solid var(--border); border-radius: 8px; padding: 24px; z-index: 1000; width: 85vw; max-width: 672px;
       max-height: 80vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
@@ -226,19 +250,65 @@
     </svg>
     <button id="undoBtn" onclick="undo()" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
     <button id="redoBtn" onclick="redo()" title="Redo (Ctrl+Y)" disabled>↷ Redo</button>
-    <button onclick="exportState()">📥 Export</button>
-    <button onclick="importState()">📤 Import</button>
-    <button onclick="cycleTheme()">🎨 Theme</button>
-    <button onclick="cycleBumpers()">↔️ Bumpers</button>
-    <button onclick="openHighlightPicker()">🖍️ Highlight</button>
-    <button onclick="openConfig()">⚙️ Config</button>
+
+    <div class="pop-wrap">
+      <button id="appearanceBtn" onclick="togglePopup('appearancePopup')" title="Theme, highlight color, text size, bumper lanes">🎨 Appearance</button>
+      <div class="pop" id="appearancePopup">
+        <p class="pop-head">Theme</p>
+        <div class="seg" id="segTheme">
+          <button type="button" data-v="blue-dark">Blue Dark</button>
+          <button type="button" data-v="slate-dark">Slate Dark</button>
+          <button type="button" data-v="white-light">White Light</button>
+          <button type="button" data-v="beige-light">Beige Light</button>
+        </div>
+
+        <p class="pop-head">Highlight Color</p>
+        <div class="highlight-swatches" id="highlightSwatches"></div>
+
+        <p class="pop-head">Text Size</p>
+        <div class="pop-row">
+          <button onclick="nudgeFont(-1)" id="fontSmallerBtn" title="Smaller text (-)">A&#8722;</button>
+          <span class="font-readout" id="fontReadout" onclick="resetFont()" title="Reset to 100% (0)">100%</span>
+          <button onclick="nudgeFont(1)" id="fontBiggerBtn" title="Larger text (+)">A&#43;</button>
+        </div>
+
+        <p class="pop-head">Bumper Lanes</p>
+        <div class="seg" id="segBumpers">
+          <button type="button" data-v="0">None</button>
+          <button type="button" data-v="5">5%</button>
+          <button type="button" data-v="10">10%</button>
+          <button type="button" data-v="15">15%</button>
+          <button type="button" data-v="20">20%</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="pop-wrap">
+      <button id="backupBtn" onclick="togglePopup('backupPopup')" title="Export, import, and recovery backup">💾 Backup</button>
+      <div class="pop" id="backupPopup">
+        <div class="pop-row">
+          <button onclick="exportState()">📥 Export</button>
+          <button onclick="importState()">📤 Import</button>
+        </div>
+        <hr>
+        <p class="pop-head">Auto Backup <span id="autoBackupStatus" title="Auto Backup is off">❌</span></p>
+        <button id="resumeAutoSaveBtn" class="wide" onclick="selectFolder()" style="display: none;"></button>
+        <label class="pop-check">
+          <input type="checkbox" id="autoExportToggle" onchange="toggleAutoExport()" disabled />
+          Auto Backup to local folder (Chrome/Edge only)
+        </label>
+        <p class="hint" id="folderStatus">No folder selected</p>
+        <button class="wide" id="chooseFolderBtn" onclick="selectFolder()">Choose Folder</button>
+      </div>
+    </div>
+
     <button onclick="openHelp()">❓ Help</button>
-    <button id="resumeAutoSaveBtn" onclick="selectFolder()" style="display: none;"></button>
     <div class="fire-meter" id="fireMeter">
       <span class="fire-label" id="changeCount">0</span>
       <div class="fire-bar">
         <div class="fire-fill" id="fireFill"></div>
       </div>
+      <button class="fire-save" onclick="exportState()" title="Export now">📥</button>
     </div>
     <div class="autosave-indicator" id="autoSaveIndicator">
       <span class="autosave-dot"></span>
@@ -262,32 +332,6 @@
       <button onclick="closeDetail()">Close</button>
     </div>
   </div>
-  <div id="highlightOverlay" class="overlay" style="display: none;"></div>
-  <div id="highlightModal" class="highlight-modal" style="display: none;">
-    <h3>Highlight Color</h3>
-    <div class="highlight-swatches" id="highlightSwatches"></div>
-    <button class="close" onclick="closeHighlightPicker()">Done</button>
-  </div>
-  <div id="configOverlay" class="overlay" style="display: none;"></div>
-  <div id="configModal" class="config-modal" style="display: none;">
-    <h3>Recovery Backup</h3>
-    <div class="config-item">
-      <label>
-        <input type="checkbox" id="autoExportToggle" onchange="toggleAutoExport()" disabled />
-        Auto-export to local folder (Chrome/Edge only)
-      </label>
-      <small style="color: #888; display: block; margin-top: 4px;">
-        Choose a folder below to arm it -- the browser can't remember folder
-        access across a refresh, so this re-enables each session
-      </small>
-    </div>
-    <div class="config-item" id="folderStatus" style="font-size: 12px; color: #888;">
-      No folder selected
-    </div>
-    <button onclick="selectFolder()">Choose Folder</button>
-    <button class="close" onclick="closeConfig()">Done</button>
-  </div>
-
   <div id="helpOverlay" class="overlay" style="display: none;"></div>
   <div id="helpModal" class="help-modal" style="display: none;">
     <button class="help-close-x" onclick="closeHelp()" title="Close" aria-label="Close">✕</button>
@@ -303,11 +347,17 @@
     <p>These render in the card's full view (and the hover preview) — the lane always shows plain first-line text, formatting included.</p>
     <p>Highlight: <code>&lt;&lt;like this&gt;&gt;</code> becomes <mark>like this</mark>. Bold: <code>[[like this]]</code> becomes <strong>like this</strong>.</p>
     <p>Two or more consecutive lines starting with <code>*</code> become a bullet list. A single <code>*</code> line on its own stays plain text.</p>
-    <p>Click 🖍️ <strong>Highlight</strong> to change the highlight color — six bright options, remembered across sessions.</p>
 
-    <h4>Save vs. Recovery Backup</h4>
+    <h4>🎨 Appearance</h4>
+    <p>Theme, highlight color, text size, and bumper lanes all live under this one popup.</p>
+    <p><strong>Theme</strong>: four palettes — pick one directly, remembered across sessions. <strong>Highlight color</strong>: six bright options for <code>&lt;&lt;highlighted&gt;&gt;</code> text.</p>
+    <p><strong>Text size</strong>: <code>A−</code>/<code>A+</code> resize card, detail, and preview text in 10% steps, independent of your browser's zoom (which resizes the whole page, toolbar included). Click the percentage between them to jump back to 100%. Keyboard: <code>+</code>/<code>-</code> to resize, <code>0</code> to reset — no Ctrl, so your browser's own zoom keys are untouched.</p>
+    <p><strong>Bumper lanes</strong>: adds side margins (0–20%) to compress the board into a narrower, more centered column on wide screens.</p>
+
+    <h4>💾 Backup</h4>
     <p><strong>Save</strong> is automatic and instant — every change is written to your browser's storage right away. It survives closing the tab or restarting your computer, but <strong>not</strong> clearing your browser's data.</p>
-    <p><strong>Recovery Backup</strong> is a separate, optional safety net: a real copy of your board written to a folder on disk, armed in ⚙️ Config. Once armed, it writes automatically every 20 changes or 20 minutes, whichever comes first — so it survives even a cleared cache. You can also back up manually anytime with 📥 Export, and restore any backup with 📤 Import.</p>
+    <p><strong>Recovery Backup</strong> is a separate, optional safety net: a real copy of your board written to a folder on disk. You can trigger it manually anytime with Export (or the 📥 icon next to the change counter), and restore any backup with Import — both are in this same popup.</p>
+    <p><strong>Auto Backup</strong> does that automatically instead of by hand — every 20 changes or 20 minutes, whichever comes first, once a folder is chosen. ✅/❌ next to the label shows whether it's currently on. A refresh always turns it back off (the browser can't remember folder access across one), so look for a <strong>Resume Auto Backup</strong> button here to re-arm it in one click instead of hunting for the folder again.</p>
 
     <h4>Undo &amp; Redo</h4>
     <p>Card moves can be undone with <code>Ctrl+Z</code> and redone with <code>Ctrl+Y</code>.</p>
@@ -320,6 +370,10 @@
     const THEMES = ['blue-dark', 'slate-dark', 'white-light', 'beige-light'];
     const BUMPER_LEVELS = [0, 5, 10, 15, 20];
     let bumperLevel = 0;
+    const FONT_ZOOM_MIN = 0.7;
+    const FONT_ZOOM_MAX = 2;
+    const FONT_ZOOM_STEP = 0.1;
+    let fontZoom = 1;
     let data = { cards: {}, laneOrder: {} };
     let changeCount = 0;
     let folderHandle = null;
@@ -375,14 +429,14 @@
       const savedFolderName = localStorage.getItem('cardoo:folderName');
       if (savedFolderName && localStorage.getItem('cardoo:autoExport') === 'true') {
         document.getElementById('folderStatus').textContent =
-          'Recovery Backup was on for "' + savedFolderName + '" — choose it again to resume';
-        // Surface this in the toolbar too, not just buried in Config -- the
-        // picker itself remembers the folder (see the `id` on
+          'Auto Backup was on for "' + savedFolderName + '" — choose it again to resume';
+        // Surface this in the popup itself, not just the folder status text --
+        // the picker itself remembers the folder (see the `id` on
         // showDirectoryPicker below), so this is genuinely one click, not a
         // folder hunt.
         const resumeBtn = document.getElementById('resumeAutoSaveBtn');
-        resumeBtn.textContent = '▶ Resume Backup';
-        resumeBtn.title = 'Resume Recovery Backup to "' + savedFolderName + '"';
+        resumeBtn.textContent = '▶ Resume Auto Backup';
+        resumeBtn.title = 'Resume Auto Backup to "' + savedFolderName + '"';
         resumeBtn.style.display = 'inline-block';
       }
       document.getElementById('autoExportToggle').checked = false;
@@ -402,34 +456,90 @@
       const savedBumper = parseInt(localStorage.getItem('cardoo:bumpers'), 10);
       bumperLevel = BUMPER_LEVELS.includes(savedBumper) ? savedBumper : 0;
       applyBumperLevel();
+      renderThemeSeg();
+      renderBumperSeg();
+      renderHighlightSwatches();
+
+      // The <head> pre-render script already applied this to --card-zoom
+      // before first paint (it's a documentElement-level var, unlike
+      // bumpers); this just syncs the JS-side value so the readout and
+      // button disabled-states are correct when the popup opens.
+      const savedZoom = parseFloat(localStorage.getItem('cardoo:fontZoom'));
+      fontZoom = (savedZoom && savedZoom >= FONT_ZOOM_MIN && savedZoom <= FONT_ZOOM_MAX) ? savedZoom : 1;
+      applyFontZoom();
 
       updateFireMeter();
       updateFireMeterVisibility();
     }
 
-    function cycleTheme() {
-      const idx = THEMES.indexOf(currentTheme);
-      currentTheme = THEMES[(idx + 1) % THEMES.length];
+    const THEME_NAMES = { 'blue-dark': 'Blue Dark', 'slate-dark': 'Slate Dark', 'white-light': 'White Light', 'beige-light': 'Beige Light' };
+
+    // Direct-select segmented buttons, not a cycle button -- once a setting
+    // lives inside a popup there's room to show every option at once, so
+    // picking the one you want is one click instead of up to three wrong
+    // ones first. Same reasoning applies to bumpers below.
+    function selectTheme(theme) {
+      currentTheme = theme;
       document.documentElement.setAttribute('data-pal', currentTheme);
       localStorage.setItem('cardoo:theme', currentTheme);
-      const names = { 'blue-dark': 'Blue Dark', 'slate-dark': 'Slate Dark', 'white-light': 'White Light', 'beige-light': 'Beige Light' };
-      toast('Theme: ' + names[currentTheme]);
+      renderThemeSeg();
+      toast('Theme: ' + THEME_NAMES[currentTheme]);
+    }
+
+    function renderThemeSeg() {
+      document.querySelectorAll('#segTheme button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.v === currentTheme);
+      });
     }
 
     // Same reading-comfort idea as Northern Lights' bumper lanes, applied to
-    // the board instead of a document -- but one button cycling through the
-    // levels (matching cycleTheme() above), not NL's segmented button group,
-    // since Cardoo doesn't use segmented controls anywhere else.
+    // the board instead of a document.
     function applyBumperLevel() {
       document.getElementById('board').className = 'container' + (bumperLevel > 0 ? ' bumper-' + bumperLevel : '');
     }
 
-    function cycleBumpers() {
-      const idx = BUMPER_LEVELS.indexOf(bumperLevel);
-      bumperLevel = BUMPER_LEVELS[(idx + 1) % BUMPER_LEVELS.length];
+    function selectBumperLevel(level) {
+      bumperLevel = level;
       applyBumperLevel();
       localStorage.setItem('cardoo:bumpers', bumperLevel);
+      renderBumperSeg();
       toast('Bumper lanes: ' + bumperLevel + '%');
+    }
+
+    function renderBumperSeg() {
+      document.querySelectorAll('#segBumpers button').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.v, 10) === bumperLevel);
+      });
+    }
+
+    // Card/detail/preview text size -- separate from browser zoom (Ctrl +/-),
+    // which scales the whole page including the toolbar. This only scales
+    // content, same principle as bumper lanes: make room for more reading,
+    // don't magnify the chrome around it. zoom (not font-size) is the lever
+    // so each element keeps its own existing size ratio to the others
+    // instead of needing a separate --card-zoom-to-px mapping per element.
+    function applyFontZoom() {
+      document.documentElement.style.setProperty('--card-zoom', fontZoom.toFixed(2));
+      const pct = Math.round(fontZoom * 100);
+      document.getElementById('fontReadout').textContent = pct + '%';
+      document.getElementById('fontSmallerBtn').disabled = fontZoom <= FONT_ZOOM_MIN;
+      document.getElementById('fontBiggerBtn').disabled = fontZoom >= FONT_ZOOM_MAX;
+      return pct;
+    }
+
+    function nudgeFont(direction) {
+      fontZoom = Math.round(Math.min(FONT_ZOOM_MAX, Math.max(FONT_ZOOM_MIN, fontZoom + direction * FONT_ZOOM_STEP)) * 100) / 100;
+      const pct = applyFontZoom();
+      localStorage.setItem('cardoo:fontZoom', fontZoom);
+      toast('Text ' + pct + '%' + (pct === 100 ? ' (default)' : ''));
+    }
+
+    function resetFont() {
+      if (fontZoom === 1) return;
+      fontZoom = 1;
+      applyFontZoom();
+      localStorage.setItem('cardoo:fontZoom', fontZoom);
+      toast('Text 100% (default)');
     }
 
     // Single source of truth for the picker -- swatches are rendered from
@@ -447,26 +557,30 @@
 
     function renderHighlightSwatches() {
       const container = document.getElementById('highlightSwatches');
+      // Rebuilding these from scratch on every color pick used to detach the
+      // just-clicked button from the DOM mid-click -- e.currentTarget was
+      // gone by the time the click finished bubbling to the document-level
+      // outside-click listener, which read that as "clicked outside the
+      // popup" and closed it right after the pick. Building the buttons
+      // once and just toggling .selected on the existing ones afterward
+      // keeps the clicked element attached, so the popup stays open.
+      if (container.children.length === HIGHLIGHT_COLORS.length) {
+        Array.from(container.children).forEach(swatch => {
+          swatch.classList.toggle('selected', swatch.dataset.color === highlightColor);
+        });
+        return;
+      }
       container.innerHTML = '';
       HIGHLIGHT_COLORS.forEach(({ color, name }) => {
         const swatch = document.createElement('button');
+        swatch.type = 'button';
         swatch.className = 'swatch' + (color === highlightColor ? ' selected' : '');
+        swatch.dataset.color = color;
         swatch.style.backgroundColor = color;
         swatch.title = name;
         swatch.onclick = () => setHighlightColor(color);
         container.appendChild(swatch);
       });
-    }
-
-    function openHighlightPicker() {
-      renderHighlightSwatches();
-      document.getElementById('highlightOverlay').style.display = 'block';
-      document.getElementById('highlightModal').style.display = 'block';
-    }
-
-    function closeHighlightPicker() {
-      document.getElementById('highlightOverlay').style.display = 'none';
-      document.getElementById('highlightModal').style.display = 'none';
     }
 
     function setHighlightColor(color) {
@@ -537,6 +651,19 @@
       const armed = autoExportEnabled && folderHandle;
       document.getElementById('fireMeter').style.display = armed ? 'none' : 'flex';
       document.getElementById('autoSaveIndicator').style.display = armed ? 'flex' : 'none';
+
+      // Same "armed" definition as the toolbar indicator above -- one
+      // source of truth for what "on" means, just a second place it's
+      // shown. This tracks the SETTING (is auto backup turned on), not
+      // "did the last write succeed" -- a transient failure (e.g. a
+      // SecurityError waiting on the next click) doesn't flip this back
+      // to red, since autoExportEnabled/folderHandle don't change for
+      // that case either. A real write failure still surfaces immediately
+      // via toast and the toolbar dot; this icon answers "is it armed",
+      // not "is the folder still reachable this second."
+      const statusIcon = document.getElementById('autoBackupStatus');
+      statusIcon.textContent = armed ? '✅' : '❌';
+      statusIcon.title = armed ? 'Auto Backup is on' : 'Auto Backup is off';
     }
 
     // Cues an actual write completing, in real time, without a toast on
@@ -885,6 +1012,57 @@
         e.preventDefault();
         redo();
       }
+      // Bare +/-/0, not Ctrl -- Ctrl+/- stays browser zoom (scales
+      // everything, chrome included). Guarded the same way as undo/redo so
+      // typing "+" or "-" into a card doesn't get hijacked.
+      if (!inField && !e.ctrlKey && !e.metaKey) {
+        if (e.key === '+' || e.key === '=') { e.preventDefault(); nudgeFont(1); }
+        else if (e.key === '-' || e.key === '_') { e.preventDefault(); nudgeFont(-1); }
+        else if (e.key === '0') { e.preventDefault(); resetFont(); }
+      }
+      if (e.key === 'Escape') closeAllPopups();
+    });
+
+    // Appearance/Backup toolbar popups: one icon each, opening a small box
+    // of related settings, matching Northern Lights' pop-wrap/pop pattern.
+    // Only one open at a time; picking a setting inside doesn't close it
+    // (you might want to glance at more than one thing), only clicking
+    // outside or Escape does.
+    function togglePopup(id) {
+      const popup = document.getElementById(id);
+      const wasOpen = popup.classList.contains('show');
+      closeAllPopups();
+      if (!wasOpen) {
+        popup.classList.add('show');
+        // Choose Folder disables itself right after a successful pick (see
+        // selectFolder()) so the click has visible confirmation instead of
+        // silently doing nothing to the button. Reopening the popup is the
+        // natural "I might want to change my mind" moment, so it resets
+        // here rather than staying disabled for the rest of the session.
+        if (id === 'backupPopup') {
+          const chooseFolderBtn = document.getElementById('chooseFolderBtn');
+          chooseFolderBtn.textContent = 'Choose Folder';
+          chooseFolderBtn.disabled = false;
+        }
+      }
+    }
+
+    function closeAllPopups() {
+      document.querySelectorAll('.pop.show').forEach(p => p.classList.remove('show'));
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.pop-wrap')) closeAllPopups();
+    });
+
+    document.getElementById('segTheme').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-v]');
+      if (btn) selectTheme(btn.dataset.v);
+    });
+
+    document.getElementById('segBumpers').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-v]');
+      if (btn) selectBumperLevel(parseInt(btn.dataset.v, 10));
     });
 
     // Adding a card reuses the detail modal rather than a separate small
@@ -935,6 +1113,12 @@
     // Returns null on success, or the caught error, so each caller can give
     // its own appropriate feedback (auto vs. manual want different tones,
     // and only the auto path needs to distinguish SecurityError).
+    // Set right before a successful write returns, so a caller that wants
+    // to name the file in its own message (exportState's toast) doesn't
+    // have to call backupFilename() a second time and risk naming a
+    // different second than the one actually written.
+    let lastBackupFilename = null;
+
     async function writeBackupToFolder() {
       try {
         const filename = backupFilename();
@@ -952,6 +1136,7 @@
         lastAutoSaveTime = Date.now();
         document.getElementById('autoSaveText').textContent = 'Backed up';
         flashAutoSaveDot();
+        lastBackupFilename = filename;
         return null;
       } catch (err) {
         return err;
@@ -966,7 +1151,7 @@
       if (folderHandle) {
         const err = await writeBackupToFolder();
         if (!err) {
-          toast('✓ Exported to Recovery Backup folder');
+          toast('✓ Saved ' + lastBackupFilename + ' to your Recovery Backup folder');
           return;
         }
         // Folder write failed (permission lapsed, folder moved, etc.) --
@@ -975,17 +1160,26 @@
         console.warn('Export to folder failed, falling back to download:', err);
       }
 
+      const filename = backupFilename();
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = backupFilename();
+      a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
       changeCount = 0;
       localStorage.setItem('cardoo:changes', '0');
       updateFireMeter();
+      // No Auto Backup folder armed, so this went through a plain browser
+      // download instead -- say so, since a silent success here reads as
+      // "nothing happened" for anyone expecting the same kind of folder
+      // write the armed path gets. Naming the file here matters more than
+      // it sounds -- every backup gets a unique, second-granularity name
+      // specifically so old ones don't get overwritten, so knowing which
+      // one you just made is how you'd actually find it again.
+      toast('✓ Saved ' + filename + ' to your Downloads folder');
     }
 
     async function autoExportToFolder() {
@@ -1037,16 +1231,6 @@
       input.click();
     }
 
-    function openConfig() {
-      document.getElementById('configOverlay').style.display = 'block';
-      document.getElementById('configModal').style.display = 'block';
-    }
-
-    function closeConfig() {
-      document.getElementById('configOverlay').style.display = 'none';
-      document.getElementById('configModal').style.display = 'none';
-    }
-
     function openHelp() {
       document.getElementById('helpOverlay').style.display = 'block';
       document.getElementById('helpModal').style.display = 'block';
@@ -1091,6 +1275,9 @@
         const name = folderHandle.name || 'Selected folder';
         document.getElementById('folderStatus').textContent = '✓ Folder: ' + name;
         localStorage.setItem('cardoo:folderName', name);
+        const chooseFolderBtn = document.getElementById('chooseFolderBtn');
+        chooseFolderBtn.textContent = '✓ Folder Selected';
+        chooseFolderBtn.disabled = true;
 
         // Picking a folder is the one action that arms auto-export -- not a
         // second, independently-settable checkbox -- so the two can't drift
@@ -1105,7 +1292,7 @@
         lastAutoSaveTime = null;
         document.getElementById('autoSaveText').textContent = 'Backed up';
         updateFireMeterVisibility();
-        toast('Recovery Backup armed for "' + name + '"');
+        toast('Auto Backup armed for "' + name + '"');
       } catch (err) {
         if (err.name !== 'AbortError') {
           alert('Could not select folder: ' + err.message);
@@ -1113,8 +1300,6 @@
       }
     }
 
-    document.getElementById('highlightOverlay').addEventListener('click', closeHighlightPicker);
-    document.getElementById('configOverlay').addEventListener('click', closeConfig);
     document.getElementById('helpOverlay').addEventListener('click', closeHelp);
 
     let detailLane = null;
