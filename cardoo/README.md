@@ -20,7 +20,7 @@ That's it.
 - **Hover preview**: Hover a card for ~¾s to peek at its full text without opening it
 - **Formatting**: `<<highlight>>`, `[[bold]]`, and consecutive `*` lines become a bullet list
 - **6 highlight colors**: Click 🖍️ Highlight to pick from six bright/neon options
-- **Undo/redo**: `Ctrl+Z` / `Ctrl+Y` for card moves
+- **Undo/redo**: `Ctrl+Z` / `Ctrl+Y` for card moves and deletes
 - **Persistence**: All changes save to browser storage automatically
 - **Four themes**: Blue Dark, Slate Dark, White Light, Beige Light (click 🎨 to cycle)
 - **Fire meter**: Visual alarm showing unsaved changes (green → yellow → red)
@@ -93,12 +93,13 @@ Your choice persists across sessions. Themes load instantly without flash.
 
 | Key | Action |
 |-----|--------|
-| `Ctrl+Z` | Undo the last card move |
-| `Ctrl+Y` | Redo a move you just undid |
-| Click × | Delete card |
+| `Ctrl+Z` | Undo the last move or delete |
+| `Ctrl+Y` | Redo what you just undid |
+| Click × | Delete card (undoable) |
 
-Undo/redo covers **drag-and-drop moves only** — not adding, deleting, or editing cards.
-Move a card three times and you can undo all three, then redo all three, in order.
+Undo/redo covers **card moves and deletes** — not adding or editing text. Actions undo in
+true reverse-chronological order regardless of type — move a card, delete a different one,
+and `Ctrl+Z` twice undoes the delete first, then the move, exactly as they happened.
 
 ## Backup & Recovery
 

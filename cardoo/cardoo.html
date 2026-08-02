@@ -206,8 +206,8 @@
       <rect x="11" y="6" width="14" height="18" rx="2.5" fill="#ffd23f" stroke="#2d2454" stroke-width="1"/>
       <rect x="7" y="10" width="14" height="18" rx="2.5" fill="#ff6b5b" stroke="#2d2454" stroke-width="1"/>
     </svg>
-    <button id="undoBtn" onclick="undoMove()" title="Undo move (Ctrl+Z)" disabled>↶ Undo</button>
-    <button id="redoBtn" onclick="redoMove()" title="Redo move (Ctrl+Y)" disabled>↷ Redo</button>
+    <button id="undoBtn" onclick="undo()" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+    <button id="redoBtn" onclick="redo()" title="Redo (Ctrl+Y)" disabled>↷ Redo</button>
     <button onclick="exportState()">📥 Export</button>
     <button onclick="importState()">📤 Import</button>
     <button onclick="cycleTheme()">🎨 Theme</button>
@@ -314,9 +314,11 @@
     let wasRed = false;
     let toastTimer = null;
     let currentTheme = 'blue-dark';
-    let moveUndoStack = [];
-    let moveRedoStack = [];
-    const MAX_MOVE_HISTORY = 50;
+    // Holds both move and delete actions now, not just moves -- {type: 'move', ...}
+    // or {type: 'delete', ...} -- so undo/redo dispatches on action.type below.
+    let undoStack = [];
+    let redoStack = [];
+    const MAX_UNDO_HISTORY = 50;
 
     // Hold-to-reorder: hovering between two cards for GAP_HOLD_MS opens a
     // placeholder gap at that exact position. holdLane/holdIndex track what's
@@ -660,7 +662,7 @@
       const usingGap = gapLane === toLane && gapIndex !== null;
       const toIndex = usingGap ? gapIndex : (data.laneOrder[toLane] || []).length;
 
-      pushMoveHistory({ cardId, fromLane, fromIndex, toLane, toIndex });
+      pushUndoHistory({ type: 'move', cardId, fromLane, fromIndex, toLane, toIndex });
       moveCard(cardId, fromLane, toLane, toIndex);
 
       saveData();
@@ -697,42 +699,90 @@
       return fromIndex;
     }
 
-    function pushMoveHistory(move) {
-      moveUndoStack.push(move);
-      if (moveUndoStack.length > MAX_MOVE_HISTORY) moveUndoStack.shift();
-      moveRedoStack = [];
-      updateMoveButtons();
+    // Mirrors moveCard's remove half, factored out so deleteCard() and
+    // redo()'s delete branch (redoing a delete just deletes it again) share
+    // one implementation instead of two copies of the same splice pair.
+    function removeCardAt(lane, cardId) {
+      const index = (data.laneOrder[lane] || []).indexOf(cardId);
+      if (index === -1) return null;
+      const cardData = data.cards[lane][index];
+      data.cards[lane].splice(index, 1);
+      data.laneOrder[lane].splice(index, 1);
+      return { index, cardData };
     }
 
-    function undoMove() {
-      const move = moveUndoStack.pop();
-      if (!move) return;
-      if (moveCard(move.cardId, move.toLane, move.fromLane, move.fromIndex) !== null) {
-        moveRedoStack.push(move);
+    // Mirrors moveCard's insert half -- used by undo()'s delete branch to put
+    // a deleted card back at its exact original index, not just the end.
+    function insertCardAt(lane, cardId, index, cardData) {
+      if (!data.cards[lane]) data.cards[lane] = [];
+      if (!data.laneOrder[lane]) data.laneOrder[lane] = [];
+      const insertAt = Math.min(index, data.laneOrder[lane].length);
+      data.cards[lane].splice(insertAt, 0, cardData);
+      data.laneOrder[lane].splice(insertAt, 0, cardId);
+    }
+
+    function pushUndoHistory(action) {
+      undoStack.push(action);
+      if (undoStack.length > MAX_UNDO_HISTORY) undoStack.shift();
+      redoStack = [];
+      updateUndoRedoButtons();
+    }
+
+    function undo() {
+      const action = undoStack.pop();
+      if (!action) return;
+
+      if (action.type === 'delete') {
+        insertCardAt(action.lane, action.cardId, action.index, action.cardData);
+        redoStack.push(action);
+        saveData();
+        updateChangeCount();
+        render();
+        toast('↶ Undo delete');
+        updateUndoRedoButtons();
+        return;
+      }
+
+      if (moveCard(action.cardId, action.toLane, action.fromLane, action.fromIndex) !== null) {
+        redoStack.push(action);
         saveData();
         updateChangeCount();
         render();
         toast('↶ Undo move');
       }
-      updateMoveButtons();
+      updateUndoRedoButtons();
     }
 
-    function redoMove() {
-      const move = moveRedoStack.pop();
-      if (!move) return;
-      if (moveCard(move.cardId, move.fromLane, move.toLane, move.toIndex) !== null) {
-        moveUndoStack.push(move);
+    function redo() {
+      const action = redoStack.pop();
+      if (!action) return;
+
+      if (action.type === 'delete') {
+        // Redoing a delete means deleting it again -- same card, same lane.
+        if (removeCardAt(action.lane, action.cardId) !== null) {
+          undoStack.push(action);
+          saveData();
+          updateChangeCount();
+          render();
+          toast('↷ Redo delete');
+        }
+        updateUndoRedoButtons();
+        return;
+      }
+
+      if (moveCard(action.cardId, action.fromLane, action.toLane, action.toIndex) !== null) {
+        undoStack.push(action);
         saveData();
         updateChangeCount();
         render();
         toast('↷ Redo move');
       }
-      updateMoveButtons();
+      updateUndoRedoButtons();
     }
 
-    function updateMoveButtons() {
-      document.getElementById('undoBtn').disabled = moveUndoStack.length === 0;
-      document.getElementById('redoBtn').disabled = moveRedoStack.length === 0;
+    function updateUndoRedoButtons() {
+      document.getElementById('undoBtn').disabled = undoStack.length === 0;
+      document.getElementById('redoBtn').disabled = redoStack.length === 0;
     }
 
     // Browsers deliberately never let a page block navigation outright, so
@@ -767,12 +817,12 @@
       if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
         if (inField) return; // let the browser's native undo handle text editing
         e.preventDefault();
-        undoMove();
+        undo();
       }
       if (e.ctrlKey && e.key.toLowerCase() === 'y') {
         if (inField) return; // Ctrl+Y is also native text-field redo -- same guard as undo
         e.preventDefault();
-        redoMove();
+        redo();
       }
     });
 
@@ -798,8 +848,9 @@
     }
 
     function deleteCard(lane, cardId) {
-      data.cards[lane] = data.cards[lane].filter(c => c.id !== cardId);
-      data.laneOrder[lane] = data.laneOrder[lane].filter(id => id !== cardId);
+      const removed = removeCardAt(lane, cardId);
+      if (!removed) return;
+      pushUndoHistory({ type: 'delete', cardId, lane, index: removed.index, cardData: removed.cardData });
       saveData();
       updateChangeCount();
       render();
