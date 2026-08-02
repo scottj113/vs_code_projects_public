@@ -28,19 +28,22 @@ their fallbacks where cheap, but Chrome/Edge is the assumption.
 
 **State**
 - [State Management](#state-management) — the save/render loop, key hygiene
-- [Durable State: Export / Import](#durable-state-export--import) — survive a cleared cache
+- [Durable State: Export / Import](#durable-state-export--import) — survive a cleared cache; Save vs. Backup naming
 - [The Staleness Meter](#the-staleness-meter) — make unsaved work visible
-- [Undo/Redo: Record Intent, Not Snapshots](#undoredo-record-intent-not-snapshots)
+- [Undo/Redo: Record Intent, Not Snapshots](#undoredo-record-intent-not-snapshots) — generalizing to multiple action types
+- [Per-Item Change Log](#per-item-change-log) — "last modified," stored on the record itself
 
 **Interface**
-- [UI Primitives](#ui-primitives) — toast, clipboard, drag & drop, blob URLs, scroll-spy
+- [UI Primitives](#ui-primitives) — toast, clipboard, drag & drop, blob URLs, scroll-spy, hover preview
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Scale the Content, Not the Chrome](#scale-the-content-not-the-chrome)
 
 **Robustness**
 - [Degrade, Don't Break](#degrade-dont-break) — feature detection and fallbacks
 - [Sanitizing Untrusted HTML](#sanitizing-untrusted-html)
+- [Lightweight Inline Formatting](#lightweight-inline-formatting) — custom markup without a markdown library
 - [Gotcha: Inline `style.display` Toggles](#gotcha-inline-styledisplay-toggles)
+- [Gotcha: Padding on Inline Elements](#gotcha-padding-on-inline-elements-doesnt-reserve-line-box-space)
 
 **Practice**
 - [Testing & Development](#testing--development)
@@ -479,18 +482,49 @@ commit to git, drop in Dropbox, or mail to themselves — and back *in* later.
 This is what makes a single-file app trustworthy. Without it you're asking someone to keep
 real work in a place that a routine "clear browsing data" wipes out.
 
+### Name It Precisely: Save vs. Backup
+
+Once an app has both localStorage persistence *and* file export, it has two genuinely
+different safety nets, and calling them by the same word is a real, recurring trap:
+
+- **Save** — instant, automatic, on every change. Survives closing the tab or restarting
+  the computer. Does **not** survive the user clearing their browser's data — it's the
+  *only* copy, not a backup of anything.
+- **Backup** — a separate, durable copy written somewhere else (a downloaded file, a
+  synced folder). Survives a cleared cache. Only exists when the user (or an automatic
+  trigger) actually writes one.
+
+Calling the second one "autosave" collapses this distinction and actively misleads: seeing
+"Autosaved" reads as *"my work is protected,"* when localStorage was already going to have
+it regardless of whether the backup ever fires. Call the automatic-backup feature
+**Backup** (or *Recovery Backup*, if "Backup" alone reads as the noun for the exported
+file rather than the feature) — never "save," never "autosave" — and reserve "save" for
+the thing that's actually always-on and always local.
+
 ### Export
 
 ```javascript
 function exportState() {
-  const json = JSON.stringify(state, null, 2);   // 2-space indent: git-diffable
+  const json = JSON.stringify(state, null, 2);    // 2-space indent: git-diffable
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "myapp-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.download = backupFilename();
   a.click();
-  URL.revokeObjectURL(url);                       // don't leak the blob
+  URL.revokeObjectURL(url);                        // don't leak the blob
+}
+
+// Second-level granularity, not day-level -- a backup that can fire more than
+// once a day (autosave, a "back up now" button clicked twice) needs more than
+// a date to stay unique. A shared per-day filename means every backup that
+// day overwrites the last one: no restore points, just whatever the most
+// recent write happened to be, good or bad. Colons aren't valid in Windows
+// filenames, so they become dashes; milliseconds are dropped since no one
+// picks a backup to restore by them.
+function backupFilename() {
+  const stamp = new Date().toISOString().replace(/:/g, "-").replace(/\.\d{3}Z$/, "");
+  return "myapp-backup-" + stamp + ".json";
 }
 ```
 
@@ -526,8 +560,11 @@ function importState() {
 
 - **Pretty-print the JSON** (`null, 2`). A minified blob is one unreadable line in a git
   diff; an indented one shows you exactly what changed between backups.
-- **Date-stamp the filename.** Backups accumulate into a history for free, and you never
-  overwrite yesterday's good copy with today's mistake.
+- **Timestamp the filename to the second, not the day.** Backups accumulate into a
+  history for free, and you never overwrite an earlier good copy with a later mistake --
+  but only if two backups can't land on the same filename. Anything that can fire more
+  than once a day (autosave, a button clicked twice) needs that granularity, not just a
+  date.
 - **Validate on import before assigning.** Check the shape (`imported.cards &&
   imported.laneOrder`) so a wrong file fails loudly instead of destroying live state.
 - **Never auto-import.** Restoring is destructive; it should always be a deliberate click.
@@ -538,16 +575,19 @@ With a directory handle from `showDirectoryPicker()`, backups can write themselv
 every change — no clicking at all:
 
 ```javascript
-async function autoExportToFolder() {
-  if (!folderHandle) return;
+// Returns null on success, or the caught error, so callers can each give
+// their own appropriate feedback -- an automatic trigger and a deliberate
+// button click warrant different tones, and only some callers need to tell
+// SecurityError (see File I/O below) apart from a real failure.
+async function writeBackupToFolder() {
   try {
-    const name = "myapp-backup-" + new Date().toISOString().slice(0, 10) + ".json";
-    const fileHandle = await folderHandle.getFileHandle(name, { create: true });
+    const fileHandle = await folderHandle.getFileHandle(backupFilename(), { create: true });
     const writable = await fileHandle.createWritable();
     await writable.write(JSON.stringify(state, null, 2));
     await writable.close();
+    return null;
   } catch (err) {
-    console.warn("Auto-export failed:", err);   // never block the app on a backup
+    return err;                                  // never block the app on a backup
   }
 }
 ```
@@ -555,6 +595,40 @@ async function autoExportToFolder() {
 Point it at a git repo and your state is versioned automatically. Treat it as a bonus,
 not the mechanism — the permission doesn't survive a page refresh (see
 [File I/O](#file-io-chromium-only)), so manual export stays the reliable path.
+
+### Converge Manual and Automatic Onto the Same Destination
+
+Once auto-export to a folder exists, the manual export button is a second, independent
+place backups can land — Downloads, by default — while the folder quietly fills up with
+a separate set. Better: manual export writes to the *same* folder when one is armed, and
+only falls back to a plain download when it isn't:
+
+```javascript
+async function exportState() {
+  // Live permission, not a saved flag: folderHandle is exactly the state
+  // that's already null after a refresh (see File I/O), so checking it here
+  // is automatically "only if the folder selection still has scope" with no
+  // separate tracking needed.
+  if (folderHandle) {
+    const err = await writeBackupToFolder();
+    if (!err) { toast("Exported to backup folder"); return; }
+    console.warn("Export to folder failed, falling back to download:", err);
+    // fall through -- a deliberate "back up now" click should never end in nothing
+  }
+
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = backupFilename();
+  a.click();
+  URL.revokeObjectURL(url);
+}
+```
+
+The write itself is shared with the auto-export path (`writeBackupToFolder()` above) —
+one implementation, two triggers, each deciding its own success/failure messaging around
+the same core operation.
 
 ---
 
@@ -682,11 +756,13 @@ function redo() {
 
 **Why this beats a snapshot stack here:**
 
-- **It scopes naturally.** Cardoo's undo covers drag-and-drop moves only, not
+- **It scopes naturally.** Cardoo's undo started covering drag-and-drop moves only, not
   add/delete/edit — those already have their own affordances (an × button, an edit
   dialog with its own save step), and a move is the one action people fat-finger. A
   snapshot stack can't express "undo *this kind* of change" at all; a recorded action can
-  simply not be pushed for the kinds you've decided don't need it.
+  simply not be pushed for the kinds you've decided don't need it. (Delete joined the
+  stack later — see below — once "undo my accidental click" turned out to matter there
+  too.)
 - **It's cheap.** A move record is three fields. A full-board snapshot is the whole JSON
   document, once per action, forever (until capped).
 - **It degrades safely.** Look the target up by id at undo time — `applyInverse` finds the
@@ -698,6 +774,45 @@ function redo() {
 uniformly, with no per-action-type scoping — a text editor undoing keystrokes, for
 instance. Reach for recorded intent first; fall back to snapshots when the domain
 genuinely doesn't factor into discrete, invertible actions.
+
+### Generalizing to Multiple Action Types
+
+The pattern above covers one action type. Adding a second — Cardoo started with moves
+only, then added delete — means the stack needs to hold a *union* of record shapes, with
+`undo`/`redo` dispatching on a `type` field instead of assuming one fixed structure:
+
+```javascript
+function undo() {
+  const action = undoStack.pop();
+  if (!action) return;
+
+  if (action.type === "delete") {
+    insertAt(action.lane, action.id, action.index, action.data);   // put it back exactly where it was
+    redoStack.push(action);
+  } else if (applyInverse(action)) {                                // type === "move"
+    redoStack.push(action);
+  }
+  saveData();
+  render();
+  updateButtons();
+}
+```
+
+This is worth doing even for a second type that seems unrelated to the first, because
+**one shared stack is what makes undo respect true chronological order across types.**
+Move a card, delete a different one, and `Ctrl+Z` twice should undo the delete first, then
+the move — exactly the order they happened in. Two separate stacks (one for moves, one for
+deletes) can't express that without the user having to know which history they're
+rewinding; there's no principled way to interleave them correctly from the outside.
+
+**Only log the item the action actually targeted, not what shifted as a side effect.**
+Moving a card to position 2 in a list re-indexes everything below it — but only the card
+that moved had something happen *to* it. The others just got renumbered by the array
+splice. Recording an action only against the specific record being mutated, and never
+against neighbors whose index happened to change, keeps this correct automatically: don't
+loop over "everything that moved" and log each one, touch only the one object the action
+was actually performed on. The same principle governs [per-item change logs](#per-item-change-log)
+below, for the same reason.
 
 ### The Undo/Redo Focus Guard
 
@@ -732,6 +847,53 @@ unconditional, just `e.preventDefault()` to stop the browser's page-reload bindi
 (the precedent Northern Lights set for `Ctrl+R` as an in-app action). But `Ctrl+Y` is the
 more standard redo binding, and it needs the guard — don't assume every redo key is as
 safe to bind globally as `Ctrl+R` happens to be.
+
+---
+
+## Per-Item Change Log
+
+**Goal**: "When did this last change, and how?" — without a separate log table or an
+external history mechanism.
+
+Store the metadata *on the record itself*, updated at the single point in the code where
+each change type actually happens — not computed after the fact, not derived from a
+separate event log:
+
+```javascript
+// Set at the one place each change type happens, not derived after the fact:
+card.lastChange = { type: "moved", timestamp: Date.now(), from: 2, to: 3 };
+// or { type: "edited", timestamp: Date.now() }
+// or { type: "created", timestamp: Date.now() }
+```
+
+```javascript
+// Records saved before this feature shipped have no lastChange at all --
+// return '' for that case rather than showing "undefined" or inventing history.
+function formatLastChange(lastChange) {
+  if (!lastChange) return "";
+  const when = new Date(lastChange.timestamp).toLocaleString(undefined,
+    { dateStyle: "medium", timeStyle: "short" });
+  if (lastChange.type === "moved") return `Moved from ${lastChange.from} to ${lastChange.to} on ${when}`;
+  return `${lastChange.type} on ${when}`;
+}
+```
+
+**What makes this reliable:**
+
+- **One field, updated in place, not appended.** This is a *last-change* marker, not a
+  log — no growing array, no pruning, no history to corrupt. If a real audit trail is the
+  actual goal, this isn't it; this is "what do I show in a footer line."
+- **Update at the mutation, not around it.** Set `lastChange` in the same function that
+  performs the change (the move helper, the save handler), not in some later pass that
+  tries to infer what happened from a diff. There's no ambiguity about origin because
+  there's no reconstruction involved.
+- **Only the record actually mutated gets a new entry.** The same rule as [undo's
+  side-effect exclusion](#generalizing-to-multiple-action-types) above: reindexing
+  siblings during a move is not a change *they* experienced, so they keep whatever
+  `lastChange` they already had.
+- **Handle absence, not just presence.** Anything that existed before the feature shipped
+  has no `lastChange` at all — render nothing for that case, not a fabricated "unknown"
+  entry or a crash on `undefined.timestamp`.
 
 ---
 
@@ -870,6 +1032,59 @@ section" means what you're reading rather than anything merely on screen.
 
 **Resolve ties in document order.** Several headings are visible at once; picking the first
 by `ids` order keeps the highlight from jumping around.
+
+### Hover Preview: Timer, Edge-Aware Position, Cleanup
+
+A quick, read-only peek at an item's full content on hover — lighter than a click-to-open
+modal, gone the instant the pointer leaves:
+
+```javascript
+const HOVER_DELAY_MS = 750;
+let hoverTimer = null;
+
+el.addEventListener("mouseenter", () => {
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => showPreview(el, content), HOVER_DELAY_MS);
+});
+el.addEventListener("mouseleave", hidePreview);
+
+function showPreview(el, content) {
+  const preview = document.getElementById("preview");
+  renderInto(preview, content);
+
+  // Prefer one side; flip to the other if that would run off the viewport
+  // edge. A fixed-position element needs this fallback explicitly -- there's
+  // no CSS equivalent of "flip if it doesn't fit" for this kind of anchoring.
+  const rect = el.getBoundingClientRect();
+  const width = 320;
+  let left = rect.right + 10;
+  if (left + width + 8 > window.innerWidth) left = rect.left - width - 10;
+  preview.style.left = Math.max(8, left) + "px";
+  preview.style.top = Math.max(8, rect.top) + "px";
+  preview.style.display = "block";
+}
+
+function hidePreview() {
+  clearTimeout(hoverTimer);
+  document.getElementById("preview").style.display = "none";
+}
+```
+
+```css
+#preview {
+  position: fixed; display: none; pointer-events: none;   /* never fights the mouse for events */
+  z-index: 500; max-height: 300px; overflow-y: auto;
+}
+```
+
+**Clear the timer/preview on more than just `mouseleave`.** Starting a drag on the same
+element, clicking it to open the full view, or deleting it should all cancel a pending or
+visible preview too — otherwise a stale preview lingers mid-drag, or sits behind a modal
+that just opened over it.
+
+**`pointer-events: none` is load-bearing, not decoration.** The preview is meant to be
+looked at, not interacted with; without this it can steal a `mouseleave` from the element
+underneath it and get itself stuck open.
 
 ---
 
@@ -1131,6 +1346,91 @@ Default to escaping, and make raw HTML an explicit opt-in the user has to turn o
 
 ---
 
+## Lightweight Inline Formatting
+
+A small, custom markup syntax — `<<highlight>>`, `[[bold]]`, a bullet-list convention —
+without pulling in a markdown library for two or three inline rules.
+
+### One Regex, Not Sequential `.split()` Passes
+
+Parsing two independent markers by splitting on each in turn (`text.split(/<</).../` then
+splitting *that* on `[[`) breaks the moment they need to coexist on one line — the second
+split re-fragments whatever the first one already produced. One alternating regex,
+tokenizing left to right, handles both from a single pass:
+
+```javascript
+function parseTokens(line) {
+  const tokens = [];
+  const re = /<<(.*?)>>|\[\[(.*?)\]\]/g;
+  let lastIndex = 0, m;
+  while ((m = re.exec(line)) !== null) {
+    if (m.index > lastIndex) tokens.push({ type: "plain", text: line.slice(lastIndex, m.index) });
+    tokens.push(m[1] !== undefined ? { type: "highlight", text: m[1] } : { type: "bold", text: m[2] });
+    lastIndex = re.lastIndex;
+  }
+  if (lastIndex < line.length) tokens.push({ type: "plain", text: line.slice(lastIndex) });
+  return tokens;
+}
+```
+
+### Combined Forms Must Come First in the Alternation
+
+If the two markers can also *nest* to combine their effects — `[[<<text>>]]` meaning bold
+**and** highlighted — the combined patterns have to be tried before the single-marker
+ones in the same alternation:
+
+```javascript
+const re = /\[\[<<(.*?)>>\]\]|<<\[\[(.*?)\]\]>>|<<(.*?)>>|\[\[(.*?)\]\]/g;
+//          ^^^^^^^^^^^^^^^^^^^^ ^^^^^^^^^^^^^^^^^^^^ these two MUST be first
+```
+
+Regex alternation takes the **first alternative that matches at a position, not the
+longest one that could.** With single-marker-first ordering, `<<(.*?)>>` matches
+`[[<<text>>]]` starting from its own `<<`, greedily-lazily consuming up through the first
+`>>` it finds — which swallows the *inner* marker's punctuation as unparsed literal text.
+The result renders as one style (bold, say) showing the literal characters `<<text>>`
+instead of two styles applied to `text`. Putting the nested alternatives first means they
+get first refusal at every position, so a genuinely nested match is claimed before the
+plain single-marker pattern ever gets a chance to mis-swallow it.
+
+### Block-Level Detection Needs a Minimum-Run-Length Qualifier
+
+A bullet list from consecutive marked lines is a block-level decision, made before the
+inline pass — and a **single** matching line shouldn't qualify, or an unrelated line that
+happens to start with the bullet character turns into a one-item list by accident:
+
+```javascript
+function renderLines(container, text) {
+  const lines = text.split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    if (/^\s*\*/.test(lines[i])) {
+      let j = i;
+      while (j < lines.length && /^\s*\*/.test(lines[j])) j++;
+      if (j - i >= 2) {                              // 2+ consecutive lines: real list
+        const ul = document.createElement("ul");
+        for (let k = i; k < j; k++) {
+          const li = document.createElement("li");
+          renderInline(li, lines[k].replace(/^\s*\*\s?/, ""));
+          ul.appendChild(li);
+        }
+        container.appendChild(ul);
+        i = j;
+        continue;
+      }
+      // falls through: a lone marked line isn't a list, render as plain text
+    }
+    renderInline(container, lines[i]);
+    i++;
+  }
+}
+```
+
+Each line's content — bullet or plain — still goes through the same inline tokenizer, so
+`<<highlight>>` and `[[bold]]` work inside list items too, not just in plain paragraphs.
+
+---
+
 ## Gotcha: Inline `style.display` Toggles
 
 Showing and hiding elements with `el.style.display = "block"` is the most natural thing to
@@ -1195,6 +1495,41 @@ check whether it's simply hidden.
 
 **Rule**: any function that reveals a panel must set the display state of *every* element
 it manages, not just the one it's turning on.
+
+---
+
+## Gotcha: Padding on Inline Elements Doesn't Reserve Line-Box Space
+
+A `<mark>` or `<span>` with vertical padding — a highlight "chip" behind some inline text —
+can visually bleed into the line above or below it, even though nothing is technically
+overlapping:
+
+```css
+mark { padding: 2px 4px; }   /* looks fine on one line, crowds the next */
+```
+
+**Why**: padding on an inline element extends its painted background, but it does **not**
+grow the line box that contains it — unlike padding on a block element, which pushes
+everything else away to make room. Tight `line-height` leaves too little natural gap
+above and below each line for that extra painted area to fit without visually touching a
+highlighted neighbor.
+
+**Fix, in order of how surgical it should be:**
+
+1. **Increase `line-height`** on the container — the general fix, costs vertical rhythm
+   across all text, not just highlighted lines.
+2. **Reduce the mark's own vertical padding** — cheaper, but global if the rule is shared
+   by every context that renders marks.
+3. **Scope a smaller padding to the specific tight container**, leaving the shared rule
+   alone for contexts where it already reads fine:
+   ```css
+   mark { padding: 1.6px 4px; }                    /* baseline, works in most contexts */
+   .tight-container mark { padding-top: 1.28px; padding-bottom: 1.28px; }  /* this one specifically crowds */
+   ```
+
+Reach for (3) once two different containers share the same `mark` rule but only one of
+them is actually tight — shrinking the shared rule to fix the tight container makes the
+roomier one worse for no reason.
 
 ---
 
@@ -1273,11 +1608,19 @@ To use this pattern in a new single-file HTML project:
 - [ ] localStorage for persistence, keys namespaced `myapp:`
 - [ ] Every storage call wrapped in `try/catch` (quota, privacy mode)
 - [ ] `state` + `saveState()` + `render()` pattern
-- [ ] **Export / Import to JSON** — never leave the only copy in localStorage
+- [ ] **Save vs. Backup, named precisely** — instant/local vs. durable/external are
+      different guarantees; never call the second one "autosave"
+- [ ] **Export / Import to JSON**, timestamped to the second — never leave the only copy
+      in localStorage, and never let two backups collide on one filename
+- [ ] If auto-export to a folder exists, **manual export writes to the same folder** when
+      one is armed, falling back to a download only when it isn't
 - [ ] **Staleness meter** — apply the litmus test: if this data vanished right now, would
       the user be upset and lose real time? If yes, add one; if losing it is a shrug, skip it
-- [ ] **Undo/redo** for whichever actions are easy to fat-finger — as recorded intent,
-      scoped to those actions, not a full-state snapshot of everything
+- [ ] **Undo/redo** for whichever actions are easy to fat-finger — recorded intent, one
+      stack dispatching on action type if there's more than one kind, not a full-state
+      snapshot of everything
+- [ ] **Per-item "last changed"**, if a change history matters — stored on the record,
+      updated at the point of mutation, not reconstructed after the fact
 - [ ] A "reset everything" that clears the namespace and reloads
 
 **Appearance**
@@ -1300,6 +1643,10 @@ To use this pattern in a new single-file HTML project:
 - [ ] File writes: check permission → check staleness → write → adopt mtime
 - [ ] Allow-list sanitizing if any content is untrusted
 - [ ] Show/hide by class or `hidden`, not inline `style.display`
+- [ ] Custom inline markup: one alternating regex, combined/nested forms ordered before
+      single-marker ones
+- [ ] `<mark>`-style padding crowding adjacent lines? Check `line-height` before shrinking
+      the shared rule for everyone
 - [ ] Cap any filesystem walk (skip list, depth, file count)
 
 **Ship**
@@ -1312,15 +1659,21 @@ To use this pattern in a new single-file HTML project:
 
 Two working apps, both a single bookmarked HTML file:
 
-- **[Cardoo](../cardoo/)** (~250 lines) — kanban board. Source of the state/render loop,
-  export/import, the staleness meter, and the `style.display` gotcha.
+- **[Cardoo](../cardoo/)** (~1,300 lines and growing) — kanban board. Source of the
+  state/render loop, export/import, the Save-vs-Backup naming distinction, the staleness
+  meter, undo/redo (moves, then generalized to deletes too), the per-item change log, the
+  `style.display` gotcha, the inline-padding gotcha, the hover preview, and the inline
+  markup patterns (regex ordering for combinable markers, block-level bullet detection).
 - **[Northern Lights MD Viewer](../northern-lights/)** (~4,700 lines, 60 features) —
   markdown viewer and editor. Source of the `file://` input routes, standalone export,
   print stylesheet, safe file writes, capability degradation, content scaling, and
   sanitizing.
 
-The scale gap is the useful part: the same patterns carry a 250-line toy and a 4,700-line
-application without a build step appearing anywhere in between.
+The scale gap is the useful part: the same patterns carry a compact personal tool and a
+4,700-line application without a build step appearing anywhere in between. Cardoo in
+particular keeps proving the reverse of what you'd expect — most of what's above came from
+a "simple" kanban board turning out to need real state management, real undo semantics,
+and real parsing, the same problems the "complex" app already had.
 
 **The thesis**: your browser stopped being a document viewer a long time ago. It has a
 rendering engine, a fast JS runtime, storage that persists between visits, and — in
