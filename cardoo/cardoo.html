@@ -92,9 +92,25 @@
     .toolbar button:hover { background: var(--bg-lane); border-color: var(--fg-muted); }
     .toolbar button:disabled { opacity: 0.35; cursor: default; }
     .toolbar button:disabled:hover { background: var(--bg-card); border-color: var(--border-strong); }
-    .container { display: flex; gap: 16px; padding: 20px; max-width: 1400px; margin: 0 auto; width: 100%;
+    .container { display: flex; gap: 16px; padding: 20px; width: 100%;
       overflow-x: auto; overflow-y: hidden; flex: 1; min-height: 0; }
-    .lane { background: var(--bg-lane); border-radius: 8px; padding: 12px; min-width: 300px; flex-shrink: 0;
+    /* Bumper lanes: percentage side margins for board width/reading comfort,
+       same mechanism as Northern Lights' reading-column bumpers. 0% (no
+       class) is genuinely full-width -- .container has no max-width and no
+       margin of its own, deliberately, so the board fills 100% of the
+       available page width until a bumper is chosen; #board's id just gives
+       these enough specificity to add margin cleanly without !important.
+       width: auto is required here -- .container also sets width: 100%, and
+       that combined with a percentage margin demands 100% + 2*N% of the
+       available space instead of subtracting the margins from it, which is
+       what pushed the board off-screen to the right instead of compressing
+       evenly. 5% steps, not 10% -- Cardoo's board is a few lanes wide, not a
+       page of prose, so a 10% jump was too coarse a tool for it. */
+    #board.bumper-5  { width: auto; margin: 0 5%; }
+    #board.bumper-10 { width: auto; margin: 0 10%; }
+    #board.bumper-15 { width: auto; margin: 0 15%; }
+    #board.bumper-20 { width: auto; margin: 0 20%; }
+    .lane { background: var(--bg-lane); border-radius: 8px; padding: 12px; min-width: 0; flex: 1 1 0;
       display: flex; flex-direction: column; height: 100%; overflow: hidden; }
     .lane-title { font-weight: 600; margin-bottom: 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--fg-muted); }
     .cards { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow-y: auto; }
@@ -213,6 +229,7 @@
     <button onclick="exportState()">📥 Export</button>
     <button onclick="importState()">📤 Import</button>
     <button onclick="cycleTheme()">🎨 Theme</button>
+    <button onclick="cycleBumpers()">↔️ Bumpers</button>
     <button onclick="openHighlightPicker()">🖍️ Highlight</button>
     <button onclick="openConfig()">⚙️ Config</button>
     <button onclick="openHelp()">❓ Help</button>
@@ -301,6 +318,8 @@
   <script>
     const LANES = ['Pondering', 'To Do', 'In Progress', 'Done'];
     const THEMES = ['blue-dark', 'slate-dark', 'white-light', 'beige-light'];
+    const BUMPER_LEVELS = [0, 5, 10, 15, 20];
+    let bumperLevel = 0;
     let data = { cards: {}, laneOrder: {} };
     let changeCount = 0;
     let folderHandle = null;
@@ -375,6 +394,15 @@
       // before first paint; this just brings the JS-side variable in sync so
       // the picker shows the right swatch selected when it's opened.
       highlightColor = localStorage.getItem('cardoo:highlightColor') || '#ffff00';
+
+      // #board doesn't exist yet when the <head> pre-render script runs, so
+      // (like Northern Lights' own bumper lanes) this is applied here in
+      // init instead of pre-paint -- a brief flash at a saved non-zero level
+      // is the accepted tradeoff, same as several other settings below.
+      const savedBumper = parseInt(localStorage.getItem('cardoo:bumpers'), 10);
+      bumperLevel = BUMPER_LEVELS.includes(savedBumper) ? savedBumper : 0;
+      applyBumperLevel();
+
       updateFireMeter();
       updateFireMeterVisibility();
     }
@@ -386,6 +414,22 @@
       localStorage.setItem('cardoo:theme', currentTheme);
       const names = { 'blue-dark': 'Blue Dark', 'slate-dark': 'Slate Dark', 'white-light': 'White Light', 'beige-light': 'Beige Light' };
       toast('Theme: ' + names[currentTheme]);
+    }
+
+    // Same reading-comfort idea as Northern Lights' bumper lanes, applied to
+    // the board instead of a document -- but one button cycling through the
+    // levels (matching cycleTheme() above), not NL's segmented button group,
+    // since Cardoo doesn't use segmented controls anywhere else.
+    function applyBumperLevel() {
+      document.getElementById('board').className = 'container' + (bumperLevel > 0 ? ' bumper-' + bumperLevel : '');
+    }
+
+    function cycleBumpers() {
+      const idx = BUMPER_LEVELS.indexOf(bumperLevel);
+      bumperLevel = BUMPER_LEVELS[(idx + 1) % BUMPER_LEVELS.length];
+      applyBumperLevel();
+      localStorage.setItem('cardoo:bumpers', bumperLevel);
+      toast('Bumper lanes: ' + bumperLevel + '%');
     }
 
     // Single source of truth for the picker -- swatches are rendered from
@@ -885,14 +929,58 @@
       return 'cardoo-backup-' + stamp + '.json';
     }
 
-    function exportState() {
+    // Writes the current board to folderHandle and resets everything a
+    // successful backup should reset -- shared by the auto-triggered path
+    // (count/timer) and Export, when Export has a folder to write to.
+    // Returns null on success, or the caught error, so each caller can give
+    // its own appropriate feedback (auto vs. manual want different tones,
+    // and only the auto path needs to distinguish SecurityError).
+    async function writeBackupToFolder() {
+      try {
+        const filename = backupFilename();
+        const fileHandle = await folderHandle.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(JSON.stringify(data, null, 2));
+        await writable.close();
+        // Only reset on a confirmed write -- a failed backup must leave the
+        // meter exactly where it was, or a silent write error would tell the
+        // user their work is backed up when it isn't.
+        changeCount = 0;
+        localStorage.setItem('cardoo:changes', '0');
+        updateFireMeter();
+        autoSaveCounter = 0;
+        lastAutoSaveTime = Date.now();
+        document.getElementById('autoSaveText').textContent = 'Backed up';
+        flashAutoSaveDot();
+        return null;
+      } catch (err) {
+        return err;
+      }
+    }
+
+    async function exportState() {
+      // Only take the folder-write path if Recovery Backup currently has a
+      // live handle -- folderHandle never survives a refresh, so this is
+      // naturally "only if the config folder selection still has scope,"
+      // with no separate flag needed to track that.
+      if (folderHandle) {
+        const err = await writeBackupToFolder();
+        if (!err) {
+          toast('✓ Exported to Recovery Backup folder');
+          return;
+        }
+        // Folder write failed (permission lapsed, folder moved, etc.) --
+        // fall through to a plain download rather than leaving a deliberate
+        // "back up now" click with no result at all.
+        console.warn('Export to folder failed, falling back to download:', err);
+      }
+
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const filename = backupFilename();
-      a.download = filename;
+      a.download = backupFilename();
       a.click();
       URL.revokeObjectURL(url);
       changeCount = 0;
@@ -902,28 +990,8 @@
 
     async function autoExportToFolder() {
       if (!folderHandle) return;
-      try {
-        const filename = backupFilename();
-        const fileHandle = await folderHandle.getFileHandle(filename, { create: true });
-        const writable = await fileHandle.createWritable();
-        await writable.write(JSON.stringify(data, null, 2));
-        await writable.close();
-        // Only reset on a confirmed write -- a failed autosave must leave the
-        // meter exactly where it was, or a silent write error would tell the
-        // user their work is backed up when it isn't. No success toast: the
-        // green dot in the toolbar already says this continuously, and a
-        // toast on every single change would just be noise on top of it.
-        changeCount = 0;
-        localStorage.setItem('cardoo:changes', '0');
-        updateFireMeter();
-        // Reset here, not in the caller -- both the count trigger and the
-        // time trigger call this function, and a successful write means
-        // "nothing owed" regardless of which one caused it.
-        autoSaveCounter = 0;
-        lastAutoSaveTime = Date.now();
-        document.getElementById('autoSaveText').textContent = 'Backed up';
-        flashAutoSaveDot();
-      } catch (err) {
+      const err = await writeBackupToFolder();
+      if (err) {
         console.warn('Auto-export failed:', err);
         // This IS worth a toast -- the meter is hidden while armed, so a
         // failed write has no other visible signal without this. But a
