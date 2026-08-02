@@ -37,6 +37,7 @@ their fallbacks where cheap, but Chrome/Edge is the assumption.
 - [UI Primitives](#ui-primitives) — toast, clipboard, drag & drop, blob URLs, scroll-spy, hover preview
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Scale the Content, Not the Chrome](#scale-the-content-not-the-chrome)
+- [Bumper Lanes: Percentage-Based Content Width](#bumper-lanes-percentage-based-content-width) — three gotchas found by looking at the result
 
 **Robustness**
 - [Degrade, Don't Break](#degrade-dont-break) — feature detection and fallbacks
@@ -1301,6 +1302,79 @@ available for the whole interface. Two different jobs, two different keys.
 
 ---
 
+## Bumper Lanes: Percentage-Based Content Width
+
+The companion control to text scaling above — instead of resizing the content, narrow the
+column it lives in. Northern Lights uses it to keep a line of prose from stretching edge to
+edge on a wide monitor; Cardoo uses the identical mechanism to keep a kanban board from
+doing the same. Same pattern, two unrelated kinds of content — proof it's the pattern
+that's reusable, not the specific feature.
+
+```css
+#content.bumper-5  { margin: 0 5%;  }
+#content.bumper-10 { margin: 0 10%; }
+#content.bumper-15 { margin: 0 15%; }
+#content.bumper-20 { margin: 0 20%; }
+```
+```javascript
+const BUMPER_LEVELS = [0, 5, 10, 15, 20];
+let bumperLevel = 0;
+
+function cycleBumpers() {
+  const idx = BUMPER_LEVELS.indexOf(bumperLevel);
+  bumperLevel = BUMPER_LEVELS[(idx + 1) % BUMPER_LEVELS.length];
+  document.getElementById("content").className = bumperLevel > 0 ? "bumper-" + bumperLevel : "";
+  localStorage.setItem("myapp:bumpers", bumperLevel);
+}
+```
+
+One button cycling through levels (matching whatever single-button-cycle convention the
+rest of the app already uses, per [Theming System](#theming-system)) or a segmented button
+group showing all levels at once (Northern Lights' choice, since it already has segmented
+controls elsewhere) — either is fine. Pick whichever matches the app's own existing UI
+language rather than mixing both patterns into one app.
+
+**Step sizes should match the content, not get copied from another app wholesale.**
+Northern Lights uses 10% steps up to 50%, comfortable for narrowing a page of prose. The
+same 10% step felt too coarse on Cardoo's board — a few lanes wide, not a page of text — and
+came down to 5% steps up to 20% once actually tested against real content. Start from the
+other app's numbers, then adjust once you've looked at your own.
+
+### Three Gotchas, All Found by Looking at the Rendered Result
+
+Percentage margins interact with three other common layout choices in ways that don't show
+up by reading the CSS — only by actually clicking through the levels:
+
+**1. `width: 100%` plus a percentage margin demands more than 100% of the available space.**
+Margins on a block element aren't automatically subtracted from an explicit width — they're
+additional space on top of it. `width: 100%; margin: 0 10%` asks for `100% + 20%`, which
+overflows the container and can push the whole thing off-screen instead of centering it.
+Fix: let the bumper rule reset `width: auto`, so the browser computes "available space minus
+the margins" itself, the way it would if width had never been set explicitly.
+
+```css
+#content.bumper-10 { width: auto; margin: 0 10%; }  /* not just margin: 0 10%; */
+```
+
+**2. `flex-shrink: 0` on the content's children fights active compression.** A common,
+reasonable default — keep child items (cards, columns) at a comfortable fixed width, and let
+the row scroll horizontally rather than cram them — is exactly wrong once a bumper is
+actively narrowing the available space on purpose. Without permission to shrink, children
+don't compress with the bumper; they overflow instead, and whichever ones don't fit become
+reachable only by scrolling, which reads as content randomly disappearing as the bumper level
+increases. Fix: `min-width: 0; flex: 1 1 0;` on the children, so they compress and stay
+proportionally sized instead of overflowing.
+
+**3. An unrelated `max-width` + `margin: auto` elsewhere leaves residual, uncontrolled
+margin.** If the content area already had a max-width centering trick for some other reason
+predating the bumper feature, "0% bumper" won't actually mean full width — it'll mean
+"capped and centered," with margin that grows or shrinks with the viewport instead of staying
+at the deliberate zero the feature promises. Once bumpers are the real mechanism for
+intentional narrowing, remove the old cap entirely rather than let two width-governors argue
+with each other.
+
+---
+
 ## Sanitizing Untrusted HTML
 
 If your app renders content the user didn't type — pasted markup, a dropped file, anything
@@ -1627,6 +1701,8 @@ To use this pattern in a new single-file HTML project:
 - [ ] Theming via CSS custom properties + `data-*` attributes
 - [ ] Pre-render theme script before CSS to avoid flash
 - [ ] Scale content via a CSS var, leave `Ctrl` `+`/`-` to browser zoom
+- [ ] Bumper lanes for content width, if the content area can meaningfully narrow — check
+      `width: 100%`, `flex-shrink: 0`, and any stray `max-width` before shipping it
 
 **UI**
 - [ ] Toast for transient feedback (under the toolbar, errors last longer)
@@ -1662,12 +1738,14 @@ Two working apps, both a single bookmarked HTML file:
 - **[Cardoo](../cardoo/)** (~1,300 lines and growing) — kanban board. Source of the
   state/render loop, export/import, the Save-vs-Backup naming distinction, the staleness
   meter, undo/redo (moves, then generalized to deletes too), the per-item change log, the
-  `style.display` gotcha, the inline-padding gotcha, the hover preview, and the inline
-  markup patterns (regex ordering for combinable markers, block-level bullet detection).
+  `style.display` gotcha, the inline-padding gotcha, the hover preview, the inline markup
+  patterns (regex ordering for combinable markers, block-level bullet detection), and the
+  three width/`flex-shrink`/`max-width` gotchas behind bumper lanes.
 - **[Northern Lights MD Viewer](../northern-lights/)** (~4,700 lines, 60 features) —
   markdown viewer and editor. Source of the `file://` input routes, standalone export,
-  print stylesheet, safe file writes, capability degradation, content scaling, and
-  sanitizing.
+  print stylesheet, safe file writes, capability degradation, content scaling, sanitizing,
+  and the original bumper-lanes feature — narrowed for prose there, for a kanban board here,
+  same underlying pattern either way.
 
 The scale gap is the useful part: the same patterns carry a compact personal tool and a
 4,700-line application without a build step appearing anywhere in between. Cardoo in
