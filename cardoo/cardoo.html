@@ -25,6 +25,8 @@
     try {
       var s = localStorage.getItem('cardoo:theme');
       if (s) document.documentElement.setAttribute('data-pal', s);
+      var hl = localStorage.getItem('cardoo:highlightColor');
+      if (hl) document.documentElement.style.setProperty('--highlight-bg', hl);
     } catch (e) {}
   </script>
   <style>
@@ -38,6 +40,10 @@
       --fg-faint: #888;
       --border: #333;
       --border-strong: #555;
+      /* Not per-theme -- a highlight color is a user choice independent of
+         which of the 4 palettes is active, so it lives outside the
+         :root[data-pal="..."] blocks and survives switching between them. */
+      --highlight-bg: #ffff00;
     }
 
     :root[data-pal="white-light"] {
@@ -100,6 +106,17 @@
     .card-gap-placeholder { height: 0; flex-shrink: 0; overflow: hidden; border-radius: 6px;
       border: 2px dashed var(--border-strong); background: var(--bg-lane); transition: height 0.35s ease; }
     .card-gap-placeholder.open { height: 52px; }
+    .hover-preview { position: fixed; z-index: 500; display: none;
+      /* Solid --bg-card plus a flat white wash, not a hardcoded color -- a
+         fixed hex would go wrong in the light themes, where --bg-card is
+         already near-white and "lighter" has nowhere to go. The overlay
+         reads clearly in the dark themes and stays harmless in light ones. */
+      background-color: var(--bg-card);
+      background-image: linear-gradient(rgba(255,255,255,.07), rgba(255,255,255,.07));
+      border: 1px dashed var(--border-strong); border-radius: 6px; padding: 12px; width: 320px;
+      max-height: 300px; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      font-size: 13px; line-height: 1.5; color: var(--fg); word-wrap: break-word;
+      pointer-events: none; }
     .card-text { font-size: 14px; line-height: 1.4; word-wrap: break-word; }
     .card-delete { float: right; cursor: pointer; color: var(--fg-faint); font-size: 16px; margin-left: 8px; }
     .card-delete:hover { color: #f00; }
@@ -121,7 +138,15 @@
       transition: opacity 0.2s, transform 0.2s; max-width: 70vw; }
     #toast.show { opacity: 1; transform: translate(-50%, 0); }
     #toast.alert { border-color: #f80; color: #ff9944; }
-    mark { background: #ffff00; color: #000; padding: 2px 4px; border-radius: 2px; font-weight: normal; }
+    mark { background: var(--highlight-bg); color: #000; padding: 1.6px 4px; border-radius: 2px; font-weight: normal; }
+    /* .hover-preview's line-height (1.5) is tighter than .detail-text's (1.6),
+       so the same mark padding that reads fine in the detail view crowds
+       adjacent highlighted lines here specifically -- scoped down another
+       20% (10% off top and bottom each) rather than shrinking the shared
+       rule and making the detail view's already-correct spacing worse. */
+    .hover-preview mark { padding-top: 1.28px; padding-bottom: 1.28px; }
+    .card-bullet-list { margin: 4px 0 4px 22px; padding: 0; }
+    .card-bullet-list li { margin-bottom: 2px; }
     .detail-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-lane);
       border: 1px solid var(--border); border-radius: 8px; padding: 20px; z-index: 1000; width: 85vw; height: 80vh;
       max-width: 900px; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
@@ -144,6 +169,18 @@
     .config-modal button { width: 100%; padding: 10px; margin-top: 8px; background: #4a4a4a; border: 1px solid #555; border-radius: 4px; color: #fff; cursor: pointer; font-size: 13px; }
     .config-modal button:hover { background: #5a5a5a; }
     .config-modal button.close { background: #666; }
+    .highlight-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-lane);
+      border: 1px solid var(--border); border-radius: 8px; padding: 20px; z-index: 1000; min-width: 260px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+    .highlight-modal h3 { margin-bottom: 16px; font-size: 16px; }
+    .highlight-swatches { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    .highlight-swatches .swatch { width: 42px; height: 42px; border-radius: 6px; border: 2px solid transparent;
+      cursor: pointer; padding: 0; transition: transform 0.15s ease, border-color 0.15s ease; }
+    .highlight-swatches .swatch:hover { transform: scale(1.08); }
+    .highlight-swatches .swatch.selected { border-color: var(--fg); }
+    .highlight-modal button.close { width: 100%; padding: 10px; background: var(--bg-card);
+      border: 1px solid var(--border-strong); border-radius: 4px; color: var(--fg); cursor: pointer; font-size: 13px; }
+    .highlight-modal button.close:hover { background: var(--border); }
     .help-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--bg-lane);
       border: 1px solid var(--border); border-radius: 8px; padding: 24px; z-index: 1000; width: 85vw; max-width: 672px;
       max-height: 80vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
@@ -174,6 +211,7 @@
     <button onclick="exportState()">📥 Export</button>
     <button onclick="importState()">📤 Import</button>
     <button onclick="cycleTheme()">🎨 Theme</button>
+    <button onclick="openHighlightPicker()">🖍️ Highlight</button>
     <button onclick="openConfig()">⚙️ Config</button>
     <button onclick="openHelp()">❓ Help</button>
     <button id="resumeAutoSaveBtn" onclick="selectFolder()" style="display: none;"></button>
@@ -189,6 +227,7 @@
     </div>
   </div>
   <div class="container" id="board"></div>
+  <div id="hoverPreview" class="hover-preview"></div>
   <div id="toast"></div>
   <div id="detailOverlay" class="overlay" style="display: none;"></div>
   <div id="detailModal" class="detail-modal" style="display: none;">
@@ -202,6 +241,12 @@
       <button onclick="saveDetailEdit()">💾 Save</button>
       <button onclick="closeDetail()">Close</button>
     </div>
+  </div>
+  <div id="highlightOverlay" class="overlay" style="display: none;"></div>
+  <div id="highlightModal" class="highlight-modal" style="display: none;">
+    <h3>Highlight Color</h3>
+    <div class="highlight-swatches" id="highlightSwatches"></div>
+    <button class="close" onclick="closeHighlightPicker()">Done</button>
   </div>
   <div id="configOverlay" class="overlay" style="display: none;"></div>
   <div id="configModal" class="config-modal" style="display: none;">
@@ -229,13 +274,16 @@
     <h3>How Cardoo Works</h3>
 
     <h4>Cards &amp; Lanes</h4>
-    <p>Drag a card between lanes to move it. Click any card to open its full text and edit it — the lane only ever shows the first line, so longer notes stay out of the way until you need them.</p>
+    <p>Drag a card between lanes to move it. Click any card to open its full text and edit it — the lane only ever shows the first line, so longer notes stay out of the way until you need them. Hover a card for about ¾ second to peek at its full text without opening it.</p>
 
     <h4>Reordering</h4>
     <p>Drag a card and hold it between two others for about a second — a gap opens up between them. Drop there and the card lands in that exact spot instead of at the bottom of the lane.</p>
 
-    <h4>Highlighting</h4>
-    <p>Wrap any text in double angle brackets to highlight it, both in the lane and in the card's full view: <code>&lt;&lt;like this&gt;&gt;</code> becomes <mark>like this</mark>.</p>
+    <h4>Highlighting &amp; Formatting</h4>
+    <p>These render in the card's full view (and the hover preview) — the lane always shows plain first-line text, formatting included.</p>
+    <p>Highlight: <code>&lt;&lt;like this&gt;&gt;</code> becomes <mark>like this</mark>. Bold: <code>[[like this]]</code> becomes <strong>like this</strong>.</p>
+    <p>Two or more consecutive lines starting with <code>*</code> become a bullet list. A single <code>*</code> line on its own stays plain text.</p>
+    <p>Click 🖍️ <strong>Highlight</strong> to change the highlight color — six bright options, remembered across sessions.</p>
 
     <h4>Save vs. Recovery Backup</h4>
     <p><strong>Save</strong> is automatic and instant — every change is written to your browser's storage right away. It survives closing the tab or restarting your computer, but <strong>not</strong> clearing your browser's data.</p>
@@ -318,6 +366,10 @@
 
       currentTheme = localStorage.getItem('cardoo:theme') || 'blue-dark';
       document.documentElement.setAttribute('data-pal', currentTheme);
+      // The pre-render script in <head> already applied this to --highlight-bg
+      // before first paint; this just brings the JS-side variable in sync so
+      // the picker shows the right swatch selected when it's opened.
+      highlightColor = localStorage.getItem('cardoo:highlightColor') || '#ffff00';
       updateFireMeter();
       updateFireMeterVisibility();
     }
@@ -329,6 +381,50 @@
       localStorage.setItem('cardoo:theme', currentTheme);
       const names = { 'blue-dark': 'Blue Dark', 'slate-dark': 'Slate Dark', 'white-light': 'White Light', 'beige-light': 'Beige Light' };
       toast('Theme: ' + names[currentTheme]);
+    }
+
+    // Single source of truth for the picker -- swatches are rendered from
+    // this array rather than hardcoded in the HTML, so there's one place
+    // that defines the six colors, not two that could drift apart.
+    const HIGHLIGHT_COLORS = [
+      { color: '#ffff00', name: 'Yellow' },
+      { color: '#39ff14', name: 'Neon Green' },
+      { color: '#ff10f0', name: 'Neon Pink' },
+      { color: '#00ffff', name: 'Cyan' },
+      { color: '#ff9100', name: 'Neon Orange' },
+      { color: '#b026ff', name: 'Neon Purple' }
+    ];
+    let highlightColor = '#ffff00';
+
+    function renderHighlightSwatches() {
+      const container = document.getElementById('highlightSwatches');
+      container.innerHTML = '';
+      HIGHLIGHT_COLORS.forEach(({ color, name }) => {
+        const swatch = document.createElement('button');
+        swatch.className = 'swatch' + (color === highlightColor ? ' selected' : '');
+        swatch.style.backgroundColor = color;
+        swatch.title = name;
+        swatch.onclick = () => setHighlightColor(color);
+        container.appendChild(swatch);
+      });
+    }
+
+    function openHighlightPicker() {
+      renderHighlightSwatches();
+      document.getElementById('highlightOverlay').style.display = 'block';
+      document.getElementById('highlightModal').style.display = 'block';
+    }
+
+    function closeHighlightPicker() {
+      document.getElementById('highlightOverlay').style.display = 'none';
+      document.getElementById('highlightModal').style.display = 'none';
+    }
+
+    function setHighlightColor(color) {
+      highlightColor = color;
+      localStorage.setItem('cardoo:highlightColor', color);
+      document.documentElement.style.setProperty('--highlight-bg', color);
+      renderHighlightSwatches(); // refresh which swatch shows the selected ring
     }
 
     function saveData() {
@@ -504,11 +600,17 @@
             card.ondragstart = (e) => {
               e.dataTransfer.effectAllowed = 'move';
               e.currentTarget.classList.add('dragging');
+              hideHoverPreview(); // don't show a stale preview mid-drag
             };
             card.ondragend = (e) => {
               e.currentTarget.classList.remove('dragging');
               clearGapHold(); // covers a drag abandoned without a drop
             };
+            card.onmouseenter = () => {
+              clearTimeout(hoverTimer);
+              hoverTimer = setTimeout(() => showHoverPreview(card, cardText), HOVER_PREVIEW_MS);
+            };
+            card.onmouseleave = hideHoverPreview;
 
             const text = document.createElement('span');
             text.className = 'card-text';
@@ -518,7 +620,7 @@
             const del = document.createElement('span');
             del.className = 'card-delete';
             del.textContent = '×';
-            del.onclick = (e) => { e.stopPropagation(); deleteCard(lane, cardId); };
+            del.onclick = (e) => { e.stopPropagation(); hideHoverPreview(); deleteCard(lane, cardId); };
 
             card.appendChild(del);
             card.appendChild(text);
@@ -874,44 +976,130 @@
       }
     }
 
+    document.getElementById('highlightOverlay').addEventListener('click', closeHighlightPicker);
     document.getElementById('configOverlay').addEventListener('click', closeConfig);
     document.getElementById('helpOverlay').addEventListener('click', closeHelp);
 
     let detailLane = null;
     let detailCardId = null;
 
+    const HOVER_PREVIEW_MS = 750;
+    let hoverTimer = null;
+
+    function showHoverPreview(card, cardText) {
+      const preview = document.getElementById('hoverPreview');
+      renderHighlightedText(preview, cardText);
+
+      // Prefer the right side of the card; flip to the left if that would
+      // run off the viewport edge. Clamped rather than centered, since a
+      // fixed-position preview needs an explicit fallback -- there's no
+      // CSS equivalent of "flip if it doesn't fit" for this positioning.
+      const rect = card.getBoundingClientRect();
+      const previewWidth = 320;
+      let left = rect.right + 10;
+      if (left + previewWidth + 8 > window.innerWidth) {
+        left = rect.left - previewWidth - 10;
+      }
+      preview.style.left = Math.max(8, left) + 'px';
+      preview.style.top = Math.max(8, rect.top) + 'px';
+      preview.style.display = 'block';
+    }
+
+    function hideHoverPreview() {
+      clearTimeout(hoverTimer);
+      hoverTimer = null;
+      document.getElementById('hoverPreview').style.display = 'none';
+    }
+
+    // Tokenizes ONE line into { type, text } segments for <<highlight>> and
+    // [[bold]]. A single alternating regex, not two separate .split() passes,
+    // so the two markers can appear on the same line in either order without
+    // one pass's output needing to be re-split by the other.
+    // The two nested-combo alternatives MUST come before the two single-marker
+    // ones: regex alternation takes the first alternative that matches at a
+    // given position, not the longest, so with a single-marker-first ordering
+    // the outer marker of e.g. [[<<text>>]] would win the match and swallow
+    // "<<text>>" as the literal, unparsed bold text -- bold, but not
+    // highlighted, and showing the inner marker's punctuation on screen.
+    function parseInlineTokens(line) {
+      const tokens = [];
+      const re = /\[\[<<(.*?)>>\]\]|<<\[\[(.*?)\]\]>>|<<(.*?)>>|\[\[(.*?)\]\]/g;
+      let lastIndex = 0, m;
+      while ((m = re.exec(line)) !== null) {
+        if (m.index > lastIndex) tokens.push({ text: line.slice(lastIndex, m.index), highlight: false, bold: false });
+        if (m[1] !== undefined) tokens.push({ text: m[1], highlight: true, bold: true });        // [[<<...>>]]
+        else if (m[2] !== undefined) tokens.push({ text: m[2], highlight: true, bold: true });    // <<[[...]]>>
+        else if (m[3] !== undefined) tokens.push({ text: m[3], highlight: true, bold: false });   // <<...>>
+        else tokens.push({ text: m[4], highlight: false, bold: true });                            // [[...]]
+        lastIndex = re.lastIndex;
+      }
+      if (lastIndex < line.length) tokens.push({ text: line.slice(lastIndex), highlight: false, bold: false });
+      return tokens;
+    }
+
+    function renderInline(container, line) {
+      parseInlineTokens(line).forEach(({ text, highlight, bold }) => {
+        let el = document.createElement('span');
+        el.textContent = text;
+        if (bold) { const strong = document.createElement('strong'); strong.appendChild(el); el = strong; }
+        if (highlight) { const mark = document.createElement('mark'); mark.appendChild(el); el = mark; }
+        container.appendChild(el);
+      });
+    }
+
+    // Shared by the detail modal and the hover preview -- both need the same
+    // <<highlight>>/[[bold]]/bullet-list rendering, and duplicating it would
+    // mean fixing the same bug twice the next time this needs a change.
+    //
+    // Bullet detection is line-level and runs before the inline pass: a run
+    // of 2+ CONSECUTIVE lines starting with "*" becomes a <ul>; a lone "*"
+    // line doesn't qualify and renders as plain text, asterisk included.
+    // Each line's content (bullet or plain) still goes through renderInline,
+    // so <<highlight>> and [[bold]] work inside bullets too.
+    function renderHighlightedText(container, text) {
+      container.innerHTML = '';
+      const lines = text.split('\n');
+      let needsBreakBefore = false;
+      let i = 0;
+
+      while (i < lines.length) {
+        if (/^\s*\*/.test(lines[i])) {
+          let j = i;
+          while (j < lines.length && /^\s*\*/.test(lines[j])) j++;
+          if (j - i >= 2) {
+            const ul = document.createElement('ul');
+            ul.className = 'card-bullet-list';
+            for (let k = i; k < j; k++) {
+              const li = document.createElement('li');
+              renderInline(li, lines[k].replace(/^\s*\*\s?/, ''));
+              ul.appendChild(li);
+            }
+            container.appendChild(ul);
+            i = j;
+            needsBreakBefore = false; // the <ul>'s own margin provides the gap
+            continue;
+          }
+          // Falls through: a lone "*" line isn't a bullet run, render as text.
+        }
+
+        if (needsBreakBefore) container.appendChild(document.createElement('br'));
+        renderInline(container, lines[i]);
+        needsBreakBefore = true;
+        i++;
+      }
+    }
+
     function showDetail(lane, cardId, cardText) {
       detailLane = lane;
       detailCardId = cardId;
+      hideHoverPreview();
       // Reset in case the modal was last used to add a card -- openInput()
       // hides the Edit toggle and retitles the modal, and both need to come
       // back for an existing card, which always has something to preview.
       document.getElementById('detailTitle').textContent = 'Card Details';
       document.getElementById('editDetailBtn').style.display = '';
       const detailText = document.getElementById('detailText');
-      detailText.innerHTML = '';
-
-      const parts = cardText.split(/<<(.*?)>>/);
-      for (let i = 0; i < parts.length; i++) {
-        const text = parts[i];
-        const lines = text.split('\n');
-
-        for (let j = 0; j < lines.length; j++) {
-          if (i % 2 === 0) {
-            const span = document.createElement('span');
-            span.textContent = lines[j];
-            detailText.appendChild(span);
-          } else {
-            const mark = document.createElement('mark');
-            mark.textContent = lines[j];
-            detailText.appendChild(mark);
-          }
-
-          if (j < lines.length - 1) {
-            detailText.appendChild(document.createElement('br'));
-          }
-        }
-      }
+      renderHighlightedText(detailText, cardText);
 
       document.getElementById('detailEdit').value = cardText;
       document.getElementById('detailEdit').style.display = 'none';
