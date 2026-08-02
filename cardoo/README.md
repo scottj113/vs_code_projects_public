@@ -17,7 +17,9 @@ That's it.
 - **Hold-to-reorder**: Hold a dragged card between two others for ~1s to drop it in that exact spot
 - **Add/delete cards**: Click "+ Add card" in any lane, or use the delete button (×)
 - **Card details**: Click any card to view/edit — same large editor for adding and editing
-- **Highlights**: Use `<<text>>` to mark important parts with yellow background
+- **Hover preview**: Hover a card for ~¾s to peek at its full text without opening it
+- **Formatting**: `<<highlight>>`, `[[bold]]`, and consecutive `*` lines become a bullet list
+- **6 highlight colors**: Click 🖍️ Highlight to pick from six bright/neon options
 - **Undo/redo**: `Ctrl+Z` / `Ctrl+Y` for card moves
 - **Persistence**: All changes save to browser storage automatically
 - **Four themes**: Blue Dark, Slate Dark, White Light, Beige Light (click 🎨 to cycle)
@@ -25,15 +27,16 @@ That's it.
 - **Recovery Backup**: Optional automatic backups to a local folder (Chrome/Edge), every 20 changes or 20 minutes
 - **Help**: Click ❓ Help for a quick in-app reference to all of this
 
-## Card Details & Highlights
+## Card Details & Formatting
 
-**In the lanes**, cards show only their **first line** — keeping the board clean and compact.
+**In the lanes**, cards show only their **first line**, as plain text — keeping the board clean and compact. All formatting below renders in the detail view and the hover preview, not in the lane.
 
 **Click any card** to open its detail view and see the full multi-line body. Here you can:
-- See the complete card text (line 1, line 2, line 3, etc.)
-- View highlights (yellow background text)
+- See the complete card text (line 1, line 2, line 3, etc.), formatted
 - Edit by clicking ✏️ **Edit**
 - Save changes with 💾 **Save**
+
+**Hover any card** for about ¾ second to see the same formatted preview without opening the editor — move the mouse off and it disappears.
 
 **Multi-line cards** let you write rich descriptions without cluttering the board:
 
@@ -44,18 +47,36 @@ Fix critical auth bug
   - Test with <<production data>>
 ```
 
-In lanes: shows `Fix critical auth bug`  
-In popup: shows full description with highlights
+In lanes: shows `Fix critical auth bug`
+In the detail view/hover preview: shows the full description, formatted
 
-**To highlight text**, wrap it in double angle brackets:
+**Highlight** text by wrapping it in double angle brackets:
 
 ```
 Remember to call <<Mom>> on Sunday
 ```
 
-Renders as: Remember to call **Mom** on Sunday (with yellow highlight)
+Pick the highlight color from six bright/neon options with the 🖍️ **Highlight** button — your choice persists across sessions.
 
-Highlights persist across sessions and are included in exports.
+**Bold** text by wrapping it in double square brackets:
+
+```
+This is [[really]] important
+```
+
+Combine both by nesting either order — `[[<<text>>]]` or `<<[[text]]>>` — to get bold *and* highlighted together.
+
+**Bullet lists**: two or more *consecutive* lines starting with `*` become a real bullet list:
+
+```
+* First item
+* Second item
+* Third item
+```
+
+A single `*` line on its own doesn't qualify and stays as literal text — you need at least two in a row.
+
+All formatting persists across sessions and is included in exports.
 
 ## Themes
 
