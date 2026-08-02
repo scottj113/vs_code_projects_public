@@ -156,6 +156,8 @@
       flex: 1; overflow-y: auto; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
     .detail-edit { width: 100%; flex: 1; min-height: 0; padding: 10px; background: var(--bg-card); border: 1px solid var(--border);
       border-radius: 4px; color: var(--fg); font-family: monospace; font-size: 13px; display: none; resize: none; margin-bottom: 12px; }
+    .detail-log { font-size: 11px; color: var(--fg-faint); margin-bottom: 10px; min-height: 14px; }
+    .detail-log strong { color: var(--fg-muted); font-weight: 600; }
     .detail-buttons { display: flex; gap: 8px; }
     .detail-buttons button { flex: 1; padding: 8px; background: var(--bg-card); border: 1px solid var(--border-strong);
       border-radius: 4px; color: var(--fg); cursor: pointer; font-size: 13px; }
@@ -236,6 +238,7 @@
       <div id="detailText" class="detail-text"></div>
       <textarea id="detailEdit" class="detail-edit"></textarea>
     </div>
+    <div id="detailLog" class="detail-log"></div>
     <div class="detail-buttons">
       <button id="editDetailBtn" onclick="toggleDetailEdit()">✏️ Edit</button>
       <button onclick="saveDetailEdit()">💾 Save</button>
@@ -570,12 +573,18 @@
           e.preventDefault();
           const index = getCardInsertIndex(cardsDiv, e.clientY);
           const cardCount = cardsDiv.querySelectorAll('.card:not(.dragging)').length;
-          const isBetweenCards = index > 0 && index < cardCount;
+          // index === 0 (above the top card) counts too, not just strictly
+          // interior gaps -- otherwise the only way to reach the very top
+          // spot was dropping 2nd, then dragging the old top card below it.
+          // index === cardCount (the very end) is deliberately excluded:
+          // that position already works instantly via the default
+          // append-to-bottom drop, so it doesn't need a hold at all.
+          const showsGap = cardCount > 0 && index < cardCount;
 
           if (holdLane === lane && holdIndex === index) return; // already timing this exact gap
 
           clearGapHold();
-          if (isBetweenCards) {
+          if (showsGap) {
             holdLane = lane;
             holdIndex = index;
             holdTimer = setTimeout(() => openGap(lane, cardsDiv, index), GAP_HOLD_MS);
@@ -693,6 +702,14 @@
       // entry), splice would otherwise insert at a stale position instead of
       // degrading safely to the nearest valid one.
       const insertAt = Math.min(toIndex ?? data.laneOrder[toLane].length, data.laneOrder[toLane].length);
+
+      // Logged on cardData itself -- the one card that actually moved -- not
+      // on any of the other cards in toLane whose indices shift as a side
+      // effect of this splice. They're never touched, so they're never logged.
+      cardData.lastChange = fromLane === toLane
+        ? { type: 'order', timestamp: Date.now(), from: fromIndex, to: insertAt }
+        : { type: 'lane', timestamp: Date.now() };
+
       data.cards[toLane].splice(insertAt, 0, cardData);
       data.laneOrder[toLane].splice(insertAt, 0, cardId);
 
@@ -841,6 +858,7 @@
       const editArea = document.getElementById('detailEdit');
       editArea.value = '';
       editArea.style.display = 'block';
+      document.getElementById('detailLog').innerHTML = ''; // nothing logged yet -- card doesn't exist until saved
 
       document.getElementById('detailOverlay').style.display = 'block';
       document.getElementById('detailModal').style.display = 'flex';
@@ -1140,6 +1158,20 @@
       }
     }
 
+    // Cards saved before this feature shipped have no lastChange at all --
+    // formatLastChange returns '' for that case, and detailLog just stays
+    // empty rather than showing "undefined" or a fabricated history.
+    function formatLastChange(lastChange) {
+      if (!lastChange) return '';
+      const when = new Date(lastChange.timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+      if (lastChange.type === 'order') {
+        return 'Last change: <strong>Changed priority order</strong> from [' + (lastChange.from + 1) +
+          '] to [' + (lastChange.to + 1) + '] on ' + when;
+      }
+      const labels = { created: 'Created card', updated: 'Updated content', lane: 'Changed lane' };
+      return 'Last change: <strong>' + (labels[lastChange.type] || lastChange.type) + '</strong> on ' + when;
+    }
+
     function showDetail(lane, cardId, cardText) {
       detailLane = lane;
       detailCardId = cardId;
@@ -1151,6 +1183,9 @@
       document.getElementById('editDetailBtn').style.display = '';
       const detailText = document.getElementById('detailText');
       renderHighlightedText(detailText, cardText);
+
+      const cardObj = data.cards[lane]?.find(c => c.id === cardId);
+      document.getElementById('detailLog').innerHTML = formatLastChange(cardObj?.lastChange);
 
       document.getElementById('detailEdit').value = cardText;
       document.getElementById('detailEdit').style.display = 'none';
@@ -1194,7 +1229,7 @@
         const cardId = Date.now().toString();
         if (!data.cards[detailLane]) data.cards[detailLane] = [];
         if (!data.laneOrder[detailLane]) data.laneOrder[detailLane] = [];
-        data.cards[detailLane].push({ id: cardId, text: newText });
+        data.cards[detailLane].push({ id: cardId, text: newText, lastChange: { type: 'created', timestamp: Date.now() } });
         data.laneOrder[detailLane].push(cardId);
         saveData();
         updateChangeCount();
@@ -1207,6 +1242,7 @@
       const card = data.cards[detailLane].find(c => c.id === detailCardId);
       if (card) {
         card.text = newText;
+        card.lastChange = { type: 'updated', timestamp: Date.now() };
         saveData();
         updateChangeCount();
         render();
