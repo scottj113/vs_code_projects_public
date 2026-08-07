@@ -1710,37 +1710,49 @@ function list(lines, start, ctx) {
 
 /* ---------- inline level ---------- */
 
-function inline(src, ctx) {
-  const stash = [];
+/** `stash` is threaded through the recursive call on link text (step 9). That
+ *  call sees placeholders its caller already made, so it has to resolve them
+ *  against the same array — given a fresh one the lookup misses and the link
+ *  text renders as the string "undefined". */
+function inline(src, ctx, stash) {
+  stash = stash || [];
   const keep = (html) => "\u0000" + (stash.push(html) - 1) + "\u0000";
   let s = String(src);
 
   // 1. HTML comments never survive.
   s = s.replace(/<!--[\s\S]*?-->/g, "");
 
-  // 2. Backslash escapes -> literal, immune to everything below.
-  s = s.replace(/\\([\\`*_{}\[\]()#+\-.!>~|=$])/g, (_, c) => keep(esc(c)));
+  // 2. Backslash escapes -> literal, immune to everything below. `<` joined the
+  //    set when <br> became a real break below, so \<br> still shows as text.
+  s = s.replace(/\\([\\`*_{}\[\]()#+\-.!<>~|=$])/g, (_, c) => keep(esc(c)));
 
   // 3. Code spans.
   s = s.replace(/(`+)([\s\S]+?)\1(?!`)/g, (_, __, code) =>
     keep("<code>" + esc(code.replace(/^ ([\s\S]*) $/, "$1")) + "</code>"));
 
-  // 4. Raw inline HTML (opt-in; the DOM sanitizer is the real gate).
+  // 4. <br> is a hard break even with raw HTML off. It is the only break a
+  //    table cell can carry (a row is one line, so trailing spaces can't
+  //    work there), so files written for GitHub depend on it. </br> is not
+  //    real HTML but shows up in the wild meaning the same thing.
+  //    After code spans, so a `<br>` being written *about* stays literal.
+  s = s.replace(/<\s*br\s*\/?\s*>|<\s*\/\s*br\s*>/gi, () => keep("<br>"));
+
+  // 5. Raw inline HTML (opt-in; the DOM sanitizer is the real gate).
   if (ctx.rawHtml) {
     s = s.replace(/<\/?[A-Za-z][\w:.\-]*(?:\s(?:"[^"]*"|'[^']*'|[^>])*)?\/?>/g, (tag) => keep(tag));
   }
 
-  // 5. Autolinks.
+  // 6. Autolinks.
   s = s.replace(/<((?:https?|ftp|mailto):[^\s<>]+)>/gi, (_, u) =>
     keep('<a href="' + esc(safeUrl(u)) + '" rel="noopener noreferrer">' + esc(u) + "</a>"));
   s = s.replace(/<([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)>/g, (_, a) =>
     keep('<a href="mailto:' + esc(a) + '">' + esc(a) + "</a>"));
 
-  // 6. Images (before links: the `!` prefix disambiguates).
+  // 7. Images (before links: the `!` prefix disambiguates).
   s = s.replace(/!\[([^\]]*)\]\(\s*(<[^>]*>|[^\s)]*)(?:\s+["'(]([^"')]*)["')])?\s*\)/g,
     (_, alt, url, title) => keep(image(alt, url, title, ctx)));
 
-  // 7. Footnote references.
+  // 8. Footnote references.
   s = s.replace(/\[\^([^\]\s]+)\]/g, (whole, id) => {
     if (!ctx.footnotes.has(id)) return whole;
     if (!ctx.fnOrder.includes(id)) ctx.fnOrder.push(id);
@@ -1749,7 +1761,7 @@ function inline(src, ctx) {
     return keep('<sup class="fnref" id="fnref-' + sl + '"><a href="#fn-' + sl + '">' + n + "</a></sup>");
   });
 
-  // 8. Links. Link text is re-parsed so emphasis/code inside it still works.
+  // 9. Links. Link text is re-parsed so emphasis/code inside it still works.
   s = s.replace(/\[((?:[^\[\]]|\[[^\[\]]*\])*)\]\(\s*(<[^>]*>|[^\s)]*)(?:\s+["'(]([^"')]*)["')])?\s*\)/g,
     (_, text, url, title) => {
       const href = safeUrl(url.replace(/^<|>$/g, ""));
@@ -1757,13 +1769,13 @@ function inline(src, ctx) {
       return keep('<a href="' + esc(href) + '"' +
         (title ? ' title="' + esc(title) + '"' : "") +
         (ext ? ' target="_blank" rel="noopener noreferrer"' : "") +
-        ">" + inline(text, ctx) + "</a>");
+        ">" + inline(text, ctx, stash) + "</a>");
     });
 
-  // 9. Everything still unclaimed is plain text.
+  // 10. Everything still unclaimed is plain text.
   s = esc(s);
 
-  // 10. Emphasis. `_` requires word boundaries so snake_case survives.
+  // 11. Emphasis. `_` requires word boundaries so snake_case survives.
   s = s
     .replace(/\*\*\*(?=\S)([\s\S]*?\S)\*\*\*/g, "<em><strong>$1</strong></em>")
     .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "<strong>$1</strong>")
@@ -1773,14 +1785,14 @@ function inline(src, ctx) {
     .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "<del>$1</del>")
     .replace(/==(?=\S)([\s\S]*?\S)==/g, "<mark>$1</mark>");
 
-  // 11. Bare URLs.
+  // 12. Bare URLs.
   s = s.replace(/(^|[\s(])(https?:\/\/[^\s<>"')\]]+[^\s<>"')\].,;:!?])/g,
     (_, pre, u) => pre + '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + u + "</a>");
 
-  // 12. Hard breaks: two trailing spaces, or a trailing backslash.
+  // 13. Hard breaks: two trailing spaces, or a trailing backslash.
   s = s.replace(/ {2,}\n/g, "<br>\n").replace(/\\\n/g, "<br>\n");
 
-  // 13. Restore.
+  // 14. Restore.
   return s.replace(/\u0000(\d+)\u0000/g, (_, n) => stash[+n]);
 }
 
