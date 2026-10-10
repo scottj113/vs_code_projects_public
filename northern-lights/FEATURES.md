@@ -120,8 +120,31 @@ Complete feature inventory with status, timeline, and metadata.
 
 ## Next Steps (Backlog)
 
-Potential future enhancements (not committed):
-- Multi-pattern text highlighting (experimental)
+Potential future enhancements (not committed). All must stay single-file and offline — no server, even optional.
+
+### Recommended next
+- **Find in document (Ctrl+F)** — highlight all matches in the rendered text, Enter / Shift+Enter to step, marks on the scrollbar. Sees collapsed table columns, which the browser's find can't. Covers multi-pattern highlighting.
+- **GitHub-style callouts** — render `> [!NOTE]`, `[!TIP]`, `[!WARNING]`, `[!IMPORTANT]` as colored boxes instead of plain blockquotes. Small.
+- **Markdown tables as datasets** — give every ordinary GFM table the v3 sort and CSV/JSON export, not just `<script data-id>` tables.
+- **Reconnect folder** — pick the project folder once per session; every remembered tab from that folder gets its live file link back (reload/Watch). Follow-up to document tabs.
+
+### Reading & navigation
+- Collapsible sections — click a heading to fold it; "collapse all to H2" for skimming.
+- Copy link to heading — hover a heading, click to copy `#section-name`.
+- Reading progress bar — thin bar under the toolbar (word count and reading time already exist).
+- Focus mode — hide toolbar and sidebar, dim all but the current section.
+- Wikilinks and backlinks in a document set — `[[Other Doc]]` jumps to that file; "linked from" list at the bottom.
+
+### Data layer (Phase 3)
+- Group-by and totals row — sum, average, count.
+- Range and type filters — min/max for numbers, date from/to, pick-list for low-cardinality fields.
+- Chart from a table — small inline-SVG bar/line chart, kept as static SVG in exports.
+
+### Quality
+- Optional lint tab — broken internal links, unclosed code fences, skipped heading levels, ragged tables. Only shows when opened.
+- Math rendering (`$...$`, `$$...$$`) — costs ~300 KB vendored KaTeX; opt-in or skip.
+
+### Earlier ideas
 - Docx export (if good conversion path found)
 - Collaborative features (design stage)
 - Plugin system (research phase)
@@ -129,6 +152,6 @@ Potential future enhancements (not committed):
 
 ---
 
-**Last Updated:** 7/31/2026  
+**Last Updated:** 10/10/2026  
 **Maintainer:** Scott  
 **License:** See LICENSE file in distro/
