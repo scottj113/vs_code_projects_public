@@ -53,7 +53,7 @@ The task is defined in `.vscode/tasks.json` in this repo. To use it:
 ### Alternative: Without the Task
 
 If you prefer not to use the PowerShell task:
-- **Open the viewer** (`md_to_html_viewer.html`) in your browser
+- **Open the viewer** (`northern-lights.html`) in your browser
 - **Drag your markdown file** onto the viewer
 - **Edit in VS Code**, then click **Refresh** (Ctrl+R) to see changes
 
@@ -84,16 +84,16 @@ The bootstrap data is embedded *inline*, not in a separate `.js` file, so it wor
 To use this from a different project or folder:
 
 1. Copy `.vscode/tasks.json` and `.vscode/open-in-viewer.ps1` to your project's `.vscode/` folder
-2. Make sure `md_to_html_viewer.html` is accessible from your project root:
-   - Either at `./distro/md_to_html_viewer.html`
-   - Or at `../northern-lights/distro/md_to_html_viewer.html` (if the viewer is a sibling folder)
+2. Make sure `northern-lights.html` is accessible from your project root:
+   - Either at `./distro/northern-lights.html`
+   - Or at `../northern-lights/distro/northern-lights.html` (if the viewer is a sibling folder)
 3. Add the keyboard shortcut to your `keybindings.json` if you haven't already
 4. Now **Ctrl+M then Down** works in this folder too
 
 ## Troubleshooting
 
 **Task doesn't run:**
-- Make sure PowerShell 5.1+ is available (already included with Windows 10+)
+- Make sure PowerShell 5.1+ is available (already included with Windows 10+)  
 - Check VS Code's Terminal panel for error messages
 - Verify the `.vscode/open-in-viewer.ps1` file exists
 

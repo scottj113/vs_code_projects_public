@@ -6,6 +6,15 @@
 <title>Northern Lights MD Viewer</title>
 
 <!--
+  Versions: this file is the current viewer, unversioned. Earlier releases
+  carried the version in the name -- northern-lights-v3.html (until 2026-10-10),
+  northern-lights-v2.html (also kept in version_history/), and before the
+  rename, md_to_html_viewer.html. To get one back, look for those names in git:
+    git log --follow --oneline -- distro/northern-lights.html
+    git show <commit>:northern-lights/distro/northern-lights-v3.html > old.html
+-->
+
+<!--
   Favicon as an inline SVG data URI rather than a separate .ico, so the icon
   cannot get separated from the HTML when the folder is zipped or the file is
   moved. A filled badge is used instead of the outlined Markdown mark because
