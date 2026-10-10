@@ -441,6 +441,37 @@ button.btn:disabled { opacity: .4; cursor: default; }
 button.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 button.btn.icon { padding: 5px 7px; }
 
+/* ---------- document tabs ---------- */
+/* Toggled by a body class rather than [hidden]: display:flex here would
+   override the hidden attribute's display:none. */
+#tabs {
+  position: fixed; inset: 46px 0 auto 0; height: 30px; z-index: 39;
+  display: none; align-items: stretch; gap: 1px; padding: 0 10px;
+  background: var(--bg-raised); border-bottom: 1px solid var(--border);
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+}
+#tabs::-webkit-scrollbar { display: none; }
+body.has-tabs #tabs { display: flex; }
+body.has-tabs #shell { top: 76px; }
+#tabs .tab {
+  flex: none; display: flex; align-items: center; gap: 3px; max-width: 220px;
+  padding: 0 3px 0 10px; color: var(--fg-muted); font-size: 12px;
+  cursor: pointer; user-select: none; border-radius: 6px 6px 0 0;
+}
+#tabs .tab:hover { color: var(--fg); background: var(--accent-soft); }
+#tabs .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#tabs .tab.active { color: var(--accent); font-weight: 600; box-shadow: inset 0 -2px var(--accent); }
+#tabs .tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A saved copy from an earlier session, not the live file. */
+#tabs .tab.restored .tab-name { font-style: italic; }
+#tabs .tab-x {
+  appearance: none; border: 0; background: none; color: var(--fg-faint);
+  font: inherit; font-size: 14px; line-height: 1; width: 18px; height: 18px;
+  padding: 0; border-radius: 4px; cursor: pointer; opacity: 0;
+}
+#tabs .tab:hover .tab-x, #tabs .tab.active .tab-x, #tabs .tab-x:focus-visible { opacity: 1; }
+#tabs .tab-x:hover { color: var(--fg); background: var(--border); }
+
 /* ---------- layout ---------- */
 #shell { position: fixed; inset: 46px 0 0 0; display: flex; }
 
@@ -555,6 +586,7 @@ body.dragging #drop { display: flex; }
   max-width: 70vw;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
+body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as without it */
 #toast.err { border-color: #d9534f; color: #d9534f; }
 
 #vscode-welcome {
@@ -935,7 +967,7 @@ body.dragging #drop { display: flex; }
 @media print {
   :root { color-scheme: light; }
   body { overflow: visible; background: #fff; }
-  #bar, #toc, #drop, #toast, #empty { display: none !important; }
+  #bar, #tabs, #toc, #drop, #toast, #empty { display: none !important; }
   #shell { position: static; display: block; }
   #scroller { overflow: visible; }
   #page { max-width: none; padding: 0; }
@@ -1085,6 +1117,8 @@ body.dragging #drop { display: flex; }
     </div>
   </div>
 </div>
+
+<div id="tabs" role="tablist" aria-label="Open documents"></div>
 
 <div id="shell">
   <nav id="toc">
@@ -1911,6 +1945,7 @@ function sanitize(root) {
 const state = {
   name: "",
   path: "",           // full source path; only the VS Code task can supply it
+  dir: "",            // folder within a document set, to tell apart two README.md
   text: "",
   handle: null,      // FileSystemFileHandle when opened via the File System Access API
   dirAnchor: null,   // last handle this session, kept only to seed the picker's startIn
@@ -1921,6 +1956,12 @@ const state = {
   // is present is what the text is read from.
   library: [],
   libraryIndex: -1,
+  libraryAssets: null, // images dropped alongside a multi-file set, shared by its docs
+  // Open documents, one per tab: { key, name, path, dir, text, handle,
+  // lastModified, assets, scroll, used, restored }. The active one mirrors the
+  // fields above and is refreshed from them on every render.
+  tabs: [],
+  tabIndex: -1,
   watchTimer: null,
   mermaidSources: [],
   headings: [],      // last render's headings, carrying source line numbers
@@ -2004,6 +2045,7 @@ const els = {
   doc: $("#doc"), tocList: $("#toc-list"), name: $("#doc-name"), meta: $("#doc-meta"),
   toast: $("#toast"), fileInput: $("#file-input"), scroller: $("#scroller"),
   docs: $("#docs"), docsList: $("#docs-list"), docsCount: $("#docs-count"),
+  tabs: $("#tabs"),
 };
 
 let toastTimer = null;
@@ -2105,8 +2147,13 @@ function render() {
     for (const id of ["mi-export", "mi-print", "mi-edit"]) $("#" + id).disabled = true;
     updatePathPanel();
     updateSync();
+    renderTabs();
     return;
   }
+
+  // Before the old document leaves the screen, so its scroll position can
+  // still be read off the scroller.
+  const switched = syncTabs();
 
   let { html, ctx } = parse(state.text, { rawHtml: state.rawHtml, assets: state.assets });
   state.mermaidSources = ctx.mermaid;
@@ -2142,6 +2189,10 @@ function render() {
   convertMarkdownTablesToDataTables();
   // initTableInteractivity(); // Disabled - using v3 interactive tables instead
   initDataTableInteractivity();
+
+  // "instant", not a plain scrollTop assignment: #scroller has smooth
+  // scrolling, which would animate the whole way down a long document.
+  if (switched) els.scroller.scrollTo({ top: state.tabs[state.tabIndex].scroll || 0, behavior: "instant" });
 }
 
 function buildToc(headings) {
@@ -2244,9 +2295,17 @@ const MD_RE = /\.(?:md|markdown|mdown|mkd|mdx|txt)$/i;
 const IMG_RE = /\.(?:png|jpe?g|gif|webp|avif|bmp|svg)$/i;
 
 function releaseAssets() {
-  if (!state.assets) return;
-  for (const url of state.assets.values()) URL.revokeObjectURL(url);
+  const old = state.assets;
   state.assets = null;
+  dropAssets(old);
+}
+
+/** Revoke an image map's object URLs -- unless a tab or the document set
+ *  still shows it. Switching tabs must not break the images of the one left. */
+function dropAssets(map) {
+  if (!map || map === state.assets || map === state.libraryAssets ||
+      state.tabs.some((t) => t.assets === map)) return;
+  for (const url of map.values()) URL.revokeObjectURL(url);
 }
 
 /* ---------------------------------------------------------------- library --
@@ -2291,6 +2350,11 @@ function sortLibrary(list) {
 function setLibrary(entries) {
   state.library = sortLibrary(entries || []);
   state.libraryIndex = -1;
+  // Callers set state.assets for the new set first. Kept separately because
+  // a tab from elsewhere may own state.assets when a set document is clicked.
+  const oldAssets = state.libraryAssets;
+  state.libraryAssets = state.library.length ? state.assets : null;
+  dropAssets(oldAssets);
   renderLibrary();
 }
 
@@ -2319,6 +2383,8 @@ async function openLibraryDoc(i) {
     state.name = d.name;
     // Still no full path: a handle names the file, not its location on disk.
     state.path = "";
+    state.dir = d.dir;
+    state.assets = state.libraryAssets;
     state.text = text;
     state.lastModified = file.lastModified || 0;
     state.handle = d.handle || null;
@@ -2432,6 +2498,7 @@ async function loadFiles(fileList, handlePromises) {
     // Dropped and picked files carry no path -- clear any stale one so the
     // panel never shows the previous document's location.
     state.path = "";
+    state.dir = "";
     state.text = text;
     state.lastModified = doc.lastModified || 0;
     state.handle = handle;
@@ -2456,12 +2523,160 @@ function loadText(text, name, path) {
   setLibrary([]);
   state.name = name || "";
   state.path = path || "";
+  state.dir = "";
   state.text = text;
   state.handle = null;
   stopWatching();
   updateSync();
   render();
   persist();
+}
+
+/* ------------------------------------------------------------------- tabs --
+   Every document opened becomes a tab in a thin row under the bar, so moving
+   between files is one click instead of another trip through the picker.
+
+   The row follows render(): whatever is on screen is the active tab. That
+   keeps every way in -- drop, picker, folder, VS Code task, paste -- in step
+   without each having to register itself, and a file opened a second time
+   finds its existing tab by key instead of adding a duplicate.
+
+   Tabs outlive a refresh as saved copies of their text (see persist()). Their
+   file handles do not: IndexedDB is blocked on file://, so there is nowhere to
+   keep one. A restored tab shows its saved copy, in italics, until the file
+   is opened again.
+   -------------------------------------------------------------------------- */
+
+const TAB_MAX = 12;
+
+/** What makes two loads the same document. A real path wins when the VS Code
+ *  task supplied one; otherwise the folder within a set plus the filename. */
+function docKey(d) {
+  if (d.path) return "p:" + d.path.toLowerCase();
+  if (d.name) return "n:" + (d.dir ? d.dir + "/" : "") + d.name;
+  return "paste";
+}
+
+/** Record what is on screen as a tab. Returns true when the active tab changed. */
+function syncTabs() {
+  const key = docKey(state);
+  const cur = state.tabs[state.tabIndex];
+  // Same handle with a new key is Save As writing under a new name: still
+  // this tab, not a new one.
+  if (cur && (cur.key === key || (state.handle && cur.handle === state.handle))) {
+    updateTab(cur);
+    renderTabs();
+    return false;
+  }
+  if (cur) cur.scroll = els.scroller.scrollTop;
+  let i = state.tabs.findIndex((t) => t.key === key);
+  if (i < 0) {
+    i = state.tabIndex >= 0 ? state.tabIndex + 1 : state.tabs.length;
+    state.tabs.splice(i, 0, { scroll: 0, restored: false });
+  }
+  state.tabIndex = i;
+  updateTab(state.tabs[i]);
+  // Oldest out first, never the one being read.
+  while (state.tabs.length > TAB_MAX) {
+    let oldest = -1;
+    state.tabs.forEach((t, n) => {
+      if (n !== state.tabIndex && (oldest < 0 || t.used < state.tabs[oldest].used)) oldest = n;
+    });
+    removeTab(oldest);
+  }
+  renderTabs();
+  return true;
+}
+
+function updateTab(t) {
+  // A live handle, or text that differs from the saved copy, means the file
+  // itself has been read again this session.
+  if (state.handle || state.text !== t.text) t.restored = false;
+  const oldAssets = t.assets;
+  Object.assign(t, {
+    key: docKey(state), name: state.name, path: state.path, dir: state.dir,
+    text: state.text, handle: state.handle, lastModified: state.lastModified,
+    assets: state.assets, used: Date.now(),
+  });
+  if (oldAssets !== t.assets) dropAssets(oldAssets);
+}
+
+function removeTab(n) {
+  const [t] = state.tabs.splice(n, 1);
+  if (n < state.tabIndex) state.tabIndex--;
+  dropAssets(t.assets);
+}
+
+async function activateTab(i) {
+  const t = state.tabs[i];
+  if (!t || i === state.tabIndex) return;
+  if (!discardEdits("Switch documents and lose them?")) return;
+  closeEditor(true);
+  stopWatching();
+  // writeFile() adopts its own write's timestamp after the render that synced
+  // the tab; without this, coming back would "reload" our own save.
+  const cur = state.tabs[state.tabIndex];
+  if (cur) cur.lastModified = state.lastModified;
+  const prevAssets = state.assets;
+  Object.assign(state, {
+    name: t.name, path: t.path, dir: t.dir, text: t.text, handle: t.handle,
+    lastModified: t.lastModified, assets: t.assets,
+  });
+  dropAssets(prevAssets);
+  if (t.handle) state.dirAnchor = t.handle;
+  state.libraryIndex = state.library.findIndex((d) =>
+    d.handle ? d.handle === t.handle : !t.path && d.name === t.name && d.dir === t.dir);
+  render();
+  renderLibrary();
+  persist();
+  // The file may have moved on while another tab was in front. Same check
+  // the watch poll makes, so an unchanged file costs one stat and no render.
+  if (t.handle && await reloadFromHandle(false)) toast("Reloaded " + t.name + " — it changed on disk");
+}
+
+function closeTab(n) {
+  if (!state.tabs[n]) return;
+  if (n !== state.tabIndex) {
+    removeTab(n);
+    renderTabs();
+    persist();
+    return;
+  }
+  if (!discardEdits("Close this document and lose them?")) return;
+  closeEditor(true);
+  removeTab(n);
+  state.tabIndex = -1;
+  if (state.tabs.length) { activateTab(Math.min(n, state.tabs.length - 1)); return; }
+
+  stopWatching();
+  const prevAssets = state.assets;
+  Object.assign(state, { name: "", path: "", dir: "", text: "", handle: null, lastModified: 0, assets: null });
+  dropAssets(prevAssets);
+  state.libraryIndex = -1;
+  render();
+  renderLibrary();
+  persist();
+}
+
+function renderTabs() {
+  const n = state.tabs.length;
+  // One document is not a set -- same rule as the document list.
+  document.body.classList.toggle("has-tabs", n > 1);
+  if (n < 2) { els.tabs.innerHTML = ""; return; }
+  els.tabs.innerHTML = state.tabs.map((t, i) => {
+    const label = t.name || "Pasted markdown";
+    const where = t.path || (t.dir ? t.dir + "/" : "") + label;
+    const tip = where + (t.restored
+      ? "\nSaved copy from an earlier session — open the file again for live reload" : "");
+    const on = i === state.tabIndex;
+    return '<div class="tab' + (on ? " active" : "") + (t.restored ? " restored" : "") +
+      '" data-i="' + i + '" role="tab" tabindex="0" aria-selected="' + on + '" title="' + esc(tip) + '">' +
+      '<span class="tab-name">' + esc(label) + "</span>" +
+      '<button type="button" class="tab-x" data-x="' + i + '" title="Close (middle-click)" aria-label="Close ' +
+      esc(label) + '">&times;</button></div>';
+  }).join("");
+  const a = els.tabs.querySelector(".tab.active");
+  if (a) a.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
 const canPick = typeof window.showOpenFilePicker === "function";
@@ -2514,6 +2729,10 @@ async function openViaPicker(startWatching) {
     if (anchor) opts.startIn = anchor;
     const [handle] = await window.showOpenFilePicker(opts);
     releaseAssets();
+    // Open brings in a different file, so the current one's path and folder
+    // would mislabel it -- and, as a tab key, overwrite the current tab.
+    // Enable-live-reload re-picks THIS file, so it keeps both.
+    if (!startWatching) { state.path = ""; state.dir = ""; }
     state.handle = handle;
     state.dirAnchor = handle;
     await reloadFromHandle(true);
@@ -3266,28 +3485,64 @@ async function saveEditor() {
 
 /* ---------- persistence ---------- */
 
+// Total characters of tab text kept across sessions. localStorage gives a
+// file:// origin roughly 5M characters, shared with every other local tool.
 const PERSIST_LIMIT = 2000000;
+let persistOff = false;   // set by clearCache, so the unload save can't undo it
+
+/** Save the open tabs, text and all, so the next session reopens them. */
 function persist() {
+  if (persistOff) return;
+  const active = state.tabs[state.tabIndex];
+  if (active) active.scroll = els.scroller.scrollTop;
   try {
-    if (state.text && state.text.length <= PERSIST_LIMIT && !state.assets) {
-      localStorage.setItem("mdv:last",
-        JSON.stringify({ name: state.name, path: state.path, text: state.text }));
+    // The tab being read first, then most recently used, so a full budget
+    // drops the oldest tabs rather than the current one. Documents with
+    // dropped images are skipped: their object URLs die with the page.
+    let budget = PERSIST_LIMIT;
+    const keep = new Set();
+    const order = state.tabs.slice().sort((a, b) => (b === active) - (a === active) || b.used - a.used);
+    for (const t of order) {
+      if (t.assets || !t.text || t.text.length > budget) continue;
+      budget -= t.text.length;
+      keep.add(t);
     }
+    const saved = state.tabs.filter((t) => keep.has(t));
+    localStorage.setItem("mdv:tabs", JSON.stringify({
+      active: saved.indexOf(active),
+      tabs: saved.map((t) => ({ name: t.name, path: t.path, dir: t.dir, text: t.text, scroll: t.scroll || 0 })),
+    }));
+    localStorage.removeItem("mdv:last");   // the single-document format this replaced
   } catch (_) { /* quota; not worth surfacing */ }
 }
 
-function restore() {
+/**
+ * Rebuild the tab list from the last session without showing anything yet --
+ * a document arriving from the VS Code task should land beside these tabs,
+ * not behind them. Returns the index to show, or -1 when there is nothing.
+ */
+function restoreTabs() {
   try {
-    const saved = JSON.parse(localStorage.getItem("mdv:last") || "null");
-    if (saved && saved.text) {
-      state.name = saved.name || "";
-      state.path = saved.path || "";
-      state.text = saved.text;
-      render();
-      return true;
+    let saved = JSON.parse(localStorage.getItem("mdv:tabs") || "null");
+    if (!saved) {
+      const last = JSON.parse(localStorage.getItem("mdv:last") || "null");
+      if (last && last.text) saved = { active: 0, tabs: [last] };
     }
-  } catch (_) { }
-  return false;
+    if (!saved || !Array.isArray(saved.tabs)) return -1;
+    const now = Date.now();
+    state.tabs = saved.tabs.filter((t) => t && typeof t.text === "string" && t.text).map((t, n) => {
+      const tab = { name: t.name || "", path: t.path || "", dir: t.dir || "", text: t.text,
+        handle: null, lastModified: 0, assets: null, scroll: Number(t.scroll) || 0,
+        used: n === saved.active ? now : now - 1000 - n, restored: true };
+      tab.key = docKey(tab);
+      return tab;
+    });
+    if (!state.tabs.length) return -1;
+    return saved.active >= 0 && saved.active < state.tabs.length ? saved.active : 0;
+  } catch (_) {
+    state.tabs = [];
+    return -1;
+  }
 }
 
 function clearCache() {
@@ -3303,6 +3558,7 @@ function clearCache() {
     }
   }
   keys.forEach(key => localStorage.removeItem(key));
+  persistOff = true;   // or the pagehide save writes the tabs straight back
 
   toast("Cache and settings cleared");
   // Reload to apply defaults
@@ -3476,6 +3732,10 @@ $("#path-field").addEventListener("change", (e) => {
   const newPath = e.target.value.trim();
   if (newPath !== state.path) {
     state.path = newPath;
+    // Re-key the tab now; otherwise the next render sees an unfamiliar key
+    // and opens this same document again as a new tab.
+    const t = state.tabs[state.tabIndex];
+    if (t) { t.path = newPath; t.key = docKey(state); renderTabs(); }
     persist();
     toast("Path updated");
   }
@@ -3509,6 +3769,38 @@ els.docsList.addEventListener("keydown", (e) => {
   e.preventDefault();
   openLibraryDoc(Number(a.dataset.i));
 });
+
+// --- tabs ---
+els.tabs.addEventListener("click", (e) => {
+  const x = e.target.closest(".tab-x");
+  if (x) { closeTab(Number(x.dataset.x)); return; }
+  const t = e.target.closest(".tab");
+  if (t) activateTab(Number(t.dataset.i));
+});
+els.tabs.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const t = e.target.closest(".tab");
+  if (!t || e.target.closest(".tab-x")) return;
+  e.preventDefault();
+  activateTab(Number(t.dataset.i));
+});
+// Middle-click closes, as in browsers and editors. The mousedown is cancelled
+// too, or Windows starts its autoscroll cursor instead.
+els.tabs.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });
+els.tabs.addEventListener("auxclick", (e) => {
+  const t = e.target.closest(".tab");
+  if (e.button !== 1 || !t) return;
+  e.preventDefault();
+  closeTab(Number(t.dataset.i));
+});
+// An overflowing row has no visible scrollbar; let the wheel move it sideways.
+els.tabs.addEventListener("wheel", (e) => {
+  if (!e.deltaY || e.deltaX || els.tabs.scrollWidth <= els.tabs.clientWidth) return;
+  els.tabs.scrollLeft += e.deltaY;
+  e.preventDefault();
+}, { passive: false });
+// Scroll positions change without any render to catch them.
+window.addEventListener("pagehide", persist);
 
 // --- drag & drop over the whole window ---
 let dragDepth = 0;
@@ -3607,6 +3899,12 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     setAppearance({ mode: isDark() ? "light" : "dark" });
     toast(isDark() ? "Dark mode" : "Light mode");
+  } else if ((e.key === "[" || e.key === "]") && state.tabs.length > 1) {
+    // Unmodified, like the keys above: Ctrl+Tab and Ctrl+W belong to the
+    // browser and never reach the page.
+    e.preventDefault();
+    const n = state.tabs.length;
+    activateTab((state.tabIndex + (e.key === "]" ? 1 : -1) + n) % n);
   }
 });
 
@@ -4655,6 +4953,9 @@ function initDataTableInteractivity() {
 }
 
 (function boot() {
+  // 0. Last session's tabs, rebuilt quietly. Whatever the routes below load
+  //    joins them (or refreshes its own saved tab) rather than replacing them.
+  const resume = restoreTabs();
   // 1. Sidecar written by the VS Code task.
   const bs = window.__MD_BOOTSTRAP__;
   if (bs && typeof bs.text === "string") {
@@ -4685,9 +4986,12 @@ function initDataTableInteractivity() {
       toast("Could not decode the #md64 payload", true);
     }
   }
-  // 3. Last document from a previous session.
-  if (restore()) {
-    toast("Restored " + (state.name || "last document") + " — drop a file to replace it");
+  // 3. Last session's active tab.
+  if (resume >= 0) {
+    activateTab(resume);
+    const n = state.tabs.length;
+    toast(n > 1 ? "Restored " + n + " documents from last session"
+                : "Restored " + (state.name || "last document") + " — drop a file to open another");
     return;
   }
   render();

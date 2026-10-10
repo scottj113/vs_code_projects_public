@@ -79,6 +79,10 @@ Complete feature inventory with status, timeline, and metadata.
 | Table state persistence | tables | ✓ | 100% | 7/31 | 8/1 | v2.0 | v2.0 | 2 | medium | UX | Remember column widths, visibility, filter state |
 | Show all / Reset controls | tables | ✓ | 100% | 8/1 | 8/1 | v2.0 | v2.0 | 2 | medium | UX | Restore all columns or reset to original layout with confirmation |
 | Three-mode logo | brand | ✓ | 100% | 8/1 | 8/1 | v2.0 | v2.0 | 3 | medium | Feature | Auto-animate, color-only, or mono-only with smooth transitions |
+| **v3.0 — NAVIGATION** | | | | | | | | | |
+| File name as browser tab title | nav | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 3 | medium | UX | Browser tab shows the open .md file's name |
+| Document tabs | nav | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | Thin tab row under the toolbar (shown at 2+ docs); one tab per opened file, re-opening reuses its tab; `[` / `]` to switch, × or middle-click to close; per-tab scroll position; up to 12, oldest closes first |
+| Tabs remembered across sessions | state | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | Tab text saved to localStorage (2M-char budget); restored tabs show in italics as saved copies until the file is opened again (file handles can't survive a refresh on file://) |
 
 ## Legend: Feature Type Codes
 

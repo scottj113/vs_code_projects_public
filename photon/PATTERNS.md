@@ -32,6 +32,7 @@ their fallbacks where cheap, but Chrome/Edge is the assumption.
 - [The Staleness Meter](#the-staleness-meter) — make unsaved work visible
 - [Undo/Redo: Record Intent, Not Snapshots](#undoredo-record-intent-not-snapshots) — generalizing to multiple action types
 - [Per-Item Change Log](#per-item-change-log) — "last modified," stored on the record itself
+- [Session Memory Without Handles](#session-memory-without-handles-remember-the-content) — reopen files across sessions when handles can't persist
 
 **Interface**
 - [UI Primitives](#ui-primitives) — toast, clipboard, drag & drop, blob URLs, scroll-spy, hover preview
@@ -895,6 +896,55 @@ function formatLastChange(lastChange) {
 - **Handle absence, not just presence.** Anything that existed before the feature shipped
   has no `lastChange` at all — render nothing for that case, not a fabricated "unknown"
   entry or a crash on `undefined.timestamp`.
+
+---
+
+## Session Memory Without Handles: Remember the Content
+
+**Goal**: An app that opens several files (Northern Lights' document tabs) should reopen
+them after a refresh or the next day.
+
+The obvious design, remembering the *file handles*, is impossible on `file://`: handles
+can only be stored in IndexedDB, which is blocked there (see [The `file://`
+Contract](#the-file-contract)). A directory handle Cardoo-style doesn't help either, since
+it dies on refresh just the same. So remember the **content**, not the link:
+
+```javascript
+function persist() {
+  let budget = PERSIST_LIMIT;                     // shared ~5M chars on file://
+  const order = tabs.slice().sort((a, b) =>
+    (b === active) - (a === active) || b.used - a.used);   // current first, then recent
+  const keep = new Set();
+  for (const t of order) {
+    if (t.text.length > budget) continue;          // oldest fall off when full
+    budget -= t.text.length;
+    keep.add(t);
+  }
+  localStorage.setItem("myapp:tabs", JSON.stringify(
+    tabs.filter((t) => keep.has(t)).map(({ name, path, text, scroll }) => ({ name, path, text, scroll }))));
+}
+```
+
+**Rules that matter:**
+
+- **Mark restored items as copies.** A restored tab is a snapshot, not the live file.
+  Show it differently (italics plus a tooltip) until the file is opened again and a
+  handle reattaches. Otherwise someone reads stale text and doesn't know it.
+- **Key items by identity so a re-open reattaches.** The same file opened again (VS
+  Code path, or folder + filename) should find its saved tab and refresh it, not add a
+  duplicate. That's also how a restored tab gets its live link back for free.
+- **Rebuild quietly, then let the boot routes land beside it.** Restore the list *before*
+  the sidecar or hash route loads, so a document arriving from an editor joins the
+  remembered tabs instead of replacing them.
+- **Save on `pagehide`** as well as on change. Scroll position moves without any event
+  you'd otherwise persist on.
+- **A Clear-cache button must stop that unload save**, or the `pagehide` handler writes
+  everything straight back during the reload that follows.
+
+**Let the list follow `render()`.** Rather than making every load path (drop, picker,
+folder, paste, sidecar) register a tab, record whatever `render()` is showing: same key →
+update that tab, new key → open or focus one. A new way to open a file can't then forget
+to create its tab.
 
 ---
 
