@@ -153,6 +153,12 @@ file), current item first, oldest dropped when full.
 - **Also save on `pagehide`** — scroll position moves without any event you'd persist on.
 - **Let the list follow `render()`**: same key → update, new key → open/focus. A new way to
   open files can't forget to register itself.
+- **Reattach with one folder pick per session.** A directory handle granted read/write
+  reaches every file under it, so one `showDirectoryPicker({ mode: "readwrite" })` relinks all
+  restored items — match by real path, else folder + name, else a name unique in the tree,
+  and never guess between two. Use `dir.resolve(fileHandle)` to place a file you already
+  hold, and resolve relative images against the document's own folder (on `file://` the
+  browser resolves them against the viewer). Northern Lights: **Connect folder**.
 
 ### Writing files: check, write, adopt
 

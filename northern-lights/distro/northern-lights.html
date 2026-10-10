@@ -48,6 +48,10 @@ try {
     document.documentElement.style.setProperty("--doc-weight", "600");
     document.documentElement.style.setProperty("--doc-strong", "800");
   }
+  if (localStorage.getItem("mdv:caps") === "1") {
+    document.documentElement.style.setProperty("--head-case", "uppercase");
+    document.documentElement.style.setProperty("--head-track", ".03em");
+  }
   // Panel widths, so a resized sidebar doesn't open at the default and jump.
   var tw = localStorage.getItem("mdv:tocWidth");
   if (tw) document.documentElement.style.setProperty("--toc-w", tw);
@@ -74,6 +78,11 @@ try {
      into it. */
   --doc-weight: 400;
   --doc-strong: 650;
+
+  /* All-caps headings: display only -- the file keeps its own casing. A touch
+     of tracking, since capitals set tight read cramped. */
+  --head-case: none;
+  --head-track: normal;
 }
 
 /* ---------------------------------------------------------------------------
@@ -649,6 +658,61 @@ body.source-view:not(.blank) #raw-view {
 }
 body.source-view .toc-edit { display: none !important; }
 .src-lines .sl.h .lt { font-weight: 700; color: var(--accent); }
+
+/* ---------- find in document (Ctrl+F) ---------- */
+#find-bar {
+  position: fixed; top: 54px; right: 22px; z-index: 45;
+  display: flex; align-items: flex-start; gap: 3px; padding: 5px 6px;
+  background: var(--bg-raised); border: 1px solid var(--border-strong);
+  border-radius: 8px; box-shadow: var(--shadow);
+}
+#find-bar[hidden] { display: none; }
+body.has-tabs #find-bar { top: 84px; }
+/* With the Markdown pane open, stay over the document -- on top of the pane
+   the bar would hide the very line about to be replaced. */
+body.split:not(.blank) #find-bar { right: calc(var(--split-w, 38%) + 26px); }
+#find-input {
+  width: 230px; font: inherit; font-size: 13px; padding: 5px 8px; color: var(--fg);
+  background: var(--bg); border: 1px solid var(--border-strong); border-radius: 6px;
+}
+#find-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+#find-input.none { border-color: #d9534f; background: color-mix(in srgb, #d9534f 9%, var(--bg)); }
+#find-count { min-width: 66px; text-align: center; font-size: 12px; color: var(--fg-faint); white-space: nowrap; }
+#find-bar button {
+  appearance: none; border: 1px solid transparent; background: none; color: var(--fg-muted);
+  font: inherit; font-size: 13px; min-width: 27px; height: 27px; border-radius: 5px; cursor: pointer;
+}
+#find-bar button:hover { background: var(--accent-soft); color: var(--fg); }
+#find-bar button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+#find-case { font-weight: 650; letter-spacing: -.02em; }
+#find-regex { font-family: ui-monospace, Consolas, monospace; font-weight: 700; }
+#find-bar .find-rows { display: flex; flex-direction: column; gap: 4px; }
+#find-bar .find-row { display: flex; align-items: center; gap: 3px; }
+#replace-row { display: none !important; }
+#find-bar.replacing #replace-row { display: flex !important; }
+#replace-input {
+  width: 230px; font: inherit; font-size: 13px; padding: 5px 8px; color: var(--fg);
+  background: var(--bg); border: 1px solid var(--border-strong); border-radius: 6px;
+}
+#replace-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+#find-bar button.txt { padding: 0 9px; font-size: 12px; border-color: var(--border-strong); }
+#find-bar button:disabled { opacity: .4; cursor: default; background: none; }
+#find-toggle { align-self: flex-start; transition: transform .12s; font-size: 16px; }
+#find-toggle[aria-expanded="true"] { transform: rotate(90deg); }
+body.source-view #find-toggle { visibility: hidden; }
+/* Replace: the block holding the occurrence about to change. */
+#doc .find-block { box-shadow: 0 0 0 3px color-mix(in srgb, #ff9a3c 60%, transparent); border-radius: 4px; }
+/* Id-qualified so it beats .md mark (==highlight== styling); browser-find
+   colours, which read on every palette. */
+#doc mark.find-hit, #raw-view mark.find-hit, #src-body mark.find-hit {
+  background: #ffe36e; color: #1a1a1a; padding: 0; margin: 0; border-radius: 2px;
+}
+#doc mark.find-hit.find-cur, #raw-view mark.find-hit.find-cur, #src-body mark.find-hit.find-cur { background: #ff9a3c; outline: 2px solid #e8590c; }
+/* Where the matches are, alongside the scrollbar. */
+#find-ticks { position: fixed; width: 10px; z-index: 30; pointer-events: none; }
+#find-ticks[hidden] { display: none; }
+#find-ticks i { position: absolute; left: 1px; right: 1px; height: 3px; border-radius: 1px; background: #e0b400; }
+#find-ticks i.cur { background: #e8590c; height: 4px; }
 #src-body .src-empty { padding: 14px 16px; color: var(--fg-faint); font: 12.5px/1.5 system-ui, sans-serif; white-space: normal; }
 #empty .card {
   max-width: 620px; margin: 0 auto; background: var(--bg-raised);
@@ -843,6 +907,7 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
 
 .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
   margin: 1.9em 0 .6em; line-height: 1.28; font-weight: 650; scroll-margin-top: 62px;
+  text-transform: var(--head-case); letter-spacing: var(--head-track);
 }
 .md h1 { font-size: 1.95em; font-weight: 700; letter-spacing: -.02em; }
 .md h2 { font-size: 1.48em; padding-bottom: .28em; border-bottom: 1px solid var(--border); }
@@ -1082,7 +1147,9 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
 @media print {
   :root { color-scheme: light; }
   body { overflow: visible; background: #fff; }
-  #bar, #tabs, #toc, #toc-handle, #drop, #toast, #empty, #sec-frame, #source-pane, #split-handle, #src-toggle { display: none !important; }
+  #bar, #tabs, #toc, #toc-handle, #drop, #toast, #empty, #sec-frame, #source-pane, #split-handle, #src-toggle,
+  #find-bar, #find-ticks { display: none !important; }
+  #doc mark.find-hit, #raw-view mark.find-hit { background: none !important; outline: none !important; color: inherit !important; }
   #shell { position: static; display: block; }
   #scroller { overflow: visible; }
   #page { max-width: none; padding: 0; }
@@ -1168,6 +1235,9 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
   <button type="button" class="btn" id="btn-edit" aria-pressed="false" hidden
           title="Edit in place: click any block to edit its Markdown (Ctrl+E)">&#9998; Edit</button>
 
+  <button type="button" class="btn" id="btn-folder" aria-pressed="false" hidden
+          title="Connect your project folder: relinks open documents for saving and live reload, and loads relative images">&#128193; <span id="folder-label">Connect folder</span></button>
+
   <!-- File-sync pill. Refresh is a repeated action so it stays one click;
        Watch is a set-once preference that doubles as the state indicator. -->
   <div class="pill" id="sync" hidden>
@@ -1210,6 +1280,7 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
         <button type="button" class="btn" id="btn-font-reset" title="Reset to 100% (0)">Reset</button>
       </div>
       <label class="pop-check"><input type="checkbox" id="chk-bold"> Bold all text <kbd>B</kbd></label>
+      <label class="pop-check"><input type="checkbox" id="chk-caps"> ALL-CAPS HEADINGS <kbd>H</kbd></label>
     </div>
   </div>
 
@@ -1238,6 +1309,29 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
 </div>
 
 <div id="tabs" role="tablist" aria-label="Open documents"></div>
+
+<div id="find-bar" role="search" hidden>
+  <button type="button" id="find-toggle" aria-expanded="false" title="Replace (Ctrl+H)" aria-label="Toggle replace">&#8250;</button>
+  <div class="find-rows">
+    <div class="find-row">
+      <input type="text" id="find-input" placeholder="Find" spellcheck="false" autocomplete="off" aria-label="Find">
+      <span id="find-count" aria-live="polite"></span>
+      <button type="button" id="find-case" aria-pressed="false" title="Match case">Aa</button>
+      <button type="button" id="find-word" aria-pressed="false" title="Match whole word"><u>ab</u></button>
+      <button type="button" id="find-regex" aria-pressed="false" title="Use regular expression ($1 in the replacement)">.*</button>
+      <button type="button" id="find-prev" title="Previous (Shift+Enter, Shift+F3)" aria-label="Previous match">&#8593;</button>
+      <button type="button" id="find-next" title="Next (Enter, F3)" aria-label="Next match">&#8595;</button>
+      <button type="button" id="find-close" title="Close (Esc)" aria-label="Close find">&times;</button>
+    </div>
+    <div class="find-row" id="replace-row">
+      <input type="text" id="replace-input" placeholder="Replace" spellcheck="false" autocomplete="off" aria-label="Replace with">
+      <button type="button" class="txt" id="replace-one" title="Replace this one and go to the next (Enter)">Replace</button>
+      <button type="button" class="txt" id="replace-all" title="Replace all (Ctrl+Alt+Enter)">All</button>
+      <button type="button" class="txt" id="find-undo" title="Undo the last replace" hidden>Undo</button>
+    </div>
+  </div>
+</div>
+<div id="find-ticks" hidden></div>
 
 <div id="shell">
   <nav id="toc">
@@ -2174,6 +2268,7 @@ const state = {
   showToc: localStorage.getItem("mdv:toc") !== "0",
   fontSize: Number(localStorage.getItem("mdv:fontSize")) || 15.5,
   bold: localStorage.getItem("mdv:bold") === "1",
+  caps: localStorage.getItem("mdv:caps") === "1",   // ALL-CAPS headings
   // Appearance is two independent axes. Family and depth are remembered per
   // mode, so flipping Light <-> Dark returns you to the exact look you last
   // chose for that mode rather than resetting.
@@ -2224,6 +2319,8 @@ function applyDocStyle() {
   root.setProperty("--doc-zoom", (size / BASE_FONT).toFixed(4));
   root.setProperty("--doc-weight", state.bold ? "600" : "400");
   root.setProperty("--doc-strong", state.bold ? "800" : "650");
+  root.setProperty("--head-case", state.caps ? "uppercase" : "none");
+  root.setProperty("--head-track", state.caps ? ".03em" : "normal");
 
   const pct = Math.round((size / BASE_FONT) * 100);
   $("#btn-smaller").disabled = size <= MIN_FONT;
@@ -2231,6 +2328,7 @@ function applyDocStyle() {
   $("#font-readout").textContent = pct + "%";
   $("#btn-font-reset").disabled = size === BASE_FONT;
   $("#chk-bold").checked = state.bold;
+  $("#chk-caps").checked = state.caps;
   return pct;
 }
 
@@ -2344,7 +2442,9 @@ function render() {
     els.name.textContent = "No document";
     els.name.classList.remove("dirty");
     $("#btn-edit").hidden = true;
+    updateFolderButton();
     if (state.editMode) setEditMode(false);
+    if (find.open) closeFind();
     state.editScope = null;
     document.body.classList.remove("sec-editing");
     paintSectionFrame();
@@ -2428,6 +2528,9 @@ function render() {
   updateSourcePane();
   placeSrcToggle();
   paintRawView();
+  refreshFind();
+  updateFolderButton();
+  folderAfterRender();
 }
 
 function buildToc(headings) {
@@ -2906,7 +3009,7 @@ function renderTabs() {
     const label = t.name || "Pasted markdown";
     const where = t.path || (t.dir ? t.dir + "/" : "") + label;
     const tip = where + (t.restored
-      ? "\nSaved copy from an earlier session — open the file again for live reload" : "");
+      ? "\nSaved copy from an earlier session — connect its folder (📁) or open the file again for live reload" : "");
     const on = i === state.tabIndex;
     return '<div class="tab' + (on ? " active" : "") + (t.restored ? " restored" : "") + (t.dirty ? " dirty" : "") +
       '" data-i="' + i + '" role="tab" tabindex="0" aria-selected="' + on + '" title="' + esc(tip) + '">' +
@@ -3561,6 +3664,13 @@ function queueSourcePane() {
 
 const srcRange = (el) => { const [start, end] = el.dataset.src.split("-").map(Number); return { start, end }; };
 
+/** One source line as HTML, with replace's occurrence marked when it's on it. */
+function srcLineHtml(t, line, mk) {
+  if (!mk || mk.line !== line) return esc(t) || " ";
+  const a = Math.min(mk.col, t.length), b = Math.min(mk.col + mk.len, t.length);
+  return esc(t.slice(0, a)) + '<mark class="find-hit find-cur">' + esc(t.slice(a, b)) + "</mark>" + esc(t.slice(b));
+}
+
 /** The first block whose bottom edge is below the top of the screen. */
 function readingBlock() {
   const top = els.scroller.getBoundingClientRect().top + 8;
@@ -3582,6 +3692,9 @@ function updateSourcePane() {
   if (inlineEd.ta) {
     focus = { start: inlineEd.start, end: inlineEd.end, live: inlineEd.ta.value };
     how = "Editing";
+  } else if (replaceFocus()) {
+    focus = replaceFocus();
+    how = "Next to replace";
   } else if (srcHover && els.doc.contains(srcHover)) {
     focus = srcRange(srcHover);
     how = "Under the pointer";
@@ -3619,9 +3732,11 @@ function updateSourcePane() {
     (shown.length > 1 ? "lines " + (start + 1) + "–" + last : "line " + (start + 1));
   body.innerHTML = shown.map((t, i) =>
     '<div class="sl' + (hl && i >= hl.from && i < hl.to ? " hl" : "") + '"><span class="ln">' + (start + i + 1) +
-    '</span><span class="lt">' + (esc(t) || " ") + "</span></div>").join("");
+    '</span><span class="lt">' + srcLineHtml(t, start + i, focus && focus.mark) + "</span></div>").join("");
   const mark = body.querySelector(".sl.hl");
   if (mark) mark.scrollIntoView({ block: "nearest" });
+  const hit = body.querySelector("mark.find-cur");
+  if (hit) hit.scrollIntoView({ block: "nearest" });
   else if (!state.editScope) body.scrollTop = 0;
 }
 
@@ -3709,6 +3824,7 @@ function setSourceView(on) {
   // the other opens.
   const keep = on ? readingLine() : rawTopLine();
   if (on) {
+    if (find.replaceOpen) setReplace(false, true);
     commitInline();
     endSectionEdit(true);
     if (state.editMode) setEditMode(false, true);
@@ -3720,6 +3836,7 @@ function setSourceView(on) {
   paintRawView();
   placeSrcToggle();
   if (keep !== null) on ? scrollRawTo(keep) : scrollDocTo(keep);
+  refreshFind();   // the other view's text
   if (state.text) toast(on ? "Showing the Markdown source — read-only" : "Showing the rendered page");
 }
 
@@ -3768,6 +3885,597 @@ function scrollDocTo(line) {
   }
   if (best) alignTop(best.closest(".md-table-wrapper") || best);
 }
+
+/* -------------------------------------------------------- connect folder --
+   File handles can't survive a refresh on file:// (no IndexedDB), so tabs come
+   back as saved copies and a document from the VS Code task never had one.
+   One folder pick per session fixes both: a directory handle with read/write
+   access reaches every file under it.
+
+   On connect, each open tab is matched to its file -- by its real path when
+   the VS Code task supplied one, else folder + name, else a name that's
+   unique in the tree; never a guess between two. Matched tabs get a live
+   handle back (save, refresh, watch). One with no unsaved edits takes the
+   file's current text; one with edits keeps them. Documents opened later,
+   while connected, are linked as they arrive.
+
+   It also resolves relative images (Markdown or raw <img>) against the
+   document's own place in the folder -- which a page can't otherwise do,
+   since file:// resolves them against the viewer instead.
+   -------------------------------------------------------------------------- */
+
+const canPickDir = typeof window.showDirectoryPicker === "function";
+state.folder = null;          // FileSystemDirectoryHandle, this session only
+let folderIndex = null;       // Markdown files in it: [{ name, dir, handle }]
+const folderAssets = new Map();   // folder-relative path -> object URL
+
+function updateFolderButton() {
+  const btn = $("#btn-folder");
+  btn.hidden = !canPickDir || !state.text;
+  $("#folder-label").textContent = state.folder ? state.folder.name : "Connect folder";
+  btn.setAttribute("aria-pressed", String(!!state.folder));
+  btn.title = state.folder
+    ? "Connected to “" + state.folder.name + "” — click to connect a different folder"
+    : "Connect your project folder: relinks open documents for saving and live reload, and loads relative images";
+}
+
+async function folderFiles() {
+  if (!folderIndex) folderIndex = await collectMarkdown(state.folder, "", [], 0);
+  return folderIndex;
+}
+
+/** Where a document's file is in the connected folder: { handle, dir } or null. */
+async function locateInFolder(doc) {
+  const root = state.folder;
+  if (!root) return null;
+  // Already linked: just learn where it sits.
+  if (doc.handle) {
+    try {
+      const p = await root.resolve(doc.handle);
+      return p ? { handle: doc.handle, dir: p.slice(0, -1).join("/") } : null;
+    } catch (_) { return null; }
+  }
+  if (!doc.name) return null;
+  let found = (await folderFiles()).filter((e) => e.name.toLowerCase() === doc.name.toLowerCase());
+  if (doc.path) {
+    // A real path: the file must sit where it says, relative to the folder
+    // (whose own name has to appear in that path). No fallback guessing.
+    const where = doc.path.split(/[\\/]/).slice(0, -1).join("/").toLowerCase();
+    found = found.filter((e) => {
+      const d = [root.name].concat(e.dir ? e.dir.split("/") : []).join("/").toLowerCase();
+      return where === d || where.endsWith("/" + d);
+    });
+  } else if (doc.dir) {
+    const narrowed = found.filter((e) => e.dir.toLowerCase().endsWith(doc.dir.toLowerCase()));
+    if (narrowed.length) found = narrowed;
+  }
+  return found.length === 1 ? { handle: found[0].handle, dir: found[0].dir } : null;
+}
+
+/** Give a tab (or the document on screen, active = true) its live file back. */
+async function linkToFolder(t, active) {
+  const doc = active ? { handle: state.handle, name: state.name, path: state.path, dir: state.dir } : t;
+  const hit = await locateInFolder(doc);
+  if (!hit) { t.folderDir = null; return false; }
+  t.folderDir = hit.dir;
+  if (doc.handle) return true;
+  const file = await hit.handle.getFile();
+  const disk = await file.text();
+  const dirty = active ? state.dirty : t.dirty;
+  if (active) {
+    state.handle = hit.handle;
+    state.lastModified = file.lastModified;
+    if (!dirty) state.text = disk;
+  } else {
+    t.handle = hit.handle;
+    t.lastModified = file.lastModified;
+    if (!dirty) t.text = disk;
+    t.restored = false;
+  }
+  return true;
+}
+
+async function connectFolder(handle) {
+  if (!handle) return;
+  for (const url of folderAssets.values()) URL.revokeObjectURL(url);
+  folderAssets.clear();
+  state.folder = handle;
+  folderIndex = null;
+  for (const t of state.tabs) delete t.folderDir;
+  updateFolderButton();
+  toast("Scanning " + handle.name + "…");
+
+  commitInline();
+  let linked = 0;
+  for (const t of state.tabs) {
+    const active = t === state.tabs[state.tabIndex];
+    if (await linkToFolder(t, active)) linked++;
+  }
+  const y = els.scroller.scrollTop;
+  render();
+  els.scroller.scrollTo({ top: y, behavior: "instant" });
+  updateSync();
+  renderTabs();
+  persist();
+  const n = state.tabs.length;
+  toast("Connected “" + handle.name + "”" + (n ? " — relinked " + linked + " of " + n + " open document" + (n === 1 ? "" : "s") : ""));
+}
+
+/**
+ * After every render: link a document that arrived while connected, then
+ * point its relative images at the folder. Async; anything that changed in
+ * the meantime (another document, another render) is left alone.
+ */
+async function folderAfterRender() {
+  const t = state.tabs[state.tabIndex];
+  if (!state.folder || !t) return;
+  if (t.folderDir === undefined) {
+    t.folderDir = null;   // one attempt per document
+    const hadHandle = !!state.handle, key = t.key;
+    try { await linkToFolder(t, true); } catch (_) { return; }
+    if (t !== state.tabs[state.tabIndex] || t.key !== key) return;
+    if (!hadHandle && state.handle) { render(); updateSync(); persist(); return; }   // re-render links images
+  }
+  resolveFolderImages(t);
+}
+
+/** "a/b" + "../img/x.png" -> "img/x.png"; null if it climbs out of the folder. */
+function folderPath(dir, rel) {
+  rel = rel.split(/[?#]/)[0];
+  // A literal "%" (50%.png) isn't valid percent-encoding, and a throw here
+  // would stop every later image in the document from resolving.
+  try { rel = decodeURIComponent(rel); } catch (_) { /* use it as written */ }
+  const out = rel.startsWith("/") ? [] : (dir ? dir.split("/") : []);
+  for (const p of rel.split("/")) {
+    if (!p || p === ".") continue;
+    if (p === "..") { if (!out.length) return null; out.pop(); } else out.push(p);
+  }
+  return out.join("/");
+}
+
+async function folderFileHandle(path) {
+  const parts = path.split("/");
+  let dir = state.folder;
+  for (const p of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(p);
+  return dir.getFileHandle(parts[parts.length - 1]);
+}
+
+async function resolveFolderImages(t) {
+  if (typeof t.folderDir !== "string") return;
+  for (const img of els.doc.querySelectorAll("img")) {
+    const raw = img.dataset.rel || img.getAttribute("src") || "";
+    if (!raw || /^(?:[a-z][a-z0-9+.\-]*:|#|\/\/)/i.test(raw)) continue;   // absolute, data:, blob:, anchors
+    const path = folderPath(t.folderDir, raw);
+    if (!path) continue;
+    img.dataset.rel = raw;
+    let url = folderAssets.get(path);
+    if (!url) {
+      try { url = URL.createObjectURL(await (await folderFileHandle(path)).getFile()); } catch (_) { continue; }
+      folderAssets.set(path, url);
+    }
+    if (img.isConnected) img.src = url;
+  }
+}
+
+$("#btn-folder").addEventListener("click", async () => {
+  const opts = { id: "nl-folder", mode: "readwrite" };
+  // Open beside the document when we have its handle (a file handle as
+  // startIn opens its folder).
+  if (state.handle || state.dirAnchor) opts.startIn = state.handle || state.dirAnchor;
+  try {
+    connectFolder(await window.showDirectoryPicker(opts));
+  } catch (e) {
+    if (e && e.name === "AbortError") return;
+    toast("Couldn't open that folder: " + (e && (e.message || e.name)), true);
+  }
+});
+
+/* ------------------------------------------------------------------ find --
+   Ctrl+F finds; Ctrl+H (or the › toggle) adds replace.
+
+   Find highlights every match in whichever view is showing -- the rendered
+   page, or the Markdown in source view -- the current one in orange, with
+   "3 of 12" in the bar and ticks beside the scrollbar. Options: match case,
+   whole word, regular expression. Unlike the browser's own find, it reaches
+   into collapsed <details> (opening them when you step to a match) and skips
+   hidden table columns, diagram SVG and buttons. A match must sit within one
+   run of text: one straddling formatting ("**bo**ld") isn't found there.
+
+   Replace works on the Markdown source, never the rendered text -- so it
+   can't damage formatting, and it counts what's actually in the file. It
+   turns edit mode on and opens the Markdown pane, which shows the current
+   occurrence highlighted in its block (outlined in the page). Every replace
+   is an ordinary edit: spliced into the text and saved to the file. The last
+   one can be undone from the bar.
+
+   Marks are plain <mark> wrappers, re-applied after every render (an edit, a
+   reload, a tab switch) and stripped from exports.
+   -------------------------------------------------------------------------- */
+
+const find = {
+  open: false, replaceOpen: false, query: "", replacement: "",
+  matchCase: false, wholeWord: false, regex: false, error: "",
+  hits: [], cur: -1,          // rendered matches (<mark>s), and the current one
+  src: [], srcCur: -1,        // replace mode: occurrences in the Markdown source
+  undo: null,                 // { before, after } of the last replace
+  openedPane: false,          // replace opened the Markdown pane, so closing it closes the pane
+  timer: null,
+};
+const FIND_SKIP = "script, style, textarea, svg, button, input, select, .anchor";
+const FIND_MAX = 2000;
+
+const findRoot = () => (state.sourceView ? $("#raw-view") : els.doc);
+
+/** The search as a RegExp, from the query and the three options. */
+function findPattern(global = true) {
+  find.error = "";
+  if (!find.query) return null;
+  let body = find.regex ? find.query : find.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (find.wholeWord) body = "(?<!\\w)(?:" + body + ")(?!\\w)";
+  try { return new RegExp(body, (global ? "g" : "") + (find.matchCase ? "" : "i") + "m"); }
+  catch (e) { find.error = "Invalid pattern"; return null; }
+}
+
+function clearFindMarks() {
+  for (const root of [els.doc, $("#raw-view")]) {
+    const marks = root.querySelectorAll("mark.find-hit");
+    if (!marks.length) continue;
+    const parents = new Set();
+    for (const m of marks) { parents.add(m.parentNode); m.replaceWith(m.textContent); }
+    for (const p of parents) p.normalize();   // rejoin the split text nodes
+  }
+  for (const b of els.doc.querySelectorAll(".find-block")) b.classList.remove("find-block");
+  find.hits = [];
+}
+
+/** Wrap every match in the visible view; returns the marks in document order. */
+function markMatches(re) {
+  const walker = document.createTreeWalker(findRoot(), NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentElement.closest(FIND_SKIP) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  // Collect first: wrapping splits nodes, which would derail the walker.
+  const nodes = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
+
+  const hits = [];
+  for (const node of nodes) {
+    if (hits.length >= FIND_MAX) break;
+    const ranges = [];
+    re.lastIndex = 0;
+    for (let m = re.exec(node.data); m && hits.length + ranges.length < FIND_MAX; m = re.exec(node.data)) {
+      if (!m[0]) { re.lastIndex++; continue; }   // a regex that can match nothing
+      ranges.push([m.index, m[0].length]);
+    }
+    // From the end, so the earlier offsets still hold as the node is split.
+    const marks = [];
+    for (let k = ranges.length - 1; k >= 0; k--) {
+      const match = node.splitText(ranges[k][0]);
+      match.splitText(ranges[k][1]);
+      const mark = document.createElement("mark");
+      mark.className = "find-hit";
+      match.replaceWith(mark);
+      mark.appendChild(match);
+      marks.push(mark);
+    }
+    hits.push(...marks.reverse());
+  }
+  // Keep what can be seen, or revealed (a closed <details>); unwrap the rest
+  // -- a hidden column, the inactive twin of an interactive table.
+  return hits.filter((m) => {
+    if (m.getClientRects().length || m.closest("details:not([open])")) return true;
+    m.replaceWith(m.textContent);
+    return false;
+  });
+}
+
+/** Every occurrence in the Markdown source, with its line and column. */
+function findInSource(re) {
+  const text = state.text, out = [];
+  const starts = [0];
+  text.replace(/\r\n|\r|\n/g, (m, i) => { starts.push(i + m.length); return m; });
+  re.lastIndex = 0;
+  for (let m = re.exec(text); m && out.length < FIND_MAX; m = re.exec(text)) {
+    if (!m[0]) { re.lastIndex++; continue; }
+    let lo = 0, hi = starts.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (starts[mid] <= m.index) lo = mid; else hi = mid - 1; }
+    out.push({ start: m.index, end: m.index + m[0].length, text: m[0], line: lo, col: m.index - starts[lo] });
+  }
+  return out;
+}
+
+/** The rendered block (table wrapper included) holding a source line. */
+function blockForLine(line) {
+  for (const b of els.doc.querySelectorAll("[data-src]")) {
+    const r = srcRange(b);
+    if (line >= r.start && line < r.end) return b.closest(".md-table-wrapper") || b;
+  }
+  return null;
+}
+
+/**
+ * Search afresh. keepPlace: a re-run after the content changed (an edit, a
+ * reload, a replace) -- stay on the same match number and don't scroll the
+ * page out from under the user. Otherwise start at the first match at or
+ * below where they're reading, not the top of the document.
+ */
+function runFind(keepPlace) {
+  clearFindMarks();
+  const re = findPattern();
+  if (!find.open || !re || !state.text) {
+    find.src = [];
+    find.srcCur = -1;
+    paintFind();
+    if (find.replaceOpen) updateSourcePane();
+    return;
+  }
+  find.hits = markMatches(re);
+  const top = els.scroller.getBoundingClientRect().top;
+
+  if (find.replaceOpen) {
+    find.src = findInSource(re);
+    if (!find.src.length) find.srcCur = -1;
+    else if (keepPlace && find.srcCur >= 0) find.srcCur = Math.min(find.srcCur, find.src.length - 1);
+    else {
+      const i = find.src.findIndex((o) => { const b = blockForLine(o.line); return b && b.getBoundingClientRect().bottom > top; });
+      find.srcCur = i < 0 ? 0 : i;
+    }
+    showReplaceCurrent(!keepPlace);
+    return;
+  }
+  if (!find.hits.length) find.cur = -1;
+  else if (keepPlace && find.cur >= 0) find.cur = Math.min(find.cur, find.hits.length - 1);
+  else {
+    const i = find.hits.findIndex((m) => m.getBoundingClientRect().bottom > top);
+    find.cur = i < 0 ? 0 : i;
+  }
+  showFindCurrent(!keepPlace);
+}
+
+const revealDetails = (el) => { for (let d = el.closest("details:not([open])"); d; d = el.closest("details:not([open])")) d.open = true; };
+
+function showFindCurrent(scroll) {
+  find.hits.forEach((m, i) => m.classList.toggle("find-cur", i === find.cur));
+  const m = find.hits[find.cur];
+  if (m && scroll) {
+    revealDetails(m);
+    m.scrollIntoView({ block: "center", behavior: "instant" });
+  }
+  paintFind();
+}
+
+/** Replace mode: outline the current occurrence's block, and orange the
+ *  matching mark inside it when the rendered text shows it too. */
+function showReplaceCurrent(scroll) {
+  for (const b of els.doc.querySelectorAll(".find-block")) b.classList.remove("find-block");
+  for (const m of find.hits) m.classList.remove("find-cur");
+  const o = find.src[find.srcCur];
+  const block = o && blockForLine(o.line);
+  if (block) {
+    block.classList.add("find-block");
+    revealDetails(block);
+    // The k-th occurrence in this block's source is, usually, its k-th mark.
+    const r = srcRange(block.matches("[data-src]") ? block : block.querySelector("[data-src]"));
+    const k = find.src.slice(0, find.srcCur).filter((x) => x.line >= r.start && x.line < r.end).length;
+    const inBlock = find.hits.filter((m) => block.contains(m));
+    if (inBlock[k]) inBlock[k].classList.add("find-cur");
+    if (scroll) block.scrollIntoView({ block: "center", behavior: "instant" });
+  }
+  paintFind();
+  updateSourcePane();
+}
+
+/** For the Markdown pane: the block and exact span about to be replaced. */
+function replaceFocus() {
+  if (!find.open || !find.replaceOpen) return null;
+  const o = find.src[find.srcCur];
+  const block = o && blockForLine(o.line);
+  if (!block) return null;
+  const r = srcRange(block.matches("[data-src]") ? block : block.querySelector("[data-src]"));
+  return { start: r.start, end: r.end, mark: { line: o.line, col: o.col, len: o.text.length } };
+}
+
+function stepFind(dir) {
+  if (find.replaceOpen) {
+    if (!find.src.length) return;
+    find.srcCur = (find.srcCur + dir + find.src.length) % find.src.length;
+    showReplaceCurrent(true);
+    return;
+  }
+  if (!find.hits.length) return;
+  find.cur = (find.cur + dir + find.hits.length) % find.hits.length;
+  showFindCurrent(true);
+}
+
+/** The count, the no-results tint, Undo, and the scrollbar ticks. */
+function paintFind() {
+  const list = find.replaceOpen ? find.src : find.hits;
+  const cur = find.replaceOpen ? find.srcCur : find.cur;
+  const n = list.length;
+  const count = $("#find-count");
+  count.textContent = find.error ? find.error : !find.query ? "" : !n ? "No results"
+    : (cur + 1) + " of " + (n >= FIND_MAX ? FIND_MAX + "+" : n);
+  count.title = find.replaceOpen ? "Occurrences in the Markdown source" : "Matches on the page";
+  $("#find-input").classList.toggle("none", !!find.query && (!n || !!find.error));
+  $("#find-undo").hidden = !(find.undo && find.undo.after === state.text);
+  $("#replace-one").disabled = $("#replace-all").disabled = !find.src.length;
+
+  const box = $("#find-ticks");
+  if (!find.open || !find.hits.length) { box.hidden = true; box.innerHTML = ""; return; }
+  const sc = els.scroller, r = sc.getBoundingClientRect(), H = sc.scrollHeight || 1;
+  Object.assign(box.style, { top: r.top + "px", height: r.height + "px", left: r.right - 12 + "px" });
+  box.innerHTML = find.hits.map((m) => {
+    const mr = m.getBoundingClientRect();
+    if (!mr.height) return "";               // inside a closed <details>
+    const y = (mr.top - r.top + sc.scrollTop) / H * 100;
+    return '<i' + (m.classList.contains("find-cur") ? ' class="cur"' : "") + ' style="top:' + y.toFixed(2) + '%"></i>';
+  }).join("");
+  box.hidden = false;
+}
+
+function openFind(withReplace) {
+  const input = $("#find-input");
+  // A short selection is what you're looking for.
+  const sel = String(window.getSelection() || "").trim();
+  if (sel && sel.length <= 120 && !/\n/.test(sel)) input.value = sel;
+  find.open = true;
+  $("#find-bar").hidden = false;
+  find.query = input.value;
+  if (withReplace && !state.sourceView) setReplace(true);
+  else runFind(false);
+  input.focus();
+  input.select();
+  // Ctrl+H with something already to find: straight to what to replace it with.
+  if (find.replaceOpen && input.value) { $("#replace-input").focus(); $("#replace-input").select(); }
+}
+
+function closeFind() {
+  if (find.replaceOpen) setReplace(false, true);
+  find.open = false;
+  $("#find-bar").hidden = true;
+  clearFindMarks();
+  paintFind();
+}
+
+/** Show or hide the replace row. Showing it turns edit mode on and opens the
+ *  Markdown pane -- replace is editing -- and hiding it closes the pane again
+ *  if replace is what opened it. */
+function setReplace(on, quiet) {
+  if (on && state.sourceView) {
+    toast("Replace works on the rendered page — turn off View Markdown source first", true);
+    return;
+  }
+  find.replaceOpen = on;
+  $("#find-bar").classList.toggle("replacing", on);
+  $("#find-toggle").setAttribute("aria-expanded", String(on));
+  if (on) {
+    if (!state.editMode) setEditMode(true, true);
+    if (!state.split) { setSplit(true); find.openedPane = state.split; }
+  } else if (find.openedPane) {
+    find.openedPane = false;
+    setSplit(false);
+  }
+  if (!quiet) runFind(false);
+}
+
+/** Replacement text for one occurrence; with regex on, $1, $& etc. expand. */
+function replacementFor(matchText) {
+  if (!find.regex) return find.replacement;
+  return matchText.replace(findPattern(false), find.replacement);
+}
+
+function canReplace() {
+  if (state.sourceView) { toast("Replace isn't available in View Markdown source", true); return false; }
+  commitInline();
+  if (!state.editMode) setEditMode(true, true);
+  return true;
+}
+
+function replaceOne() {
+  if (!canReplace()) return;
+  runFind(true);   // the commit above may have moved things
+  const o = find.src[find.srcCur];
+  if (!o) return;
+  const before = state.text;
+  applyFindEdit(before.slice(0, o.start) + replacementFor(o.text) + before.slice(o.end), before);
+  toast("Replaced 1");
+}
+
+function replaceAll() {
+  if (!canReplace()) return;
+  const re = findPattern();
+  if (!re) return;
+  const before = state.text;
+  let n = 0;
+  const after = before.replace(re, (m) => { if (!m) return m; n++; return replacementFor(m); });
+  if (!n) return;
+  applyFindEdit(after, before);
+  toast("Replaced " + n + (n === 1 ? " occurrence" : " occurrences"));
+}
+
+function undoReplace() {
+  const u = find.undo;
+  if (!u) return;
+  if (state.text !== u.after) {
+    find.undo = null;
+    paintFind();
+    toast("The document changed since — that replace can't be undone", true);
+    return;
+  }
+  find.undo = null;
+  applyFindEdit(u.before, null);
+  toast("Replace undone");
+}
+
+/** A replace is an ordinary edit: new text in, re-render, save to the file.
+ *  render() re-runs the search in place, so the next occurrence moves up. */
+function applyFindEdit(text, undoFrom) {
+  state.text = text;
+  state.dirty = true;
+  if (undoFrom !== null) find.undo = { before: undoFrom, after: text };
+  if (state.editScope) {
+    const r = rangeFor(state.editScope.id);
+    if (r.id) Object.assign(state.editScope, { start: r.start, end: r.end });
+  }
+  const y = els.scroller.scrollTop;
+  render();
+  els.scroller.scrollTo({ top: y, behavior: "instant" });
+  persist();
+  saveDocument(false);
+}
+
+/** After anything replaced the content: highlight it again, in place. */
+function refreshFind() {
+  if (find.open && find.query) runFind(true);
+  else paintFind();
+}
+
+$("#find-input").addEventListener("input", (e) => {
+  clearTimeout(find.timer);
+  find.timer = setTimeout(() => { find.query = e.target.value; runFind(false); }, 120);
+});
+$("#find-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    // Typed faster than the debounce: search first, then step.
+    if (find.query !== e.target.value) { clearTimeout(find.timer); find.query = e.target.value; runFind(false); }
+    else stepFind(e.shiftKey ? -1 : 1);
+  }
+});
+$("#replace-input").addEventListener("input", (e) => { find.replacement = e.target.value; });
+$("#replace-input").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  find.replacement = e.target.value;
+  if (e.ctrlKey && e.altKey) replaceAll(); else replaceOne();
+});
+// Esc anywhere in the bar closes find, not edit mode.
+$("#find-bar").addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  e.preventDefault();
+  e.stopPropagation();
+  closeFind();
+});
+$("#find-prev").addEventListener("click", () => stepFind(-1));
+$("#find-next").addEventListener("click", () => stepFind(1));
+$("#find-close").addEventListener("click", closeFind);
+$("#find-toggle").addEventListener("click", () => {
+  setReplace(!find.replaceOpen);
+  (find.replaceOpen ? $("#replace-input") : $("#find-input")).focus();
+});
+$("#replace-one").addEventListener("click", replaceOne);
+$("#replace-all").addEventListener("click", replaceAll);
+$("#find-undo").addEventListener("click", undoReplace);
+for (const [id, key] of [["find-case", "matchCase"], ["find-word", "wholeWord"], ["find-regex", "regex"]]) {
+  $("#" + id).addEventListener("click", (e) => {
+    find[key] = !find[key];
+    e.currentTarget.setAttribute("aria-pressed", String(find[key]));
+    runFind(false);
+    $("#find-input").focus();
+  });
+}
+// The ticks are laid out against the scroller; follow it when it resizes.
+new ResizeObserver(() => { if (find.open) paintFind(); }).observe(els.scroller);
+window.addEventListener("resize", () => { if (find.open) paintFind(); });
 
 /* ---------- saving in-place edits ---------- */
 
@@ -3923,7 +4631,7 @@ function exportHtml() {
     "accent", "accent-soft", "code-bg", "tok-com", "tok-str", "tok-num", "tok-kw", "tok-bin", "tok-fn",
     "tok-tag", "tok-atr", "tok-pun",
     // Reading preferences, so the exported file looks like what was on screen.
-    "doc-size", "doc-zoom", "doc-weight", "doc-strong", "visual-filter"];
+    "doc-size", "doc-zoom", "doc-weight", "doc-strong", "head-case", "head-track", "visual-filter"];
   const frozen = ":root{" + names.map((n) => "--" + n + ":" + vars.getPropertyValue("--" + n).trim() + ";").join("") + "}";
 
   const title = (state.name || "Markdown document").replace(/\.[^.]+$/, "");
@@ -3931,6 +4639,9 @@ function exportHtml() {
   const body = els.doc.cloneNode(true);
   for (const b of body.querySelectorAll(".code-copy")) b.remove();
   for (const n of body.querySelectorAll("[data-src]")) n.removeAttribute("data-src");
+  for (const m of body.querySelectorAll("mark.find-hit")) m.replaceWith(m.textContent);
+  // safeUrl, like every other URL: a document can author its own data-rel.
+  for (const img of body.querySelectorAll("img[data-rel]")) { img.setAttribute("src", safeUrl(img.dataset.rel)); img.removeAttribute("data-rel"); }
 
   const page = "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">" +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
@@ -3996,6 +4707,13 @@ $("#chk-bold").addEventListener("change", (e) => {
   localStorage.setItem("mdv:bold", state.bold ? "1" : "0");
   applyDocStyle();
 });
+
+function setCaps(on) {
+  state.caps = on;
+  localStorage.setItem("mdv:caps", on ? "1" : "0");
+  applyDocStyle();
+}
+$("#chk-caps").addEventListener("change", (e) => setCaps(e.target.checked));
 
 // --- appearance segmented controls ---
 $("#chk-auto").addEventListener("change", (e) => {
@@ -4213,6 +4931,23 @@ window.addEventListener("keydown", (e) => {
   }
   // Ctrl+E toggles editing in place. The section-in-a-window editor stays on
   // the menu and the contents pencils.
+  // Ctrl+F: our find, which can see what the browser's can't (collapsed
+  // <details>, the Markdown in source view) and skips what it shouldn't.
+  if (mod && e.key.toLowerCase() === "f" && state.text) {
+    e.preventDefault();
+    openFind(false);
+    return;
+  }
+  if (mod && e.key.toLowerCase() === "h" && state.text) {
+    e.preventDefault();
+    openFind(true);
+    return;
+  }
+  if (e.key === "F3" && find.open) {
+    e.preventDefault();
+    stepFind(e.shiftKey ? -1 : 1);
+    return;
+  }
   if (mod && e.key === "\\" && (state.editMode || state.editScope)) {
     e.preventDefault();
     setSplit(!state.split);
@@ -4264,6 +4999,10 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     setAppearance({ mode: isDark() ? "light" : "dark" });
     toast(isDark() ? "Dark mode" : "Light mode");
+  } else if (e.key.toLowerCase() === "h" && state.text) {
+    e.preventDefault();
+    setCaps(!state.caps);
+    toast(state.caps ? "ALL-CAPS headings on" : "All-caps headings off");
   } else if ((e.key === "[" || e.key === "]") && state.tabs.length > 1) {
     // Unmodified, like the keys above: Ctrl+Tab and Ctrl+W belong to the
     // browser and never reach the page.

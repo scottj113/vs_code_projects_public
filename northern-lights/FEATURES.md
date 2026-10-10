@@ -86,6 +86,10 @@ Complete feature inventory with status, timeline, and metadata.
 | Split view: Markdown pane | edit | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 2 | high | Workflow | While editing, a ‹/› Markdown icon on the editable block opens a read-only pane with that block's source and file line numbers (live as you type; whole section during section edit). Ctrl+\ toggles. Never open by default; closes when editing ends |
 | View Markdown source | nav | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 2 | medium | UX | ⋮ menu: the whole file as read-only Markdown with line numbers instead of the rendered page; editing and the split pane are off while it shows. Keeps your place both ways; contents jump to heading lines |
 | Resizable contents sidebar | layout | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 3 | medium | UX | Drag the sidebar edge (160px to half the window), double-click to reset; width remembered and applied before first paint. Shares one drag routine with the split view divider |
+| Find in document (Ctrl+F) | nav | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | UX | Highlights every match (current in orange), "3 of 12", scrollbar ticks; Enter/Shift+Enter, F3; match case, whole word, regex. Reaches into collapsed <details>; skips hidden columns, diagrams, buttons; searches the Markdown in source view. Starts at the match nearest where you are reading |
+| Find and replace (Ctrl+H) | edit | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | Works on the Markdown source, never the rendered text. Turns edit mode on and opens the Markdown pane showing the exact occurrence; its block is outlined. Replace / All (Ctrl+Alt+Enter), $1 with regex; each replace saves to the file; Undo for the last one. Off in source view |
+| ALL-CAPS headings | appearance | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 3 | medium | Style | Aa menu or bare H: headings shown in capitals with a touch of tracking. Display only (the file keeps its casing); remembered, applied before first paint, kept in standalone export |
+| Connect folder | sync | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | 📁 toolbar button: pick the project folder once per session (read/write). Relinks open tabs to their files — by VS Code path, else folder + name, else a unique name; never a guess — restoring save/refresh/watch; unsaved edits kept. Documents opened later link themselves. Relative images (Markdown or raw <img>) load from the folder; exports keep the original paths |
 | Tabs remembered across sessions | state | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | Tab text saved to localStorage (2M-char budget); restored tabs show in italics as saved copies until the file is opened again (file handles can't survive a refresh on file://) |
 
 ## Legend: Feature Type Codes
@@ -127,10 +131,8 @@ Complete feature inventory with status, timeline, and metadata.
 Potential future enhancements (not committed). All must stay single-file and offline — no server, even optional.
 
 ### Recommended next
-- **Find in document (Ctrl+F)** — highlight all matches in the rendered text, Enter / Shift+Enter to step, marks on the scrollbar. Sees collapsed table columns, which the browser's find can't. Covers multi-pattern highlighting.
 - **GitHub-style callouts** — render `> [!NOTE]`, `[!TIP]`, `[!WARNING]`, `[!IMPORTANT]` as colored boxes instead of plain blockquotes. Small.
 - **Markdown tables as datasets** — give every ordinary GFM table the v3 sort and CSV/JSON export, not just `<script data-id>` tables.
-- **Reconnect folder** — pick the project folder once per session; every remembered tab from that folder gets its live file link back (reload/Watch). Follow-up to document tabs.
 
 ### Reading & navigation
 - Collapsible sections — click a heading to fold it; "collapse all to H2" for skimming.
