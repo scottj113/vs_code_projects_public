@@ -55,16 +55,16 @@ Chromium is the assumption, not a preference to be relitigated per project.
 
 ## The library
 
-**[PATTERNS.md](./PATTERNS.md)** — the working pattern library. ~1,300 lines, 20 sections,
-every one extracted from shipped code:
+**[PATTERNS.md](./PATTERNS.md)** — a short brief, read before building anything new. It
+holds only what general web knowledge (and Claude) won't supply:
 
 | | |
 |---|---|
-| **Foundations** | theming with no flash on load, inlining and vendoring, the `file://` contract |
-| **Data in / out** | the four input doors, standalone HTML export, print as free PDF, safe file writes |
-| **State** | the save/render loop, export/import to survive a cleared cache, the staleness meter |
-| **Interface** | toast, clipboard, drag & drop, blob URLs, scroll-spy, content scaling |
-| **Robustness** | capability degradation, allow-list sanitizing, the `style.display` gotcha |
+| **The Rules** | single file, `file://`, no server ever, Chromium — and what `file://` blocks |
+| **Decisions** | choices already made and why: Save vs. Backup, export design, the staleness meter, undo, file writing, session memory |
+| **Gotchas** | symptom → cause → fix, for every trap that cost real time |
+| **Testing** | headless Edge over the DevTools protocol — no server, no packages |
+| **Checklist** | starting a new tool |
 
 ### The rule
 
@@ -92,6 +92,7 @@ between.
 
 Building a new single-file tool:
 
-1. Read [PATTERNS.md](./PATTERNS.md) first — most of what you need is already solved there.
-2. Work through the [checklist](./PATTERNS.md#checklist-ports-to-new-projects).
+1. Read [PATTERNS.md](./PATTERNS.md) first — the rules, decisions and gotchas are what
+   make the first version come out right.
+2. Work through the [checklist](./PATTERNS.md#5-checklist-starting-a-new-tool).
 3. When something new is proven working, **add it back to the library.**
