@@ -120,6 +120,19 @@ a bit so you can see the wrap behaviour beside the floated picture.
 *Expect: sizes as labelled; the floated image on the right with text beside it;
 "picture" (not "fallback"); a broken-image marker with alt text.*
 
+**Embedded (base64) images are not displayed** — each of these should show a
+placeholder reading "🖼 Embedded image not shown: …" with its alt text, never
+the image itself:
+
+![markdown png](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEklEQVR4nGP8z4AATEhsPBwAM9EBBzDn4UwAAAAASUVORK5CYII=)
+
+<img alt="raw html png" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEklEQVR4nGP8z4AATEhsPBwAM9EBBzDn4UwAAAAASUVORK5CYII=">
+
+![markdown svg](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiLz48L3N2Zz4=)
+
+*Expect: three placeholders — "markdown png", "raw html png", "markdown svg" — and
+no images.*
+
 ## 7. README header patterns
 
 <div align="center">

@@ -2127,7 +2127,16 @@ function isEntity(ref) {
   return entityCache.get(ref);
 }
 
+/* Embedded (base64 data:) images aren't drawn -- a placeholder stands in.
+   They're kilobytes of text in the middle of a Markdown file; the decision
+   is not to treat them as content. Applies to ![](data:…) and raw <img>. */
+const EMBEDDED_IMG = /^\s*data:/i;
+const EMBEDDED_TITLE = "Embedded (base64) images aren't displayed";
+const embeddedImage = (alt) => '<span class="img-missing" title="' + esc(EMBEDDED_TITLE) + '">&#128444; Embedded image not shown' +
+  (alt ? ": " + esc(alt) : "") + "</span>";
+
 function image(alt, url, title, ctx) {
+  if (EMBEDDED_IMG.test(url.replace(/^</, ""))) return embeddedImage(alt);
   let href = safeUrl(url.replace(/^<|>$/g, ""));
   // A multi-file drop gives us blob URLs keyed by filename, so relative
   // image paths in the markdown can still resolve.
@@ -2208,12 +2217,15 @@ function spliceSection(text, range, replacement) {
 
 function sanitize(root) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-  const doomed = [];
+  const doomed = [], embedded = [];
   let el;
   while ((el = walker.nextNode())) {
     const tag = el.tagName.toLowerCase();
     if (tag === "input" && el.type === "checkbox" && el.disabled) continue; // our task-list boxes
     if (!OK_TAGS.has(tag)) { doomed.push(el); continue; }
+    // Embedded images get the same placeholder as Markdown ones (see image()).
+    if (tag === "img" && EMBEDDED_IMG.test(el.getAttribute("src") || "")) { embedded.push(el); continue; }
+    for (const a of ["srcset", "poster"]) if (/data:/i.test(el.getAttribute(a) || "")) el.removeAttribute(a);
     for (const attr of Array.from(el.attributes)) {
       const name = attr.name.toLowerCase();
       if (name.startsWith("data-") || name.startsWith("aria-")) continue;
@@ -2223,6 +2235,13 @@ function sanitize(root) {
         if (clean !== attr.value) el.setAttribute(attr.name, clean);
       }
     }
+  }
+  for (const img of embedded) {
+    const span = document.createElement("span");
+    span.className = "img-missing";
+    span.title = EMBEDDED_TITLE;
+    span.textContent = "\u{1F5BC} Embedded image not shown" + (img.alt ? ": " + img.alt : "");
+    img.replaceWith(span);
   }
   // Unwrap rather than delete, so text content survives a stray <script>-less tag.
   for (const node of doomed) {
