@@ -472,6 +472,27 @@ body.has-tabs #shell { top: 76px; }
 #tabs .tab:hover .tab-x, #tabs .tab.active .tab-x, #tabs .tab-x:focus-visible { opacity: 1; }
 #tabs .tab-x:hover { color: var(--fg); background: var(--border); }
 
+/* ---------- edit in place ---------- */
+/* A ring drawn with box-shadow, not a border, so hovering never shifts layout. */
+body.editing #doc [data-src] { cursor: text; border-radius: 4px; }
+body.editing #doc [data-src]:hover {
+  box-shadow: 0 0 0 5px var(--accent-soft), 0 0 0 6px var(--border-strong);
+}
+.ie-hidden { display: none !important; }
+#doc textarea.inline-editor {
+  display: block; width: 100%; margin: 0 0 1em; padding: 6px 9px;
+  resize: none; overflow: hidden; tab-size: 4;
+  font: inherit; line-height: 1.6; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--accent); border-radius: 6px;
+  outline: 4px solid var(--accent-soft);
+}
+#doc textarea.inline-editor.ie-code {
+  font: .88em/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: var(--code-bg); white-space: pre; overflow-x: auto;
+}
+/* Edits that haven't reached the file yet. */
+#doc-name.dirty::after, #tabs .tab.dirty .tab-name::after { content: " \25CF"; color: var(--accent); }
+
 /* ---------- layout ---------- */
 #shell { position: fixed; inset: 46px 0 0 0; display: flex; }
 
@@ -1050,6 +1071,9 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
   <span class="meta" id="doc-meta"></span>
   <span class="spacer"></span>
 
+  <button type="button" class="btn" id="btn-edit" aria-pressed="false" hidden
+          title="Edit in place: click any block to edit its Markdown (Ctrl+E)">&#9998; Edit</button>
+
   <!-- File-sync pill. Refresh is a repeated action so it stays one click;
        Watch is a set-once preference that doubles as the state indicator. -->
   <div class="pill" id="sync" hidden>
@@ -1109,7 +1133,7 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
         <button type="button" data-v="40">40%</button>
       </div>
       <hr>
-      <button type="button" class="mi" id="mi-edit" disabled>Edit this section&hellip; <kbd>Ctrl+E</kbd></button>
+      <button type="button" class="mi" id="mi-edit" disabled>Edit this section in a window&hellip;</button>
       <button type="button" class="mi" id="mi-export" disabled>Export standalone HTML&hellip;</button>
       <button type="button" class="mi" id="mi-print" disabled>Print / Save as PDF <kbd>Ctrl+P</kbd></button>
       <hr>
@@ -1487,11 +1511,23 @@ function blocks(lines, ctx, opts) {
     const h = ctx.headings[ctx.headings.length - 1];
     if (h) h.line = line0 + n;
   };
+  // Tags a top-level block's opening element with the file lines it came from,
+  // [from, i), which is what in-place editing swaps out. Called after i has
+  // moved past the block. Nested content is edited as part of its container.
+  // Trailing blank lines (a list swallows the one after it) stay outside the
+  // range: they're spacing, not content, and an editor shouldn't open on them.
+  const mark = (html, from) => {
+    if (line0 === null) return html;
+    let to = i;
+    while (to > from + 1 && /^\s*$/.test(lines[to - 1])) to--;
+    return html.replace(/^(\s*)<([A-Za-z][\w-]*)/, '$1<$2 data-src="' + (line0 + from) + "-" + (line0 + to) + '"');
+  };
 
   while (i < lines.length) {
     const line = lines[i];
 
     if (/^\s*$/.test(line)) { i++; continue; }
+    const from = i;
 
     // --- fenced code / mermaid ---
     let m = line.match(/^ {0,3}(`{3,}|~{3,})[ \t]*([^`\n]*)$/);
@@ -1510,19 +1546,19 @@ function blocks(lines, ctx, opts) {
       const code = body.join("\n");
       if (/^mermaid$/i.test(info)) {
         const idx = ctx.mermaid.push(code) - 1;
-        out += '<div class="mermaid-block" data-mermaid="' + idx + '"></div>';
+        out += mark('<div class="mermaid-block" data-mermaid="' + idx + '"></div>', from);
       } else {
-        out += codeBlock(code, info);
+        out += mark(codeBlock(code, info), from);
       }
       continue;
     }
 
     // --- ATX heading ---
     m = line.match(/^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*(?:#+[ \t]*)?$/) || line.match(/^ {0,3}(#{1,6})[ \t]*$/);
-    if (m) { out += heading(m[1].length, m[2] || "", ctx); stamp(i); i++; continue; }
+    if (m) { const h = heading(m[1].length, m[2] || "", ctx); stamp(i); i++; out += mark(h, from); continue; }
 
     // --- horizontal rule ---
-    if (/^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(line)) { out += "<hr>"; i++; continue; }
+    if (/^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(line)) { i++; out += mark("<hr>", from); continue; }
 
     // --- blockquote ---
     if (/^ {0,3}>/.test(line)) {
@@ -1531,7 +1567,7 @@ function blocks(lines, ctx, opts) {
         buf.push(lines[i].replace(/^ {0,3}>[ \t]?/, ""));
         i++;
       }
-      out += "<blockquote>" + blocks(buf, ctx) + "</blockquote>";
+      out += mark("<blockquote>" + blocks(buf, ctx) + "</blockquote>", from);
       continue;
     }
 
@@ -1539,23 +1575,23 @@ function blocks(lines, ctx, opts) {
     if (line.includes("|") && i + 1 < lines.length &&
         /^ {0,3}\|?[ \t]*:?-{1,}:?[ \t]*(?:\|[ \t]*:?-{1,}:?[ \t]*)*\|?[ \t]*$/.test(lines[i + 1])) {
       const consumed = table(lines, i, ctx);
-      if (consumed) { out += consumed.html; i = consumed.next; continue; }
+      if (consumed) { i = consumed.next; out += mark(consumed.html, from); continue; }
     }
 
     // --- list ---
     m = line.match(/^( {0,3})([-*+]|\d{1,9}[.)])([ \t]+|$)/);
-    if (m) { const r = list(lines, i, ctx); out += r.html; i = r.next; continue; }
+    if (m) { const r = list(lines, i, ctx); i = r.next; out += mark(r.html, from); continue; }
 
     // --- definition list ---
     if (!isBlank(i) && i + 1 < lines.length && /^ {0,3}:[ \t]+\S/.test(lines[i + 1]) && !BLOCK_START.test(line)) {
-      const r = defList(lines, i, ctx); out += r.html; i = r.next; continue;
+      const r = defList(lines, i, ctx); i = r.next; out += mark(r.html, from); continue;
     }
 
     // --- raw HTML block ---
     if (ctx.rawHtml && /^ {0,3}<(?:[A-Za-z][\w:.\-]*|!--)/.test(line)) {
       const buf = [];
       while (i < lines.length && !isBlank(i)) { buf.push(lines[i]); i++; }
-      out += buf.join("\n");
+      out += mark(buf.join("\n"), from);
       continue;
     }
 
@@ -1566,7 +1602,7 @@ function blocks(lines, ctx, opts) {
         if (/^\s*$/.test(lines[i]) && !/^ {4}/.test(lines[i + 1] || "")) break;
         buf.push(lines[i].slice(4)); i++;
       }
-      out += codeBlock(buf.join("\n").replace(/\n+$/, ""), "");
+      out += mark(codeBlock(buf.join("\n").replace(/\n+$/, ""), ""), from);
       continue;
     }
 
@@ -1583,11 +1619,11 @@ function blocks(lines, ctx, opts) {
     const setextM = prev.match(/^ {0,3}(=+|-{2,})[ \t]*$/);
     if (setextM && buf.length) {
       // A setext heading starts at its text, not at the ===== underline.
-      out += heading(setextM[1][0] === "=" ? 1 : 2, buf.join(" "), ctx);
+      out += mark(heading(setextM[1][0] === "=" ? 1 : 2, buf.join(" "), ctx), from);
       stamp(pStart);
     } else if (buf.length) {
       const text = inline(buf.join("\n"), ctx);
-      out += loose ? "<p>" + text + "</p>" : text;
+      out += loose ? mark("<p>" + text + "</p>", from) : text;
     }
   }
   return out;
@@ -1962,6 +1998,8 @@ const state = {
   // fields above and is refreshed from them on every render.
   tabs: [],
   tabIndex: -1,
+  editMode: false,   // click-to-edit in place (Ctrl+E)
+  dirty: false,      // in-place edits not yet written to the file
   watchTimer: null,
   mermaidSources: [],
   headings: [],      // last render's headings, carrying source line numbers
@@ -2141,6 +2179,9 @@ function render() {
   if (!state.text) {
     document.body.classList.add("blank");
     els.name.textContent = "No document";
+    els.name.classList.remove("dirty");
+    $("#btn-edit").hidden = true;
+    if (state.editMode) setEditMode(false);
     document.title = "Northern Lights MD Viewer";
     els.meta.textContent = "";
     state.headings = [];
@@ -2150,6 +2191,12 @@ function render() {
     renderTabs();
     return;
   }
+
+  // Re-rendering would silently destroy an open in-place editor. Every path
+  // that changes documents commits first; this catches the ones that only
+  // repaint (appearance, raw-HTML toggle). A commit that changed something
+  // has already rendered; an unchanged one just closes and we carry on.
+  if (inlineEd.ta && commitInline()) return;
 
   // Before the old document leaves the screen, so its scroll position can
   // still be read off the scroller.
@@ -2172,6 +2219,8 @@ function render() {
 
   const words = els.doc.textContent.trim().split(/\s+/).filter(Boolean).length;
   els.name.textContent = state.name || "Pasted markdown";
+  els.name.classList.toggle("dirty", state.dirty);
+  $("#btn-edit").hidden = false;
   document.title = state.name || "Pasted markdown";
   updatePathPanel();
   els.meta.textContent = words.toLocaleString() + " words · ~" + Math.max(1, Math.round(words / 220)) + " min";
@@ -2386,6 +2435,7 @@ async function openLibraryDoc(i) {
     state.dir = d.dir;
     state.assets = state.libraryAssets;
     state.text = text;
+    state.dirty = false;
     state.lastModified = file.lastModified || 0;
     state.handle = d.handle || null;
     if (d.handle) state.dirAnchor = d.handle;
@@ -2447,6 +2497,7 @@ async function loadDirectory(dirHandle) {
  *   no trip through the picker.
  */
 async function loadFiles(fileList, handlePromises) {
+  commitInline();
   const files = Array.from(fileList || []);
 
   let handles = [];
@@ -2500,6 +2551,7 @@ async function loadFiles(fileList, handlePromises) {
     state.path = "";
     state.dir = "";
     state.text = text;
+    state.dirty = false;
     state.lastModified = doc.lastModified || 0;
     state.handle = handle;
     // A dropped file's handle also makes a good starting point for a later
@@ -2525,6 +2577,7 @@ function loadText(text, name, path) {
   state.path = path || "";
   state.dir = "";
   state.text = text;
+  state.dirty = false;
   state.handle = null;
   stopWatching();
   updateSync();
@@ -2596,7 +2649,7 @@ function updateTab(t) {
   Object.assign(t, {
     key: docKey(state), name: state.name, path: state.path, dir: state.dir,
     text: state.text, handle: state.handle, lastModified: state.lastModified,
-    assets: state.assets, used: Date.now(),
+    assets: state.assets, dirty: state.dirty, used: Date.now(),
   });
   if (oldAssets !== t.assets) dropAssets(oldAssets);
 }
@@ -2620,7 +2673,7 @@ async function activateTab(i) {
   const prevAssets = state.assets;
   Object.assign(state, {
     name: t.name, path: t.path, dir: t.dir, text: t.text, handle: t.handle,
-    lastModified: t.lastModified, assets: t.assets,
+    lastModified: t.lastModified, assets: t.assets, dirty: !!t.dirty,
   });
   dropAssets(prevAssets);
   if (t.handle) state.dirAnchor = t.handle;
@@ -2635,7 +2688,11 @@ async function activateTab(i) {
 }
 
 function closeTab(n) {
-  if (!state.tabs[n]) return;
+  const doomed = state.tabs[n];
+  if (!doomed) return;
+  if (n === state.tabIndex) commitInline();
+  if (doomed.dirty && !window.confirm((doomed.name || "This document") +
+      " has edits that aren't saved to the file. Close it anyway?")) return;
   if (n !== state.tabIndex) {
     removeTab(n);
     renderTabs();
@@ -2650,7 +2707,7 @@ function closeTab(n) {
 
   stopWatching();
   const prevAssets = state.assets;
-  Object.assign(state, { name: "", path: "", dir: "", text: "", handle: null, lastModified: 0, assets: null });
+  Object.assign(state, { name: "", path: "", dir: "", text: "", handle: null, lastModified: 0, assets: null, dirty: false });
   dropAssets(prevAssets);
   state.libraryIndex = -1;
   render();
@@ -2669,7 +2726,7 @@ function renderTabs() {
     const tip = where + (t.restored
       ? "\nSaved copy from an earlier session — open the file again for live reload" : "");
     const on = i === state.tabIndex;
-    return '<div class="tab' + (on ? " active" : "") + (t.restored ? " restored" : "") +
+    return '<div class="tab' + (on ? " active" : "") + (t.restored ? " restored" : "") + (t.dirty ? " dirty" : "") +
       '" data-i="' + i + '" role="tab" tabindex="0" aria-selected="' + on + '" title="' + esc(tip) + '">' +
       '<span class="tab-name">' + esc(label) + "</span>" +
       '<button type="button" class="tab-x" data-x="' + i + '" title="Close (middle-click)" aria-label="Close ' +
@@ -2728,6 +2785,7 @@ async function openViaPicker(startWatching) {
     const anchor = state.handle || state.dirAnchor;
     if (anchor) opts.startIn = anchor;
     const [handle] = await window.showOpenFilePicker(opts);
+    commitInline();
     releaseAssets();
     // Open brings in a different file, so the current one's path and folder
     // would mislabel it -- and, as a tab key, overwrite the current tab.
@@ -2752,10 +2810,14 @@ async function openViaPicker(startWatching) {
 
 async function reloadFromHandle(force) {
   if (!state.handle) return false;
+  // A reload re-renders from disk: it would tear down an open in-place editor
+  // and replace edits that haven't reached the file yet.
+  if (!force && (inlineEd.ta || state.dirty)) return false;
   try {
     const file = await state.handle.getFile();
     if (!force && file.lastModified === state.lastModified) return false;
     state.text = await file.text();
+    state.dirty = false;
     state.name = file.name;
     state.lastModified = file.lastModified;
     const y = els.scroller.scrollTop;
@@ -3059,6 +3121,9 @@ async function openEditor(id) {
 
 /** Gate for anything that replaces state.text out from under an open edit. */
 function discardEdits(question) {
+  // An open in-place edit is kept, not discarded: applied to the document
+  // (and saved) before whatever is about to replace it.
+  commitInline();
   if (!editorDirty()) return true;
   return window.confirm("This section has unsaved changes. " + question);
 }
@@ -3335,35 +3400,48 @@ function syncEditor() {
  * composed against lines that have since moved, so writing it back would
  * overwrite whatever arrived in the meantime.
  */
-async function writeFile(text) {
-  if (!state.handle) return { ok: false, why: "no-handle" };
+async function writeFile(text, handle) {
+  // Captured before the first await: an in-place edit saves in the background,
+  // and a tab switch meanwhile must not redirect the write to another file.
+  handle = handle || state.handle;
+  if (!handle) return { ok: false, why: "no-handle" };
+  const known = handle === state.handle ? state.lastModified
+    : (state.tabs.find((t) => t.handle === handle) || {}).lastModified;
   try {
-    if (typeof state.handle.queryPermission === "function") {
-      let p = await state.handle.queryPermission({ mode: "readwrite" });
-      if (p !== "granted" && typeof state.handle.requestPermission === "function") {
+    if (typeof handle.queryPermission === "function") {
+      let p = await handle.queryPermission({ mode: "readwrite" });
+      if (p !== "granted" && typeof handle.requestPermission === "function") {
         // Succeeds when Ctrl+S was pressed in the viewer itself. From the
         // editor's own window it throws SecurityError, because activation
         // belongs to that window and this handle belongs to this page --
         // caller falls back to saveAs(), which has no such problem.
-        try { p = await state.handle.requestPermission({ mode: "readwrite" }); }
+        try { p = await handle.requestPermission({ mode: "readwrite" }); }
         catch (e) { return { ok: false, why: "no-activation" }; }
       }
       if (p !== "granted") return { ok: false, why: "denied" };
     }
-    const before = await state.handle.getFile();
-    if (before.lastModified !== state.lastModified) return { ok: false, why: "stale" };
+    const before = await handle.getFile();
+    if (before.lastModified !== known) return { ok: false, why: "stale", diskModified: before.lastModified };
 
-    const w = await state.handle.createWritable();
+    const w = await handle.createWritable();
     await w.write(text);
     await w.close();
 
     // Adopt our own write, or the watch poll sees a changed file one second
     // later and "reloads" the edit back over the top of itself.
-    state.lastModified = (await state.handle.getFile()).lastModified;
+    const lm = (await handle.getFile()).lastModified;
+    adoptModified(handle, lm);
     return { ok: true };
   } catch (e) {
     return { ok: false, why: "error", error: e };
   }
+}
+
+/** Record a file's new timestamp wherever that file is open -- on screen, in
+ *  a background tab, or both. */
+function adoptModified(handle, lm) {
+  if (state.handle === handle) state.lastModified = lm;
+  for (const t of state.tabs) if (t.handle === handle) t.lastModified = lm;
 }
 
 /** Last resort when there is no handle: hand the file back as a download. */
@@ -3427,6 +3505,8 @@ async function saveEditor() {
   editorStatus("Saving…");
   const res = await writeFile(state.text);
   if (res.ok) {
+    // The whole document went to disk, in-place edits included.
+    setDirty(false);
     editorStatus("Saved to " + (state.name || "file") + " at " + new Date().toLocaleTimeString());
     toast("Saved " + (state.name || "document"));
     return;
@@ -3458,6 +3538,7 @@ async function saveEditor() {
   const alt = await saveAs();
 
   if (alt.ok) {
+    setDirty(false);
     editorStatus("Saved to " + state.name + " at " + new Date().toLocaleTimeString() +
       " — later saves go straight there");
     toast("Saved " + state.name);
@@ -3481,6 +3562,242 @@ async function saveEditor() {
     : "Could not save: " + (alt.error && (alt.error.name || alt.error.message)),
     true, offerDownload);
   toast("Not saved — " + because.toLowerCase(), true);
+}
+
+/* --------------------------------------------------------- edit in place --
+   Typora's model: in edit mode, click any block and it turns into its own
+   Markdown source, right where it sits; click away and it renders again.
+
+   Only the clicked block's lines change. The parser stamps every top-level
+   block with the file lines it came from (data-src="start-end"), and a commit
+   splices exactly those lines back -- so the rest of the file keeps its
+   formatting, line endings, and git history byte for byte.
+
+   Each commit saves straight to the file when there is a handle to write
+   through. Without one the edit stays in the view (and the tab, which
+   outlives a refresh) until Ctrl+S finds it a home.
+   -------------------------------------------------------------------------- */
+
+const inlineEd = {
+  ta: null,          // the open <textarea>, or null
+  hidden: null,      // the rendered element it stands in for
+  start: 0, end: 0,  // file lines [start, end) it is editing
+  original: "",      // those lines as they were when opened
+};
+
+function setEditMode(on) {
+  if (on && !state.text) return;
+  if (!on) commitInline();
+  state.editMode = on;
+  document.body.classList.toggle("editing", on);
+  $("#btn-edit").setAttribute("aria-pressed", String(on));
+  toast(on ? "Edit mode — click any block to edit it. Esc to finish." : "Edit mode off");
+}
+
+/** Where in the source the click landed, roughly: the rendered text just
+ *  before the click point, found again in the Markdown. Markup between the
+ *  two (**, links) means an exact mapping isn't possible, so the longest tail
+ *  that still matches wins, nearest to the proportional position. */
+function caretFromPoint(block, x, y, src) {
+  const r = document.caretRangeFromPoint && document.caretRangeFromPoint(x, y);
+  if (!r || !block.contains(r.startContainer)) return src.length;
+  const pre = document.createRange();
+  pre.setStart(block, 0);
+  pre.setEnd(r.startContainer, r.startOffset);
+  const before = pre.toString().replace(/^#/, "");   // heading anchor glyph
+  if (!before) return 0;
+  for (let n = Math.min(16, before.length); n >= 2; n--) {
+    const tail = before.slice(-n);
+    let best = -1, at = src.indexOf(tail);
+    const aim = before.length * (src.length / Math.max(1, block.textContent.length));
+    while (at >= 0) {
+      if (best < 0 || Math.abs(at - aim) < Math.abs(best - aim)) best = at;
+      at = src.indexOf(tail, at + 1);
+    }
+    if (best >= 0) return best + n;
+  }
+  return src.length;
+}
+
+function openInline(block, caret) {
+  const [start, end] = block.dataset.src.split("-").map(Number);
+  const original = splitLines(state.text).slice(start, end).join("\n");
+  // A table carries its menu bar and interactive twin in a wrapper; all of it
+  // gives way to the source.
+  const hide = block.closest(".md-table-wrapper") || block;
+  const ta = document.createElement("textarea");
+  ta.className = "inline-editor";
+  // Source whose layout is the content -- code, tables, diagrams, raw HTML --
+  // reads in monospace; prose keeps the document's own font.
+  if (/^\s*(?:`{3}|~{3}|\|| {4}|<)/.test(original) || /\n\s*\|?[\s:|-]*-{3}/.test(original)) {
+    ta.classList.add("ie-code");
+  }
+  ta.spellcheck = !ta.classList.contains("ie-code");
+  ta.value = original;
+  hide.before(ta);
+  hide.classList.add("ie-hidden");
+  Object.assign(inlineEd, { ta, hidden: hide, start, end, original });
+
+  const fit = () => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + 2 + "px"; };
+  ta.addEventListener("input", fit);
+  ta.addEventListener("keydown", onInlineKey);
+  ta.addEventListener("blur", () => { if (inlineEd.ta === ta) commitInline(); });
+  fit();
+  const at = caret === undefined ? original.length : Math.max(0, Math.min(caret, original.length));
+  ta.focus({ preventScroll: true });
+  ta.setSelectionRange(at, at);
+}
+
+function closeInline() {
+  const { ta, hidden } = inlineEd;
+  inlineEd.ta = null;
+  inlineEd.hidden = null;
+  if (hidden) hidden.classList.remove("ie-hidden");
+  if (ta) ta.remove();
+}
+
+/**
+ * Apply the open edit to the document. Returns where it was and how many
+ * lines it grew or shrank by, so a caller about to open another block can
+ * find it again in the re-rendered page; null when nothing changed.
+ */
+function commitInline(cancel) {
+  if (!inlineEd.ta) return null;
+  const { start, end, original } = inlineEd;
+  const value = inlineEd.ta.value;
+  closeInline();
+  if (cancel || value === original) return null;
+
+  // Reloads are held off while an edit is open, so this is a backstop: never
+  // splice into lines that are no longer the ones that were opened.
+  if (splitLines(state.text).slice(start, end).join("\n") !== original) {
+    toast("The document changed while you were editing — your edit was not applied", true);
+    return null;
+  }
+  state.text = spliceSection(state.text, { start, end }, value);
+  state.dirty = true;
+  const y = els.scroller.scrollTop;
+  render();
+  els.scroller.scrollTo({ top: y, behavior: "instant" });
+  persist();
+  saveDocument(false);
+  return { start, delta: splitLines(value.replace(/\n+$/, "")).length - (end - start) };
+}
+
+function onInlineKey(e) {
+  const ta = e.currentTarget;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    e.stopPropagation();            // Esc here cancels the edit, not edit mode
+    commitInline(true);
+    return;
+  }
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    commitInline();
+    return;
+  }
+  // Arrow past either end walks into the neighbouring block, so a document
+  // can be read and fixed top to bottom without reaching for the mouse.
+  const atStart = ta.selectionStart === 0 && ta.selectionEnd === 0;
+  const atEnd = ta.selectionStart === ta.value.length && ta.selectionEnd === ta.value.length;
+  if ((e.key === "ArrowUp" && atStart) || (e.key === "ArrowDown" && atEnd)) {
+    const blocks = [...els.doc.querySelectorAll("[data-src]")];
+    const here = blocks.indexOf(inlineEd.hidden.matches("[data-src]") ? inlineEd.hidden
+      : inlineEd.hidden.querySelector("[data-src]"));
+    const target = blocks[here + (e.key === "ArrowUp" ? -1 : 1)];
+    if (!target) return;
+    e.preventDefault();
+    let line = Number(target.dataset.src.split("-")[0]);
+    const moved = commitInline();
+    if (moved && line > moved.start) line += moved.delta;
+    const el = [...els.doc.querySelectorAll("[data-src]")]
+      .find((b) => Number(b.dataset.src.split("-")[0]) >= line);
+    if (!el) return;
+    openInline(el, e.key === "ArrowUp" ? undefined : 0);
+    inlineEd.ta.scrollIntoView({ block: "nearest" });
+  }
+}
+
+// Capture phase: in edit mode a click on a link must not navigate, and that
+// has to be stopped before the link's own handling sees it.
+els.doc.addEventListener("click", (e) => {
+  if (!state.editMode || !state.text) return;
+  if (inlineEd.ta && inlineEd.ta.contains(e.target)) return;
+  if (e.target.closest(".code-copy, .md-table-menu, .md-table-interactive, details.frontmatter > summary")) return;
+  if (e.target.closest("a")) e.preventDefault();
+  // Close the previous editor first. Its blur usually has already, but not
+  // always (a click that never moved focus), and two open at once would each
+  // splice against line numbers the other is about to shift.
+  if (inlineEd.ta) commitInline();
+  // Either way the page may have re-rendered, detaching the element that was
+  // clicked. Whatever is under the pointer now is the same block, new render.
+  let target = e.target;
+  if (!els.doc.contains(target)) target = document.elementFromPoint(e.clientX, e.clientY);
+  const block = target && target.closest("[data-src]");
+  if (!block || !els.doc.contains(block)) return;
+  e.preventDefault();
+  const src = splitLines(state.text).slice(...block.dataset.src.split("-").map(Number)).join("\n");
+  openInline(block, caretFromPoint(block, e.clientX, e.clientY, src));
+}, true);
+
+/* ---------- saving in-place edits ---------- */
+
+let warnedUnlinked = false;
+
+function setDirty(on) {
+  state.dirty = on;
+  const t = state.tabs[state.tabIndex];
+  if (t) t.dirty = on;
+  els.name.classList.toggle("dirty", on);
+  renderTabs();
+}
+
+/**
+ * Write the document to its file. Automatic after each in-place commit
+ * (explicit = false): quiet on success, and never opens a dialog on its own.
+ * Ctrl+S (explicit = true) goes further -- it overwrites a file that changed
+ * on disk, and falls back to Save As when there is no file to write to.
+ */
+async function saveDocument(explicit) {
+  const text = state.text, handle = state.handle, name = state.name || "document";
+  if (!state.dirty && !explicit) return;
+  const done = () => {
+    // Only clean if nothing newer arrived while the write was in flight.
+    if (state.handle === handle && state.text === text) setDirty(false);
+    else { const t = state.tabs.find((x) => x.handle === handle && x.text === text); if (t) { t.dirty = false; renderTabs(); } }
+  };
+  setDirty(state.dirty);   // paint the marker now; the write may take a moment
+
+  if (handle) {
+    let res = await writeFile(text, handle);
+    if (!res.ok && res.why === "stale" && explicit) {
+      // Ctrl+S on a file that moved on disk: the deliberate keypress is the
+      // confirmation, same as the section editor's second Ctrl+S.
+      adoptModified(handle, res.diskModified);
+      res = await writeFile(text, handle);
+    }
+    if (res.ok) { done(); if (explicit) toast("Saved " + name); return; }
+    if (res.why === "stale") {
+      toast(name + " changed on disk since it was opened — not saved. Ctrl+S to overwrite it.", true);
+      return;
+    }
+    if (!explicit) {
+      toast("Couldn't save to " + name + " — press Ctrl+S to choose where", true);
+      return;
+    }
+  } else if (!explicit) {
+    if (!warnedUnlinked) toast("Edited in the view only — press Ctrl+S to save it to a file");
+    warnedUnlinked = true;
+    return;
+  }
+
+  const alt = await saveAs();
+  if (alt.ok) { setDirty(false); toast("Saved " + state.name); return; }
+  if (alt.why !== "cancelled") {
+    toast(alt.why === "unsupported" ? "This browser can't save files from a page opened with file://"
+      : "Could not save: " + (alt.error && (alt.error.name || alt.error.message)), true);
+  }
 }
 
 /* ---------- persistence ---------- */
@@ -3510,7 +3827,8 @@ function persist() {
     const saved = state.tabs.filter((t) => keep.has(t));
     localStorage.setItem("mdv:tabs", JSON.stringify({
       active: saved.indexOf(active),
-      tabs: saved.map((t) => ({ name: t.name, path: t.path, dir: t.dir, text: t.text, scroll: t.scroll || 0 })),
+      tabs: saved.map((t) => ({ name: t.name, path: t.path, dir: t.dir, text: t.text, scroll: t.scroll || 0,
+        dirty: !!t.dirty })),
     }));
     localStorage.removeItem("mdv:last");   // the single-document format this replaced
   } catch (_) { /* quota; not worth surfacing */ }
@@ -3532,7 +3850,7 @@ function restoreTabs() {
     const now = Date.now();
     state.tabs = saved.tabs.filter((t) => t && typeof t.text === "string" && t.text).map((t, n) => {
       const tab = { name: t.name || "", path: t.path || "", dir: t.dir || "", text: t.text,
-        handle: null, lastModified: 0, assets: null, scroll: Number(t.scroll) || 0,
+        handle: null, lastModified: 0, assets: null, scroll: Number(t.scroll) || 0, dirty: !!t.dirty,
         used: n === saved.active ? now : now - 1000 - n, restored: true };
       tab.key = docKey(tab);
       return tab;
@@ -3578,8 +3896,10 @@ function exportHtml() {
   const frozen = ":root{" + names.map((n) => "--" + n + ":" + vars.getPropertyValue("--" + n).trim() + ";").join("") + "}";
 
   const title = (state.name || "Markdown document").replace(/\.[^.]+$/, "");
+  commitInline();
   const body = els.doc.cloneNode(true);
   for (const b of body.querySelectorAll(".code-copy")) b.remove();
+  for (const n of body.querySelectorAll("[data-src]")) n.removeAttribute("data-src");
 
   const page = "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">" +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
@@ -3625,6 +3945,7 @@ function refreshNow() {
 $("#btn-refresh").addEventListener("click", refreshNow);
 $("#btn-watch").addEventListener("click", toggleWatch);
 $("#mi-edit").addEventListener("click", () => openEditor(null));
+$("#btn-edit").addEventListener("click", () => setEditMode(!state.editMode));
 $("#mi-export").addEventListener("click", exportHtml);
 $("#mi-print").addEventListener("click", () => window.print());
 $("#mi-clear-cache").addEventListener("click", clearCache);
@@ -3858,11 +4179,11 @@ window.addEventListener("keydown", (e) => {
     refreshNow();
     return;
   }
-  // Ctrl+E opens the section you are looking at; the editor's own host handles
-  // these too, for when focus is inside it.
+  // Ctrl+E toggles editing in place. The section-in-a-window editor stays on
+  // the menu and the contents pencils.
   if (mod && e.key.toLowerCase() === "e" && state.text) {
     e.preventDefault();
-    openEditor(null);
+    setEditMode(!state.editMode);
     return;
   }
   if (mod && e.key.toLowerCase() === "p" && state.text) {
@@ -3873,6 +4194,17 @@ window.addEventListener("keydown", (e) => {
   if (mod && e.key.toLowerCase() === "s" && editorOpen()) {
     e.preventDefault();
     saveEditor();
+    return;
+  }
+  if (mod && e.key.toLowerCase() === "s" && state.text) {
+    e.preventDefault();
+    // A commit with a file behind it is already saving itself; Ctrl+S is
+    // only needed for the rest -- nothing open, or nowhere to write yet.
+    if (!commitInline() || !state.handle) saveDocument(true);
+    return;
+  }
+  if (e.key === "Escape" && state.editMode && !inlineEd.ta && !document.querySelector(".pop:not([hidden])")) {
+    setEditMode(false);
     return;
   }
 

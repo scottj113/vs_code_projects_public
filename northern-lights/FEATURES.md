@@ -82,6 +82,7 @@ Complete feature inventory with status, timeline, and metadata.
 | **v3.0 — NAVIGATION** | | | | | | | | | |
 | File name as browser tab title | nav | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 3 | medium | UX | Browser tab shows the open .md file's name |
 | Document tabs | nav | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | Thin tab row under the toolbar (shown at 2+ docs); one tab per opened file, re-opening reuses its tab; `[` / `]` to switch, × or middle-click to close; per-tab scroll position; up to 12, oldest closes first |
+| Edit in place (Ctrl+E) | edit | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | critical | Workflow | Typora-style: in edit mode, click any block and it becomes its Markdown source right where it sits; click away (or Ctrl+Enter) to apply, Esc to cancel, ↑/↓ at the edges walk into neighbouring blocks. Only that block's lines are spliced, so formatting, line endings and the rest of the file stay byte-identical. Auto-saves each edit when the file is linked; otherwise ● marks unsaved edits until Ctrl+S. Section-in-a-window editor still on the ⋮ menu |
 | Tabs remembered across sessions | state | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | Tab text saved to localStorage (2M-char budget); restored tabs show in italics as saved copies until the file is opened again (file handles can't survive a refresh on file://) |
 
 ## Legend: Feature Type Codes
