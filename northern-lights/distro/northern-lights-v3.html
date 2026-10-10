@@ -438,6 +438,7 @@ button.btn {
 }
 button.btn:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
 button.btn:disabled { opacity: .4; cursor: default; }
+button.btn[hidden] { display: none; }   /* display:inline-flex above would beat the attribute */
 button.btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 button.btn.icon { padding: 5px 7px; }
 
@@ -545,13 +546,16 @@ body.no-toc #toc { display: none; }
 #docs-list a .doc-dir { display: block; font-size: 11px; color: var(--fg-faint); }
 #docs-list a.active .doc-dir { color: var(--accent); opacity: .85; }
 
-/* Where the editor lands when it cannot have a window of its own -- a blocked
-   popup, or a browser that won't let this page script one. A flex child rather
-   than an overlay, so the document reflows beside it instead of hiding under it. */
-#editor-dock {
-  flex: 0 0 44%; min-width: 320px; max-width: 60vw;
-  border-left: 1px solid var(--border); background: var(--bg-raised);
-  position: relative; overflow: hidden;
+/* Section edit (contents pencil): one red frame around the section, drawn as
+   an overlay so it doesn't break at the margins between blocks. */
+#page { position: relative; }
+#sec-frame {
+  position: absolute; z-index: 1; pointer-events: none;
+  border: 2px solid #d9534f; border-radius: 8px;
+}
+body.sec-editing #doc .sec-block { cursor: text; border-radius: 4px; }
+body.sec-editing #doc .sec-block:hover {
+  box-shadow: 0 0 0 5px var(--accent-soft), 0 0 0 6px var(--border-strong);
 }
 
 #scroller { flex: 1; overflow: auto; scroll-behavior: smooth; }
@@ -566,6 +570,63 @@ body.no-toc #toc { display: none; }
 #empty { display: none; padding: 6vh 24px 24px; }
 body.blank #empty { display: block; }
 body.blank #doc, body.blank #toc { display: none; }
+
+/* ---------- split view: read-only source pane ---------- */
+#source-pane, #split-handle { display: none; }
+body.split:not(.blank) #source-pane {
+  display: flex; flex-direction: column; flex: 0 0 var(--split-w, 38%);
+  min-width: 260px; max-width: 70vw; background: var(--bg-raised);
+}
+body.split:not(.blank) #split-handle {
+  display: block; flex: 0 0 5px; cursor: col-resize;
+  background: var(--border); border-left: 2px solid var(--bg-raised); border-right: 2px solid var(--bg-raised);
+}
+body.split:not(.blank) #split-handle:hover, body.split-dragging #split-handle { background: var(--accent); }
+body.split-dragging { cursor: col-resize; user-select: none; }
+#source-pane header {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-bottom: 1px solid var(--border); font-size: 12px; color: var(--fg-muted);
+}
+#src-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#source-pane .src-ro {
+  flex: none; font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--fg-faint); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+}
+#src-body {
+  flex: 1; overflow: auto; padding: 8px 0 40px; background: var(--bg);
+  font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--fg);
+}
+.src-lines .sl { display: flex; white-space: pre; padding-right: 14px; }
+.src-lines .ln {
+  flex: none; width: 4.2em; padding-right: 12px; text-align: right; color: var(--fg-faint);
+  user-select: none; -webkit-user-select: none;
+}
+.src-lines .lt { flex: 1; min-width: 0; }
+.src-lines .sl.hl { background: var(--accent-soft); }
+.src-lines .sl.hl .ln { color: var(--accent); }
+/* The way in: an icon pinned to the top-right corner of whatever you're editing. */
+#src-toggle {
+  position: absolute; z-index: 3; display: inline-flex; align-items: center; gap: 5px;
+  appearance: none; border: 1px solid var(--accent); border-radius: 999px;
+  background: var(--bg-raised); color: var(--accent); box-shadow: var(--shadow);
+  font: 600 11.5px/1 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 5px 10px 5px 8px;
+  cursor: pointer;
+}
+#src-toggle[hidden] { display: none; }
+#src-toggle .ico { font: 700 12px/1 ui-monospace, Consolas, monospace; }
+#src-toggle:hover { background: var(--accent-soft); }
+#src-toggle[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
+/* Source view (⋮ menu): the whole file as Markdown, instead of the rendered page. */
+#raw-view { display: none; }
+body.source-view #doc, body.source-view #sec-frame, body.source-view #src-toggle { display: none !important; }
+body.source-view:not(.blank) #raw-view {
+  display: block; padding: 10px 0; background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px;
+  font: calc(var(--doc-size, 15.5px) * .86)/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+body.source-view .toc-edit { display: none !important; }
+.src-lines .sl.h .lt { font-weight: 700; color: var(--accent); }
+#src-body .src-empty { padding: 14px 16px; color: var(--fg-faint); font: 12.5px/1.5 system-ui, sans-serif; white-space: normal; }
 #empty .card {
   max-width: 620px; margin: 0 auto; background: var(--bg-raised);
   border: 1px dashed var(--border-strong); border-radius: 12px;
@@ -843,7 +904,12 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
 .md .table-controls button:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .md .table-scroll { overflow-x: auto; }
 .md table { border-collapse: collapse; font-size: .94em; }
-.md th, .md td { border: 1px solid var(--border); padding: 7px 12px; text-align: left; }
+/* Markdown tables get their spacing from .md-table-wrapper; raw HTML ones need their own. */
+.md table:not([data-cols]) { margin: 0 0 1.15em; }
+.md th, .md td { border: 1px solid var(--border); padding: 7px 12px; }
+/* Left by default, but only by default: an author rule would beat the align
+   attribute that both raw HTML and Markdown's ---: columns rely on. */
+.md th:not([align]), .md td:not([align]) { text-align: left; }
 .md th { background: var(--bg-sunk); font-weight: 650; position: relative; -webkit-user-select: none; user-select: none; }
 .md th.hidden { display: none; }
 .md td.hidden { display: none; }
@@ -944,7 +1010,9 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
 .md dt { font-weight: 650; margin-top: .8em; }
 .md dd { margin: .2em 0 .2em 1.5em; color: var(--fg-muted); }
 
-.md img { max-width: 100%; height: auto; border-radius: 6px; filter: var(--visual-filter); }
+/* No height:auto: author CSS beats an <img height="64"> attribute, and
+   READMEs size their logos with exactly that. */
+.md img { max-width: 100%; border-radius: 6px; filter: var(--visual-filter); }
 .md .img-missing {
   display: inline-block; padding: 6px 10px; border: 1px dashed var(--border-strong);
   border-radius: 6px; color: var(--fg-faint); font-size: .8em;
@@ -983,12 +1051,15 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
   border: 1px solid #d9534f; border-radius: 8px; padding: 10px 13px;
   color: #d9534f; font-size: 13px; text-align: left; margin-bottom: .6em;
 }
+.md .mermaid-block .code-wrap { text-align: left; }   /* the source shown under an error */
+.md details:not(.frontmatter) { margin: 0 0 1.05em; }
+.md details:not(.frontmatter) > summary { cursor: pointer; }
 
 /* ---------- print ---------- */
 @media print {
   :root { color-scheme: light; }
   body { overflow: visible; background: #fff; }
-  #bar, #tabs, #toc, #drop, #toast, #empty { display: none !important; }
+  #bar, #tabs, #toc, #drop, #toast, #empty, #sec-frame, #source-pane, #split-handle, #src-toggle { display: none !important; }
   #shell { position: static; display: block; }
   #scroller { overflow: visible; }
   #page { max-width: none; padding: 0; }
@@ -1123,6 +1194,7 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
     <button type="button" class="btn icon" id="btn-more" title="More actions"
             aria-haspopup="true" aria-expanded="false">&#8942;</button>
     <div class="pop pop-menu" id="pop-more" hidden>
+      <label class="pop-check"><input type="checkbox" id="chk-source"> View Markdown source <span class="hint">read-only</span></label>
       <label class="pop-check"><input type="checkbox" id="chk-raw"> Allow raw HTML <span class="hint">sanitized</span></label>
       <p class="pop-head">Bumper lanes</p>
       <div class="seg" id="seg-bumpers" role="group">
@@ -1133,7 +1205,7 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
         <button type="button" data-v="40">40%</button>
       </div>
       <hr>
-      <button type="button" class="mi" id="mi-edit" disabled>Edit this section in a window&hellip;</button>
+      <button type="button" class="mi" id="mi-edit" disabled>Edit this section</button>
       <button type="button" class="mi" id="mi-export" disabled>Export standalone HTML&hellip;</button>
       <button type="button" class="mi" id="mi-print" disabled>Print / Save as PDF <kbd>Ctrl+P</kbd></button>
       <hr>
@@ -1169,8 +1241,15 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
         </div>
       </div>
       <article class="md" id="doc"></article>
+      <div id="raw-view" class="src-lines" aria-label="Markdown source (read-only)"></div>
     </div>
   </div>
+  <!-- Split view: read-only Markdown for whatever block you're on. -->
+  <div id="split-handle" title="Drag to resize"></div>
+  <aside id="source-pane" aria-label="Markdown source (read-only)">
+    <header><span id="src-label"></span><span class="src-ro">read-only</span></header>
+    <div id="src-body" class="src-lines"></div>
+  </aside>
 </div>
 
 <div id="drop"><span>Drop markdown here</span></div>
@@ -1391,7 +1470,29 @@ function highlight(code, lang) {
    NUL-delimited placeholders so later regexes can't reach inside them.
    ========================================================================== */
 
-const BLOCK_START = /^ {0,3}(?:#{1,6}\s|>|(?:[-*+]|\d{1,9}[.)])(?:\s|$)|```|~~~|<|(?:\*\s*){3,}$|(?:-\s*){3,}$|(?:_\s*){3,}$)/;
+/* HTML blocks, by CommonMark's rules -- which GitHub follows, so files written
+   for it render the way their authors saw them. Three kinds matter here:
+     - verbatim: <pre>, <script>, <style>, <textarea> run to their closing
+       tag, blank lines and all;
+     - block tags (div, p, table, details, ...) run to the next blank line,
+       and can cut a paragraph short;
+     - any other tag counts only when it is alone on its line, and cannot
+       interrupt a paragraph -- so "<b>Note:</b> **this**" stays a paragraph
+       with inline HTML in it, markdown intact.
+   Comments are separate: dropped whole, up to their -->, wherever they span. */
+const HTML_VERBATIM = /^ {0,3}<(script|pre|style|textarea)(?:\s|>|$)/i;
+const HTML_BLOCK_TAGS = "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|" +
+  "dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|" +
+  "legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|" +
+  "td|tfoot|th|thead|title|tr|track|ul";
+const HTML_BLOCK = new RegExp("^ {0,3}</?(?:" + HTML_BLOCK_TAGS + ")(?:\\s|/?>|$)", "i");
+const HTML_LONE_TAG = /^ {0,3}(?:<[A-Za-z][\w-]*(?:\s+[A-Za-z_:][\w:.\-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*\s*\/?>|<\/[A-Za-z][\w-]*\s*>)\s*$/;
+// A comment that opens a block: unclosed on this line, or closed with nothing after it.
+const HTML_COMMENT_BLOCK = /^ {0,3}<!--(?![\s\S]*-->[\s\S]*\S)/;
+
+const BLOCK_START = new RegExp("^ {0,3}(?:#{1,6}\\s|>|(?:[-*+]|\\d{1,9}[.)])(?:\\s|$)|```|~~~|" +
+  "<!--|</?(?:" + HTML_BLOCK_TAGS + ")(?:\\s|/?>|$)|<(?:script|pre|style|textarea)(?:\\s|>|$)|" +
+  "(?:\\*\\s*){3,}$|(?:-\\s*){3,}$|(?:_\\s*){3,}$)", "i");
 
 // Tags allowed through when the raw-HTML toggle is on.
 const OK_TAGS = new Set(("a abbr address article aside audio b bdi bdo big blockquote br caption center cite code col colgroup " +
@@ -1587,8 +1688,24 @@ function blocks(lines, ctx, opts) {
       const r = defList(lines, i, ctx); i = r.next; out += mark(r.html, from); continue;
     }
 
-    // --- raw HTML block ---
-    if (ctx.rawHtml && /^ {0,3}<(?:[A-Za-z][\w:.\-]*|!--)/.test(line)) {
+    // --- HTML comment: never shown, raw HTML on or off. Ends at its -->, not
+    //     at a blank line -- a template note spanning paragraphs would
+    //     otherwise reach the page unclosed and swallow everything after it.
+    if (HTML_COMMENT_BLOCK.test(line)) {
+      while (i < lines.length && !lines[i].includes("-->")) i++;
+      i++;
+      continue;
+    }
+
+    // --- raw HTML block (see HTML_VERBATIM above for the three kinds) ---
+    if (ctx.rawHtml && HTML_VERBATIM.test(line)) {
+      const close = new RegExp("</" + line.match(HTML_VERBATIM)[1] + ">", "i");
+      const buf = [];
+      while (i < lines.length) { buf.push(lines[i]); i++; if (close.test(buf[buf.length - 1])) break; }
+      out += mark(buf.join("\n"), from);
+      continue;
+    }
+    if (ctx.rawHtml && (HTML_BLOCK.test(line) || HTML_LONE_TAG.test(line))) {
       const buf = [];
       while (i < lines.length && !isBlank(i)) { buf.push(lines[i]); i++; }
       out += mark(buf.join("\n"), from);
@@ -1846,10 +1963,15 @@ function inline(src, ctx, stash) {
         ">" + inline(text, ctx, stash) + "</a>");
     });
 
-  // 10. Everything still unclaimed is plain text.
+  // 10. Entity references (&nbsp; &copy; &#124;) are markdown, not text to
+  //     escape -- READMEs space their badges with &nbsp;. After links, whose
+  //     URLs go through safeUrl(), which would strip a placeholder's NULs.
+  s = s.replace(/&(?:#\d{1,7}|#[xX][\da-fA-F]{1,6}|[A-Za-z][A-Za-z\d]{1,31});/g, (e) => isEntity(e) ? keep(e) : e);
+
+  // 11. Everything still unclaimed is plain text.
   s = esc(s);
 
-  // 11. Emphasis. `_` requires word boundaries so snake_case survives.
+  // 12. Emphasis. `_` requires word boundaries so snake_case survives.
   s = s
     .replace(/\*\*\*(?=\S)([\s\S]*?\S)\*\*\*/g, "<em><strong>$1</strong></em>")
     .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "<strong>$1</strong>")
@@ -1859,15 +1981,32 @@ function inline(src, ctx, stash) {
     .replace(/~~(?=\S)([\s\S]*?\S)~~/g, "<del>$1</del>")
     .replace(/==(?=\S)([\s\S]*?\S)==/g, "<mark>$1</mark>");
 
-  // 12. Bare URLs.
+  // 13. Bare URLs.
   s = s.replace(/(^|[\s(])(https?:\/\/[^\s<>"')\]]+[^\s<>"')\].,;:!?])/g,
     (_, pre, u) => pre + '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + u + "</a>");
 
-  // 13. Hard breaks: two trailing spaces, or a trailing backslash.
+  // 14. Hard breaks: two trailing spaces, or a trailing backslash.
   s = s.replace(/ {2,}\n/g, "<br>\n").replace(/\\\n/g, "<br>\n");
 
-  // 14. Restore.
+  // 15. Restore.
   return s.replace(/\u0000(\d+)\u0000/g, (_, n) => stash[+n]);
+}
+
+/** Whether a named reference is a real HTML entity. Passing an unknown one
+ *  through isn't safe either: the browser reads a legacy prefix without its
+ *  semicolon, so &notanentity; would show as "¬anentity;". The browser's own
+ *  decoder is the authority -- a real entity decodes completely, leaving no
+ *  trailing ";" behind. */
+const entityProbe = document.createElement("textarea");
+const entityCache = new Map();
+function isEntity(ref) {
+  if (ref[1] === "#") return true;
+  if (!entityCache.has(ref)) {
+    entityProbe.innerHTML = ref;
+    const out = entityProbe.value;
+    entityCache.set(ref, out !== ref && !out.endsWith(";"));
+  }
+  return entityCache.get(ref);
 }
 
 function image(alt, url, title, ctx) {
@@ -1999,6 +2138,7 @@ const state = {
   tabs: [],
   tabIndex: -1,
   editMode: false,   // click-to-edit in place (Ctrl+E)
+  editScope: null,   // { id, start, end }: in-place editing confined to one section (contents pencil)
   dirty: false,      // in-place edits not yet written to the file
   watchTimer: null,
   mermaidSources: [],
@@ -2129,7 +2269,6 @@ function applyTheme(rerenderDiagrams) {
   }
 
   try { localStorage.setItem("mdv:appearance", JSON.stringify(a)); } catch (e) { /* quota */ }
-  paintEditorTheme();
   if (rerenderDiagrams && mermaidReady) renderMermaid();
 }
 
@@ -2182,6 +2321,9 @@ function render() {
     els.name.classList.remove("dirty");
     $("#btn-edit").hidden = true;
     if (state.editMode) setEditMode(false);
+    state.editScope = null;
+    document.body.classList.remove("sec-editing");
+    paintSectionFrame();
     document.title = "Northern Lights MD Viewer";
     els.meta.textContent = "";
     state.headings = [];
@@ -2201,6 +2343,12 @@ function render() {
   // Before the old document leaves the screen, so its scroll position can
   // still be read off the scroller.
   const switched = syncTabs();
+  // A section frame belongs to the document it was opened on.
+  if (switched && state.editScope) {
+    state.editScope = null;
+    document.body.classList.remove("sec-editing");
+    if (!state.editMode) setSplit(false);
+  }
 
   let { html, ctx } = parse(state.text, { rawHtml: state.rawHtml, assets: state.assets });
   state.mermaidSources = ctx.mermaid;
@@ -2209,8 +2357,19 @@ function render() {
   // rather than cached anywhere longer-lived.
   state.headings = ctx.headings;
 
-  els.doc.innerHTML = html;
-  if (state.rawHtml) sanitize(els.doc);
+  if (state.rawHtml) {
+    // Sanitize inside an inert <template>, never after insertion: a live
+    // document acts on some elements the instant they arrive -- a
+    // <meta http-equiv="refresh"> navigates away, <base> re-roots every
+    // link, <iframe>/<link> start fetching -- before a later pass could
+    // remove them. Template content runs nothing and loads nothing.
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html;
+    sanitize(tpl.content);
+    els.doc.replaceChildren(tpl.content);
+  } else {
+    els.doc.innerHTML = html;
+  }
 
   document.body.classList.remove("blank");
   buildToc(ctx.headings);
@@ -2220,7 +2379,7 @@ function render() {
   const words = els.doc.textContent.trim().split(/\s+/).filter(Boolean).length;
   els.name.textContent = state.name || "Pasted markdown";
   els.name.classList.toggle("dirty", state.dirty);
-  $("#btn-edit").hidden = false;
+  $("#btn-edit").hidden = state.sourceView;
   document.title = state.name || "Pasted markdown";
   updatePathPanel();
   els.meta.textContent = words.toLocaleString() + " words · ~" + Math.max(1, Math.round(words / 220)) + " min";
@@ -2229,7 +2388,7 @@ function render() {
   $("#mi-print").disabled = false;
   $("#mi-edit").disabled = false;
   updateSync();
-  syncEditor();
+  markSection();
 
   if (location.hash && !location.hash.startsWith("#md64=")) {
     const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
@@ -2242,6 +2401,9 @@ function render() {
   // "instant", not a plain scrollTop assignment: #scroller has smooth
   // scrolling, which would animate the whole way down a long document.
   if (switched) els.scroller.scrollTo({ top: state.tabs[state.tabIndex].scroll || 0, behavior: "instant" });
+  updateSourcePane();
+  placeSrcToggle();
+  paintRawView();
 }
 
 function buildToc(headings) {
@@ -2256,7 +2418,7 @@ function buildToc(headings) {
     const label = esc(h.text.replace(/[*_`~]/g, ""));
     const pencil = typeof h.line === "number"
       ? '<button type="button" class="toc-edit" data-edit="' + esc(h.id) + '" tabindex="-1" ' +
-        'title="Edit this section (Ctrl+E)" aria-label="Edit section: ' + label + '">&#9998;</button>'
+        'title="Edit this section in place" aria-label="Edit section: ' + label + '">&#9998;</button>'
       : "";
     return '<div class="toc-row"><a href="#' + esc(h.id) + '" class="lv' + (h.level - min + 1) +
       '" data-id="' + esc(h.id) + '">' + label + "</a>" + pencil + "</div>";
@@ -2424,8 +2586,7 @@ async function openLibraryDoc(i) {
   if (!d) return;
   // Switching documents replaces state.text wholesale; an open edit of the
   // outgoing one would be dropped without a word.
-  if (!discardEdits("Switch documents and lose them?")) return;
-  closeEditor(true);
+  commitInline();
   try {
     const file = d.file || await d.handle.getFile();
     const text = await file.text();
@@ -2569,8 +2730,7 @@ async function loadFiles(fileList, handlePromises) {
 }
 
 function loadText(text, name, path) {
-  if (!discardEdits("Load a different document and lose them?")) return;
-  closeEditor(true);
+  commitInline();
   releaseAssets();
   setLibrary([]);
   state.name = name || "";
@@ -2663,8 +2823,7 @@ function removeTab(n) {
 async function activateTab(i) {
   const t = state.tabs[i];
   if (!t || i === state.tabIndex) return;
-  if (!discardEdits("Switch documents and lose them?")) return;
-  closeEditor(true);
+  commitInline();
   stopWatching();
   // writeFile() adopts its own write's timestamp after the render that synced
   // the tab; without this, coming back would "reload" our own save.
@@ -2699,8 +2858,7 @@ function closeTab(n) {
     persist();
     return;
   }
-  if (!discardEdits("Close this document and lose them?")) return;
-  closeEditor(true);
+  commitInline();
   removeTab(n);
   state.tabIndex = -1;
   if (state.tabs.length) { activateTab(Math.min(n, state.tabs.length - 1)); return; }
@@ -2878,87 +3036,16 @@ function toggleWatch() {
   toast("Watching " + state.name + " for changes");
 }
 
-/* ----------------------------------------------------------------- editor --
-   One section of the raw Markdown, in a window of its own, written straight
-   back to the file with Ctrl+S.
+/* --------------------------------------------------------- section edit --
+   The contents sidebar's pencil: scroll to that section, frame it in red, and
+   edit it in place -- the same click-a-block editing as edit mode (Ctrl+E),
+   confined to the one section. Clicking outside it, Esc, or the same pencil
+   again finishes.
 
-   Two hosts, one UI: a real popup window when the browser allows it, an
-   in-page pane when it doesn't. That is why these styles live in a string
-   instead of #app-css -- a popup is a separate document and cannot use the
-   opener's stylesheet, and having the rules twice would let them drift.
+   The section is tracked by file lines, not by its heading: retitling the
+   heading is an ordinary edit, and it changes the id. commitInline() grows
+   or shrinks the range as blocks inside it are edited.
    -------------------------------------------------------------------------- */
-
-const EDITOR_CSS = [
-  ".mdv-editor { display: flex; flex-direction: column; height: 100%; width: 100%;",
-  "  font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--fg);",
-  "  background: var(--bg-raised); position: absolute; inset: 0; }",
-  ".mdv-editor header { display: flex; align-items: center; gap: 8px; flex: none;",
-  "  padding: 8px 10px; border-bottom: 1px solid var(--border); }",
-  ".mdv-where { font-weight: 600; font-size: 12.5px; white-space: nowrap;",
-  "  overflow: hidden; text-overflow: ellipsis; }",
-  ".mdv-dirty { color: var(--accent); font-size: 15px; line-height: 1; }",
-  ".mdv-spacer { flex: 1; }",
-  ".mdv-btn { appearance: none; border: 1px solid var(--border-strong); background: var(--bg);",
-  "  color: var(--fg); border-radius: 6px; padding: 5px 9px; font: inherit; font-size: 12px;",
-  "  cursor: pointer; white-space: nowrap; }",
-  ".mdv-btn:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }",
-  ".mdv-btn:disabled { opacity: .4; cursor: default; }",
-  ".mdv-editor textarea { flex: 1; width: 100%; resize: none; border: 0; outline: 0;",
-  "  padding: 12px 14px; background: var(--bg); color: var(--fg); tab-size: 4;",
-  "  font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }",
-  ".mdv-foot { flex: none; display: flex; align-items: center; gap: 8px;",
-  "  padding: 6px 10px; border-top: 1px solid var(--border); min-height: 34px; }",
-  ".mdv-status { flex: 1; color: var(--fg-faint); font-size: 11.5px;",
-  "  overflow: hidden; text-overflow: ellipsis; }",
-  ".mdv-status.err { color: var(--accent); }",
-  ".mdv-act { flex: none; font-size: 11.5px; padding: 4px 8px; }",
-  ".mdv-cheatsheet-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5);",
-  "  display: flex; align-items: center; justify-content: center; z-index: 10000; }",
-  ".mdv-cheatsheet-content { background: var(--bg-raised); border: 1px solid var(--border);",
-  "  border-radius: 8px; padding: 20px; max-height: 80vh; overflow-y: auto;",
-  "  max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }",
-  ".mdv-cheatsheet-content h3 { margin: 14px 0 6px 0; font-size: 13px; color: var(--fg);",
-  "  font-weight: 600; }",
-  ".mdv-cheatsheet-content p { margin: 0 0 8px 0; font-family: monospace; font-size: 12px;",
-  "  color: var(--fg-muted); white-space: pre-wrap; word-break: break-word; }",
-  ".mdv-cheatsheet-content hr { border: none; border-top: 1px solid var(--border);",
-  "  margin: 12px 0; }",
-  ".mdv-cheatsheet-close { position: absolute; top: 12px; right: 12px; background: none;",
-  "  border: none; color: var(--fg-muted); font-size: 20px; cursor: pointer; padding: 0;",
-  "  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; }",
-  ".mdv-cheatsheet-close:hover { color: var(--fg); }",
-].join("\n");
-
-// Copied into the popup's root so it matches the viewer's palette. The popup
-// cannot inherit them: custom properties resolve per document.
-const EDITOR_VARS = ["--bg", "--bg-raised", "--bg-sunk", "--fg", "--fg-muted", "--fg-faint",
-  "--border", "--border-strong", "--accent", "--accent-soft", "--code-bg"];
-
-const editor = {
-  win: null,        // popup window, when it has one
-  dock: null,       // in-page <aside>, when it doesn't
-  ui: null,         // { where, dirty, ta, status }
-  id: null,         // heading id under edit; null means the whole document
-  base: "",         // state.text as it was when this section was loaded
-  loaded: "",       // section text as loaded, to detect an untouched editor
-  confirmStale: false,
-  action: null,     // what the status line's button does, when it has one
-};
-
-/** Self-healing: a closed window leaves every reference in editor.ui pointing
- *  into a document that no longer exists, and its unload event is not
- *  something to depend on -- it doesn't always arrive when the window is
- *  closed programmatically. Anything that touches the editor asks here first. */
-function editorOpen() {
-  if (editor.ui && editor.win && editor.win.closed) {
-    editor.win = null;
-    editor.ui = null;
-    editor.id = null;
-  }
-  return !!editor.ui;
-}
-
-const editorDirty = () => editorOpen() && editor.ui.ta.value !== editor.loaded;
 
 /** The heading the reader is looking at, per the TOC scroll-spy. */
 function activeHeadingId() {
@@ -2976,364 +3063,114 @@ function rangeFor(id) {
   return { id: null, level: 0, start: 0, end: total };
 }
 
-function editorLabel(id) {
-  const h = (state.headings || []).find((x) => x.id === id);
-  if (!h) return state.name || "Whole document";
-  return "#".repeat(h.level) + " " + h.text.replace(/[*_`~]/g, "");
+/** A block belongs to the section when its first source line falls in it. */
+function inSection(block) {
+  const s = state.editScope;
+  if (!s || !block || !block.dataset.src) return false;
+  const start = Number(block.dataset.src.split("-")[0]);
+  return start >= s.start && start < s.end;
 }
 
-function buildEditorUI(doc, host) {
-  if (!doc.getElementById("mdv-editor-css")) {
-    const style = doc.createElement("style");
-    style.id = "mdv-editor-css";
-    style.textContent = EDITOR_CSS;
-    doc.head.appendChild(style);
-  }
-
-  const mk = (tag, cls, text) => {
-    const n = doc.createElement(tag);
-    if (cls) n.className = cls;
-    if (text) n.textContent = text;
-    return n;
-  };
-
-  const root = mk("div", "mdv-editor");
-  const head = doc.createElement("header");
-  const where = mk("span", "mdv-where");
-  const dirty = mk("span", "mdv-dirty", "●");
-  dirty.hidden = true;
-  dirty.title = "Unsaved changes";
-  const save = mk("button", "mdv-btn mdv-save", "Save  Ctrl+S");
-  const close = mk("button", "mdv-btn mdv-close", "Close");
-  const cheatSheet = mk("button", "mdv-btn mdv-cheatsheet", "?");
-  cheatSheet.title = "Markdown syntax reference";
-  const selectFile = mk("button", "mdv-btn mdv-select-file", "📋");
-  selectFile.hidden = true;
-  selectFile.title = "Select file to save to";
-  head.append(where, dirty, mk("span", "mdv-spacer"), cheatSheet, selectFile, save, close);
-
-  const ta = doc.createElement("textarea");
-  ta.id = "editor-ta";
-  ta.spellcheck = false;
-  ta.wrap = "off";
-
-  const foot = mk("div", "mdv-foot");
-  const status = mk("div", "mdv-status");
-  const act = mk("button", "mdv-btn mdv-act");
-  act.hidden = true;
-  foot.append(status, act);
-
-  root.append(head, ta, foot);
-  host.appendChild(root);
-
-  save.addEventListener("click", () => saveEditor());
-  close.addEventListener("click", () => closeEditor());
-  cheatSheet.addEventListener("click", () => showCheatSheet(doc));
-  selectFile.addEventListener("click", openFilePickerForEditor);
-  act.addEventListener("click", () => { if (editor.action) editor.action(); });
-  ta.addEventListener("input", () => markEditorDirty());
-  // Bound to the host, not the document: the in-page pane shares its document
-  // with the app, so a document-level listener would both outlive the pane and
-  // fire for keystrokes aimed at the viewer.
-  host.addEventListener("keydown", onEditorKey);
-
-  return { where, dirty, ta, status, act, selectFile, cheatSheet };
-}
-
-function onEditorKey(e) {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-    e.preventDefault();
-    e.stopPropagation();
-    saveEditor();
-  } else if (e.key === "Escape") {
-    e.preventDefault();
-    closeEditor();
-  }
-}
-
-/** Try for a real window; fall back to a pane inside the page. */
-function openEditorHost() {
-  let w = null;
-  try {
-    w = window.open("", "mdv-editor", "width=780,height=640,resizable=yes,scrollbars=yes");
-  } catch (_) { w = null; }
-
-  // A blocked popup returns null; a cross-origin one throws on .document.
-  // about:blank inherits this page's origin, so on file:// the usual case is
-  // that it works -- but neither outcome is worth an error message when a
-  // pane in the page does the same job.
-  let body = null;
-  try { body = w && w.document && w.document.body; } catch (_) { body = null; }
-
-  if (body) {
-    w.document.title = "Editor — " + (state.name || "markdown");
-    body.style.cssText = "margin:0;height:100vh;overflow:hidden;background:var(--bg,#fff)";
-    body.textContent = "";
-    editor.win = w;
-    // Closing the window with unsaved edits is the one way to lose them
-    // silently, so ask. The answer isn't observable here, hence the split:
-    // prompt on beforeunload, tear down on unload once it's actually going.
-    w.addEventListener("beforeunload", (e) => {
-      if (!editorDirty()) return;
-      e.preventDefault();
-      e.returnValue = "";
-    });
-    w.addEventListener("unload", () => {
-      editor.win = null;
-      closeEditor(true);
-    });
-    return { doc: w.document, host: body };
-  }
-
-  const dock = document.createElement("aside");
-  dock.id = "editor-dock";
-  $("#shell").appendChild(dock);
-  editor.dock = dock;
-  return { doc: document, host: dock };
-}
-
-async function openEditor(id) {
-  if (!state.text) { toast("Open a document first", true); return; }
-
-  const wanted = id || (editorOpen() ? editor.id : null) || activeHeadingId();
-  const range = rangeFor(wanted);
-  const text = sliceSection(state.text, range);
-
-  if (!editorOpen()) {
-    const { doc, host } = openEditorHost();
-    editor.ui = buildEditorUI(doc, host);
-  }
-
-  editor.id = range.id;
-  editor.base = state.text;
-  editor.loaded = text;
-  editor.confirmStale = false;
-  editor.ui.ta.value = text;
-  editor.ui.where.textContent = editorLabel(range.id);
-  editor.ui.where.title = editor.ui.where.textContent;
-  paintEditorTheme();
-  markEditorDirty();
-  announceWriteTarget();
-
-  editor.ui.ta.focus();
-  if (editor.win) editor.win.focus();
-}
-
-/** Gate for anything that replaces state.text out from under an open edit. */
-function discardEdits(question) {
-  // An open in-place edit is kept, not discarded: applied to the document
-  // (and saved) before whatever is about to replace it.
+function editSection(id) {
+  if (!state.text || !id || state.sourceView) return;
   commitInline();
-  if (!editorDirty()) return true;
-  return window.confirm("This section has unsaved changes. " + question);
+  if (state.editScope && state.editScope.id === id) { endSectionEdit(); return; }
+  if (state.editMode) setEditMode(false, true);
+  const r = rangeFor(id);
+  if (!r.id) return;
+  state.editScope = { id, start: r.start, end: r.end };
+  document.body.classList.add("sec-editing");
+  markSection();
+  updateSourcePane();
+  const target = document.getElementById(id);
+  if (target) {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    history.replaceState(null, "", "#" + id);
+  }
+  const h = (state.headings || []).find((x) => x.id === id);
+  toast("Editing “" + (h ? h.text.replace(/[*_`~]/g, "") : "section") +
+    "” — click any part to change it. Esc to finish.");
 }
 
-function showCheatSheet(doc) {
-  const modal = doc.createElement("div");
-  modal.className = "mdv-cheatsheet-modal";
+function endSectionEdit(quiet) {
+  if (!state.editScope) return;
+  commitInline();
+  state.editScope = null;
+  document.body.classList.remove("sec-editing");
+  for (const b of els.doc.querySelectorAll(".sec-block")) b.classList.remove("sec-block");
+  paintSectionFrame();
+  if (!state.editMode) setSplit(false);
+  placeSrcToggle();
+  updateSourcePane();
+  if (!quiet) toast("Done editing");
+}
 
-  const content = doc.createElement("div");
-  content.className = "mdv-cheatsheet-content";
+/** Re-tag the section's blocks after a render replaced them all. */
+function markSection() {
+  if (!state.editScope) { paintSectionFrame(); return; }
+  let any = false;
+  for (const b of els.doc.querySelectorAll("[data-src]")) {
+    const on = inSection(b);
+    b.classList.toggle("sec-block", on);
+    any = any || on;
+  }
+  // Every line of it deleted: nothing left to frame.
+  if (!any) { endSectionEdit(true); return; }
+  paintSectionFrame();
+}
 
-  const close = doc.createElement("button");
-  close.className = "mdv-cheatsheet-close";
-  close.innerHTML = "✕";
-  close.addEventListener("click", () => modal.remove());
+/** One red frame around the whole section. Drawn as an overlay rather than
+ *  borders on the blocks, which would break at every margin between them. */
+function paintSectionFrame() {
+  let frame = document.getElementById("sec-frame");
+  const page = $("#page");
+  const parts = [...els.doc.querySelectorAll(".sec-block")].map((b) => {
+    const el = b.closest(".md-table-wrapper") || b;
+    // A block open for editing is hidden; its textarea stands in for it.
+    return el.classList.contains("ie-hidden") && inlineEd.hidden === el ? inlineEd.ta : el;
+  }).filter(Boolean);
+  if (!state.editScope || !parts.length) { if (frame) frame.remove(); return; }
 
-  content.innerHTML = `
-    <h3># Headings</h3>
-    <p># H1
-## H2
-### H3</p>
-    <hr>
-    <h3>Formatting</h3>
-    <p>**bold**
-*italic*
-***bold italic***
-\`code\`</p>
-    <hr>
-    <h3>Code blocks</h3>
-    <p>\`\`\`language
-code here
-\`\`\`</p>
-    <hr>
-    <h3>Links & Images</h3>
-    <p>[link text](url)
-![alt text](image.url)</p>
-    <hr>
-    <h3>Lists</h3>
-    <p>- bullet
-- item
-
-1. numbered
-2. item</p>
-    <hr>
-    <h3>Tables</h3>
-    <p>| Col 1 | Col 2 |
-|-------|-------|
-| cell  | cell  |</p>
-    <hr>
-    <h3>Other</h3>
-    <p>> blockquote
-
-[footnote][1]
-[1]: text
-
----</p>
-  `;
-
-  content.insertBefore(close, content.firstChild);
-  modal.appendChild(content);
-  doc.body.appendChild(modal);
-
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) modal.remove();
+  let top = Infinity, bottom = -Infinity;
+  for (const el of parts) {
+    const r = el.getBoundingClientRect();
+    top = Math.min(top, r.top);
+    bottom = Math.max(bottom, r.bottom);
+  }
+  if (!frame) {
+    frame = document.createElement("div");
+    frame.id = "sec-frame";
+    page.appendChild(frame);
+  }
+  const p = page.getBoundingClientRect(), d = els.doc.getBoundingClientRect();
+  Object.assign(frame.style, {
+    top: top - p.top - 10 + "px", height: bottom - top + 20 + "px",
+    left: d.left - p.left - 12 + "px", width: d.width + 24 + "px",
   });
+  placeSrcToggle();
 }
 
-function closeEditor(force) {
-  if (!editorOpen()) return;
-  if (!force && editorDirty() &&
-      !window.confirm("Discard unsaved changes to this section?")) return;
-
-  const win = editor.win;
-  if (editor.dock) editor.dock.remove();
-  editor.win = null;
-  editor.dock = null;
-  editor.ui = null;
-  editor.id = null;
-  if (win && !win.closed) win.close();
-  updateSync();
-}
-
-function markEditorDirty() {
-  if (!editorOpen()) return;
-  const d = editorDirty();
-  editor.ui.dirty.hidden = !d;
-  if (d) editor.confirmStale = false;   // a fresh edit re-arms the stale prompt
-}
-async function openFilePickerForEditor() {
-  if (!editorOpen()) return;
-  const host = (editor.win && !editor.win.closed) ? editor.win : window;
-  if (typeof host.showOpenFilePicker !== "function") {
-    editorStatus("This browser cannot open files", true);
-    return;
-  }
-  try {
-    const [handle] = await host.showOpenFilePicker({
-      multiple: false,
-      types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
-    });
-    state.handle = handle;
-    state.dirAnchor = handle;
-    state.name = handle.name;
-    announceWriteTarget();
-    await saveEditor();
-  } catch (e) {
-    if (e && e.name !== "AbortError") {
-      editorStatus("Could not open file: " + (e.message || e.name), true);
-    }
-  }
-}
-
-function editorStatus(msg, isError, action) {
-  if (!editorOpen()) return;
-  // Anything that resolves later checks this before writing, so a slow
-  // permission query cannot land on top of a save result.
-  editor.statusSeq = (editor.statusSeq || 0) + 1;
-  editor.ui.status.textContent = msg || "";
-  editor.ui.status.title = msg || "";
-  editor.ui.status.classList.toggle("err", !!isError);
-  editor.action = action ? action.run : null;
-  editor.ui.act.hidden = !action;
-  if (action) editor.ui.act.textContent = action.label;
-}
+// Images arriving, diagrams rendering, an editor growing as you type: all of
+// them move the section's edges without a render to catch it.
+new ResizeObserver(() => { if (state.editScope) paintSectionFrame(); else placeSrcToggle(); }).observe(els.doc);
 
 /**
- * Says what Ctrl+S will do, before a key is pressed. It only *queries* -- the
- * permission prompt cannot be raised here, and the reason is worth writing down
- * because it is not obvious and it wasted a day:
- *
- *   window.open() spends the click's transient user activation. By the time the
- *   editor window exists, this page has none left, so requestPermission() fails
- *   with SecurityError. Nor can the popup make up for it: activation is
- *   per-browsing-context, and the handle belongs to this page, not the popup.
- *   Measured, not assumed -- see tools/Probe-FileWrite.html, test 4.
- *
- * So the prompt is raised at save time instead, by whichever window the user
- * actually pressed Ctrl+S in. See saveAs().
- */
-function announceWriteTarget() {
-  const canSaveAs = typeof (editor.win || window).showSaveFilePicker === "function";
-
-  if (!state.handle) {
-    if (state.path) {
-      const connectAction = {
-        label: "Open file",
-        run: async () => {
-          const host = (editor.win && !editor.win.closed) ? editor.win : window;
-          if (typeof host.showOpenFilePicker !== "function") {
-            editorStatus("This browser cannot open files", true);
-            return;
-          }
-          try {
-            const [handle] = await host.showOpenFilePicker({
-              multiple: false,
-              types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".mkd"], "text/plain": [".txt"] } }],
-            });
-            state.handle = handle;
-            state.dirAnchor = handle;
-            state.name = handle.name;
-            announceWriteTarget();
-          } catch (e) {
-            if (e && e.name !== "AbortError") {
-              editorStatus("Could not open file: " + (e.message || e.name), true);
-            }
-          }
-        }
-      };
-      editorStatus("To save edits back to the original file, click Open file", false, connectAction);
-    } else {
-      editorStatus(canSaveAs
-        ? "Not connected to a file — Ctrl+S will ask where to save"
-        : "This browser cannot write files — Ctrl+S will offer a download", !canSaveAs);
-    }
-    return;
-  }
-  if (typeof state.handle.queryPermission !== "function") {
-    editorStatus("Editing " + state.name + " — Ctrl+S saves");
-    return;
-  }
-
-  editorStatus("Editing " + state.name + "…");
-  const seq = editor.statusSeq;
-  const settle = (msg, isError) => {
-    if (editorOpen() && editor.statusSeq === seq) editorStatus(msg, isError);
-  };
-
-  state.handle.queryPermission({ mode: "readwrite" }).then((p) => {
-    settle(p === "granted"
-      ? "Editing " + state.name + " — Ctrl+S saves"
-      : "Editing " + state.name + " — Ctrl+S will ask for permission to write it");
-  }).catch((e) => {
-    settle("Could not check write access: " + (e.name || e.message), true);
-  });
-}
-
-/**
- * Save As, raised on the window the gesture happened in.
- *
- * This is the reliable route: choosing a file in the dialog *is* the write
- * grant, so there is no separate permission that can be refused. Calling it as
- * editor.win.showSaveFilePicker() rather than window.showSaveFilePicker() is
- * the whole trick -- the popup has the activation, this page does not.
- *
- * The handle it returns is adopted, so this costs one dialog per session and
- * every save afterwards is silent.
+ * Save As. The fallback when a document has no file behind it, or the file
+ * won't grant write access: choosing a file in the dialog *is* the grant, so
+ * there is no separate permission that can be refused. The handle it returns
+ * is adopted, so this costs one dialog per session and every save afterwards
+ * is silent.
  */
 async function saveAs() {
-  const host = (editor.win && !editor.win.closed) ? editor.win : window;
-  if (typeof host.showSaveFilePicker !== "function") return { ok: false, why: "unsupported" };
+  if (typeof window.showSaveFilePicker !== "function") return { ok: false, why: "unsupported" };
+
+  // A document from the VS Code task knows its full path: put it where the
+  // dialog's File name box can take it (Ctrl+V, Enter) to save over the
+  // original. Not awaited -- the picker needs this gesture's activation.
+  if (state.path && navigator.clipboard) {
+    navigator.clipboard.writeText(state.path).then(
+      () => toast("Path copied — paste it into the File name box (Ctrl+V, Enter)"), () => {});
+  }
 
   try {
     const opts = {
@@ -3344,7 +3181,7 @@ async function saveAs() {
     // the default gesture rather than a hunt through the tree.
     if (state.handle || state.dirAnchor) opts.startIn = state.handle || state.dirAnchor;
 
-    const handle = await host.showSaveFilePicker(opts);
+    const handle = await window.showSaveFilePicker(opts);
     const w = await handle.createWritable();
     await w.write(state.text);
     await w.close();
@@ -3360,37 +3197,6 @@ async function saveAs() {
     if (e && e.name === "AbortError") return { ok: false, why: "cancelled" };
     return { ok: false, why: "error", error: e };
   }
-}
-
-/** Follow the viewer's palette into the popup, including later theme changes. */
-function paintEditorTheme() {
-  if (!editor.win || editor.win.closed) return;
-  const from = getComputedStyle(document.documentElement);
-  const root = editor.win.document.documentElement;
-  for (const v of EDITOR_VARS) root.style.setProperty(v, from.getPropertyValue(v).trim());
-  root.style.colorScheme = activeMode();
-}
-
-/**
- * Re-point the open editor after the document was re-rendered. The line
- * numbers it was opened against are gone, so the range is recomputed from the
- * heading id. An untouched editor simply reloads; one with edits in it is left
- * alone and warned, because reloading would throw the edits away.
- */
-function syncEditor() {
-  if (!editorOpen()) return;
-  if (editorDirty()) {
-    if (state.text !== editor.base) {
-      editorStatus("The document changed underneath this edit — saving will overwrite it", true);
-    }
-    return;
-  }
-  const range = rangeFor(editor.id);
-  editor.base = state.text;
-  editor.loaded = sliceSection(state.text, range);
-  editor.ui.ta.value = editor.loaded;
-  editor.ui.where.textContent = editorLabel(range.id);
-  markEditorDirty();
 }
 
 /**
@@ -3411,10 +3217,8 @@ async function writeFile(text, handle) {
     if (typeof handle.queryPermission === "function") {
       let p = await handle.queryPermission({ mode: "readwrite" });
       if (p !== "granted" && typeof handle.requestPermission === "function") {
-        // Succeeds when Ctrl+S was pressed in the viewer itself. From the
-        // editor's own window it throws SecurityError, because activation
-        // belongs to that window and this handle belongs to this page --
-        // caller falls back to saveAs(), which has no such problem.
+        // Only succeeds inside a user gesture. The first in-place commit has
+        // one (the click away, or the arrow key); Ctrl+S always does.
         try { p = await handle.requestPermission({ mode: "readwrite" }); }
         catch (e) { return { ok: false, why: "no-activation" }; }
       }
@@ -3444,126 +3248,6 @@ function adoptModified(handle, lm) {
   for (const t of state.tabs) if (t.handle === handle) t.lastModified = lm;
 }
 
-/** Last resort when there is no handle: hand the file back as a download. */
-function downloadMarkdown(text) {
-  const a = document.createElement("a");
-  const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
-  a.href = URL.createObjectURL(blob);
-  a.download = state.name || "document.md";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-}
-
-/**
- * Ctrl+S. Splices the section into the document first and re-renders, so the
- * edit is always visible even when it cannot reach the disk, then writes.
- */
-async function saveEditor() {
-  if (!editorOpen()) return;
-
-  const range = rangeFor(editor.id);
-  if (editor.id && range.id !== editor.id) {
-    editorStatus("That heading is gone from the document — close and reopen the editor", true);
-    return;
-  }
-  // Edits composed against an older version of the file: one keypress to
-  // reconsider, a second to go ahead anyway.
-  if (state.text !== editor.base && !editor.confirmStale) {
-    editor.confirmStale = true;
-    editorStatus("Document changed since you started — press Ctrl+S again to overwrite", true);
-    return;
-  }
-
-  const merged = spliceSection(state.text, range, editor.ui.ta.value);
-  const unchanged = merged === state.text;
-
-  state.text = merged;
-  const y = els.scroller.scrollTop;
-  render();                     // re-stamps heading lines; syncEditor() re-points us
-  els.scroller.scrollTop = y;
-  persist();
-
-  editor.base = state.text;
-  editor.loaded = editor.ui.ta.value;
-  editor.confirmStale = false;
-  markEditorDirty();
-
-  if (unchanged && state.handle) { editorStatus("No changes to save"); return; }
-
-  // For bootstrap files (VS Code task), require connecting to the file first
-  if (state.path && !state.handle) {
-    editorStatus("Select your file first — click the 📋 icon to choose", true);
-    if (editor.ui && editor.ui.selectFile) {
-      editor.ui.selectFile.hidden = false;
-    }
-    return;
-  }
-  if (editor.ui && editor.ui.selectFile) {
-    editor.ui.selectFile.hidden = true;
-  }
-
-  editorStatus("Saving…");
-  const res = await writeFile(state.text);
-  if (res.ok) {
-    // The whole document went to disk, in-place edits included.
-    setDirty(false);
-    editorStatus("Saved to " + (state.name || "file") + " at " + new Date().toLocaleTimeString());
-    toast("Saved " + (state.name || "document"));
-    return;
-  }
-  // The one failure Save As must not paper over: the bytes on disk are not the
-  // ones this edit was composed against, so writing would discard someone's
-  // work -- possibly the user's own, in their editor.
-  if (res.why === "stale") {
-    // File changed on disk. Update our timestamp so next save can proceed if user wants to overwrite.
-    try {
-      state.lastModified = (await state.handle.getFile()).lastModified;
-    } catch (e) { /* handle error */ }
-    editorStatus("The file changed on disk — reload it before saving, or click Save again to overwrite", true);
-    toast("File changed on disk. Reload first, or Save again to overwrite.", true);
-    return;
-  }
-
-  // Everything else means "this handle cannot take the write": there is none,
-  // the browser will not upgrade it, or the prompt could not be raised from
-  // the window Ctrl+S was pressed in. Save As answers all three, because
-  // choosing the file in the dialog is itself the grant.
-  const because =
-    res.why === "denied" ? "Write access to " + state.name + " was refused" :
-    res.why === "error" ? "Could not write " + state.name + " (" + res.error.name + ")" :
-    res.why === "no-handle" ? "This document isn't connected to a file" :
-    "This edit needs a file to write to";
-
-  editorStatus(because + " — choose where to save…");
-  const alt = await saveAs();
-
-  if (alt.ok) {
-    setDirty(false);
-    editorStatus("Saved to " + state.name + " at " + new Date().toLocaleTimeString() +
-      " — later saves go straight there");
-    toast("Saved " + state.name);
-    return;
-  }
-
-  // Offer the download rather than performing it: a copy appearing in Downloads
-  // reads as a successful save until you check the file you meant to edit.
-  const offerDownload = { label: "Download instead", run: () => {
-    downloadMarkdown(state.text);
-    editorStatus("Downloaded " + (state.name || "document.md") + " — your original is untouched");
-  } };
-
-  if (alt.why === "cancelled") {
-    editorStatus(because + ", and saving was cancelled. The edit is in the view only.",
-      true, offerDownload);
-    return;
-  }
-  editorStatus(alt.why === "unsupported"
-    ? "This browser cannot write files from a page opened with file://"
-    : "Could not save: " + (alt.error && (alt.error.name || alt.error.message)),
-    true, offerDownload);
-  toast("Not saved — " + because.toLowerCase(), true);
-}
-
 /* --------------------------------------------------------- edit in place --
    Typora's model: in edit mode, click any block and it turns into its own
    Markdown source, right where it sits; click away and it renders again.
@@ -3585,13 +3269,16 @@ const inlineEd = {
   original: "",      // those lines as they were when opened
 };
 
-function setEditMode(on) {
-  if (on && !state.text) return;
+function setEditMode(on, quiet) {
+  if (on && (!state.text || state.sourceView)) return;
   if (!on) commitInline();
+  if (on) endSectionEdit(true);   // the whole document supersedes one section
   state.editMode = on;
   document.body.classList.toggle("editing", on);
   $("#btn-edit").setAttribute("aria-pressed", String(on));
-  toast(on ? "Edit mode — click any block to edit it. Esc to finish." : "Edit mode off");
+  if (!on && !state.editScope) setSplit(false);
+  placeSrcToggle();
+  if (!quiet) toast(on ? "Edit mode — click any block to edit it. Esc to finish." : "Edit mode off");
 }
 
 /** Where in the source the click landed, roughly: the rendered text just
@@ -3646,6 +3333,10 @@ function openInline(block, caret) {
   const at = caret === undefined ? original.length : Math.max(0, Math.min(caret, original.length));
   ta.focus({ preventScroll: true });
   ta.setSelectionRange(at, at);
+  if (state.editScope) paintSectionFrame();
+  ta.addEventListener("input", updateSourcePane);   // the pane follows live
+  updateSourcePane();
+  placeSrcToggle();
 }
 
 function closeInline() {
@@ -3654,6 +3345,9 @@ function closeInline() {
   inlineEd.hidden = null;
   if (hidden) hidden.classList.remove("ie-hidden");
   if (ta) ta.remove();
+  if (state.editScope) paintSectionFrame();
+  updateSourcePane();
+  placeSrcToggle();
 }
 
 /**
@@ -3674,7 +3368,10 @@ function commitInline(cancel) {
     toast("The document changed while you were editing — your edit was not applied", true);
     return null;
   }
+  const linesBefore = splitLines(state.text).length;
   state.text = spliceSection(state.text, { start, end }, value);
+  // A section being edited grows or shrinks with the blocks edited inside it.
+  if (state.editScope) state.editScope.end += splitLines(state.text).length - linesBefore;
   state.dirty = true;
   const y = els.scroller.scrollTop;
   render();
@@ -3707,6 +3404,7 @@ function onInlineKey(e) {
       : inlineEd.hidden.querySelector("[data-src]"));
     const target = blocks[here + (e.key === "ArrowUp" ? -1 : 1)];
     if (!target) return;
+    if (!state.editMode && state.editScope && !inSection(target)) return;   // stays inside the frame
     e.preventDefault();
     let line = Number(target.dataset.src.split("-")[0]);
     const moved = commitInline();
@@ -3722,9 +3420,17 @@ function onInlineKey(e) {
 // Capture phase: in edit mode a click on a link must not navigate, and that
 // has to be stopped before the link's own handling sees it.
 els.doc.addEventListener("click", (e) => {
-  if (!state.editMode || !state.text) return;
+  const scoped = !state.editMode && !!state.editScope;
+  if ((!state.editMode && !scoped) || !state.text) return;
   if (inlineEd.ta && inlineEd.ta.contains(e.target)) return;
   if (e.target.closest(".code-copy, .md-table-menu, .md-table-interactive, details.frontmatter > summary")) return;
+  // Section edit: a click outside the frame finishes, and then does whatever
+  // it normally would -- a link outside the section still navigates. (The
+  // blur that closed an open block may have re-rendered; see below.)
+  if (scoped) {
+    const here = els.doc.contains(e.target) ? e.target : document.elementFromPoint(e.clientX, e.clientY);
+    if (!inSection(here && here.closest("[data-src]"))) { endSectionEdit(); return; }
+  }
   if (e.target.closest("a")) e.preventDefault();
   // Close the previous editor first. Its blur usually has already, but not
   // always (a click that never moved focus), and two open at once would each
@@ -3736,10 +3442,270 @@ els.doc.addEventListener("click", (e) => {
   if (!els.doc.contains(target)) target = document.elementFromPoint(e.clientX, e.clientY);
   const block = target && target.closest("[data-src]");
   if (!block || !els.doc.contains(block)) return;
+  if (scoped && !inSection(block)) return;
   e.preventDefault();
   const src = splitLines(state.text).slice(...block.dataset.src.split("-").map(Number)).join("\n");
   openInline(block, caretFromPoint(block, e.clientX, e.clientY, src));
 }, true);
+
+/* ------------------------------------------------------------ split view --
+   A read-only pane beside the document showing the Markdown behind whatever
+   you're working on, with the file's own line numbers. It shows, in order:
+
+     1. the block open in the in-place editor, live as you type;
+     2. the block under the pointer;
+     3. the block at the top of the screen, so it follows as you read.
+
+   During section edit (the contents pencil) the editable unit is the whole
+   section, so the pane shows all of it and highlights the block you're on.
+
+   Read-only on purpose: editing happens in the document, where you can see
+   the result. The pane is for seeing exactly what's underneath.
+
+   It belongs to editing: never open by default, offered by an icon on the
+   corner of whatever you can edit (see placeSrcToggle), and closed again
+   when editing ends.
+   -------------------------------------------------------------------------- */
+
+state.split = false;
+let srcHover = null;     // the [data-src] block last under the pointer
+let srcQueued = false;
+
+function setSplit(on) {
+  on = !!on && !!(state.editMode || state.editScope) && !state.sourceView;
+  if (on === state.split) return;
+  state.split = on;
+  document.body.classList.toggle("split", on);
+  updateSourcePane();
+  placeSrcToggle();
+}
+
+/** What the toggle icon sits on while editing: the open block, else the
+ *  section frame, else (Ctrl+E mode) the block under the pointer. */
+function srcToggleTarget() {
+  if (!state.text || (!state.editMode && !state.editScope)) return null;
+  if (inlineEd.ta) return inlineEd.ta;
+  if (state.editScope) return document.getElementById("sec-frame");
+  if (srcHover && els.doc.contains(srcHover)) return srcHover.closest(".md-table-wrapper") || srcHover;
+  return null;
+}
+
+/** Pin the Markdown icon to the top-right corner of the editable block. */
+function placeSrcToggle() {
+  let btn = document.getElementById("src-toggle");
+  const target = srcToggleTarget();
+  if (!target) { if (btn) btn.hidden = true; return; }
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "src-toggle";
+    btn.innerHTML = '<span class="ico">&lsaquo;/&rsaquo;</span> Markdown';
+    // Keep focus in the block being typed in: a click here must not blur it,
+    // which would commit and close the editor.
+    btn.addEventListener("mousedown", (e) => e.preventDefault());
+    btn.addEventListener("click", () => setSplit(!state.split));
+    $("#page").appendChild(btn);
+  }
+  btn.hidden = false;
+  btn.setAttribute("aria-pressed", String(state.split));
+  btn.title = state.split ? "Hide the Markdown pane (Ctrl+\\)"
+    : "Show the Markdown for this block beside the document (Ctrl+\\)";
+  const p = $("#page").getBoundingClientRect(), r = target.getBoundingClientRect();
+  btn.style.left = r.right - p.left - btn.offsetWidth - 8 + "px";
+  btn.style.top = r.top - p.top - btn.offsetHeight / 2 + "px";
+}
+
+/** Coalesce bursts (pointer moves, scroll) into one paint per frame. */
+function queueSourcePane() {
+  if (!state.split || srcQueued) return;
+  srcQueued = true;
+  requestAnimationFrame(() => { srcQueued = false; updateSourcePane(); });
+}
+
+const srcRange = (el) => { const [start, end] = el.dataset.src.split("-").map(Number); return { start, end }; };
+
+/** The first block whose bottom edge is below the top of the screen. */
+function readingBlock() {
+  const top = els.scroller.getBoundingClientRect().top + 8;
+  for (const b of els.doc.querySelectorAll("[data-src]")) {
+    const el = b.closest(".md-table-wrapper") || b;
+    if (el.getBoundingClientRect().bottom > top) return b;
+  }
+  return null;
+}
+
+function updateSourcePane() {
+  if (!state.split || !state.text) return;
+  const lines = splitLines(state.text);
+  const label = $("#src-label");
+  const body = $("#src-body");
+
+  // What's in focus: an open editor beats the pointer, which beats scroll.
+  let focus = null, how = "";
+  if (inlineEd.ta) {
+    focus = { start: inlineEd.start, end: inlineEd.end, live: inlineEd.ta.value };
+    how = "Editing";
+  } else if (srcHover && els.doc.contains(srcHover)) {
+    focus = srcRange(srcHover);
+    how = "Under the pointer";
+  }
+
+  let start, shown, hl = null;
+  if (state.editScope) {
+    // The section, with the focused block's lines -- live, if being typed --
+    // in place and highlighted.
+    const s = state.editScope;
+    start = s.start;
+    shown = lines.slice(s.start, s.end);
+    if (focus && focus.start >= s.start && focus.start < s.end) {
+      const block = focus.live !== undefined ? focus.live.split("\n") : lines.slice(focus.start, focus.end);
+      shown.splice(focus.start - s.start, focus.end - focus.start, ...block);
+      hl = { from: focus.start - s.start, to: focus.start - s.start + block.length };
+    }
+    // The blank lines before the next heading are spacing, not content.
+    while (shown.length > 1 && !shown[shown.length - 1].trim() && !(hl && hl.to >= shown.length)) shown.pop();
+    const h = (state.headings || []).find((x) => x.id === s.id);
+    label.textContent = "Section: " + (h ? h.text.replace(/[*_`~]/g, "") : "") + (how ? " · " + how.toLowerCase() : "");
+  } else {
+    if (!focus) {
+      const b = readingBlock();
+      if (b) { focus = srcRange(b); how = "At the top of the screen"; }
+    }
+    if (!focus) { label.textContent = ""; body.innerHTML = '<div class="src-empty">No source for this part of the document.</div>'; return; }
+    start = focus.start;
+    shown = focus.live !== undefined ? focus.live.split("\n") : lines.slice(focus.start, focus.end);
+    label.textContent = how;
+  }
+
+  const last = start + shown.length;
+  label.textContent += (label.textContent ? " · " : "") +
+    (shown.length > 1 ? "lines " + (start + 1) + "–" + last : "line " + (start + 1));
+  body.innerHTML = shown.map((t, i) =>
+    '<div class="sl' + (hl && i >= hl.from && i < hl.to ? " hl" : "") + '"><span class="ln">' + (start + i + 1) +
+    '</span><span class="lt">' + (esc(t) || " ") + "</span></div>").join("");
+  const mark = body.querySelector(".sl.hl");
+  if (mark) mark.scrollIntoView({ block: "nearest" });
+  else if (!state.editScope) body.scrollTop = 0;
+}
+
+// Sticky: moving between blocks updates the pane; crossing a gap between them
+// (or the footnotes, which have no source line) leaves it where it was.
+els.doc.addEventListener("mouseover", (e) => {
+  const b = e.target.closest("[data-src]");
+  if (b && b !== srcHover) { srcHover = b; queueSourcePane(); placeSrcToggle(); }
+});
+els.doc.addEventListener("mouseleave", (e) => {
+  // Heading for the icon on the block's corner isn't leaving the block.
+  if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("#src-toggle")) return;
+  srcHover = null;
+  queueSourcePane();
+  placeSrcToggle();
+});
+els.scroller.addEventListener("scroll", () => { if (!srcHover && !inlineEd.ta) queueSourcePane(); }, { passive: true });
+
+// Drag the divider. Width is a percentage of the window, so it survives resizes.
+$("#split-handle").addEventListener("mousedown", (e) => {
+  e.preventDefault();
+  document.body.classList.add("split-dragging");
+  const move = (ev) => {
+    const shell = $("#shell").getBoundingClientRect();
+    const px = Math.min(Math.max(shell.right - ev.clientX, 260), shell.width - 360);
+    document.documentElement.style.setProperty("--split-w", (px / window.innerWidth * 100).toFixed(1) + "vw");
+  };
+  const up = () => {
+    document.body.classList.remove("split-dragging");
+    window.removeEventListener("mousemove", move);
+    window.removeEventListener("mouseup", up);
+    try { localStorage.setItem("mdv:splitWidth", document.documentElement.style.getPropertyValue("--split-w")); } catch (_) { }
+  };
+  window.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+});
+{
+  const w = localStorage.getItem("mdv:splitWidth");
+  if (w) document.documentElement.style.setProperty("--split-w", w);
+}
+
+/* ----------------------------------------------------------- source view --
+   The ⋮ menu's "View Markdown source": the whole file as its Markdown, in
+   place of the rendered page. Read-only, and deliberately separate from
+   editing -- turning it on applies and saves anything mid-edit, then closes
+   edit mode, section edit and the split pane, and none of them can be opened
+   until it's off. One way of looking at the file at a time.
+
+   Not remembered between sessions: the viewer should never open to raw code
+   by surprise.
+   -------------------------------------------------------------------------- */
+
+state.sourceView = false;
+
+function setSourceView(on) {
+  on = !!on;
+  $("#chk-source").checked = on;
+  if (on === state.sourceView) return;
+  // Keep your place: the line at the top of the screen in one view is where
+  // the other opens.
+  const keep = on ? readingLine() : rawTopLine();
+  if (on) {
+    commitInline();
+    endSectionEdit(true);
+    if (state.editMode) setEditMode(false, true);
+    setSplit(false);
+  }
+  state.sourceView = on;
+  document.body.classList.toggle("source-view", on);
+  $("#btn-edit").hidden = on || !state.text;
+  paintRawView();
+  placeSrcToggle();
+  if (keep !== null) on ? scrollRawTo(keep) : scrollDocTo(keep);
+  if (state.text) toast(on ? "Showing the Markdown source — read-only" : "Showing the rendered page");
+}
+
+function paintRawView() {
+  const view = $("#raw-view");
+  if (!state.sourceView || !state.text) { view.innerHTML = ""; return; }
+  // The parser's own headings, so a "# comment" inside a code block isn't one.
+  const heads = new Set((state.headings || []).map((h) => h.line));
+  view.innerHTML = splitLines(state.text).map((t, i) =>
+    '<div class="sl' + (heads.has(i) ? " h" : "") + '" id="raw-L' + (i + 1) + '"><span class="ln">' + (i + 1) +
+    '</span><span class="lt">' + (esc(t) || " ") + "</span></div>").join("");
+}
+
+/** File line (0-based) of the block at the top of the rendered page. */
+function readingLine() {
+  const b = readingBlock();
+  return b ? srcRange(b).start : null;
+}
+
+/** File line (0-based) at the top of the source view. */
+function rawTopLine() {
+  const top = els.scroller.getBoundingClientRect().top + 8;
+  for (const l of $("#raw-view").children) if (l.getBoundingClientRect().bottom > top) return Number(l.id.slice("raw-L".length)) - 1;
+  return null;
+}
+
+/** Put an element exactly at the top of the scroller. Not scrollIntoView():
+ *  headings carry a scroll-margin for contents jumps, which here would leave
+ *  the previous block showing above the one that was at the top. */
+function alignTop(el) {
+  if (!el) return;
+  els.scroller.scrollTo({ top: els.scroller.scrollTop + el.getBoundingClientRect().top -
+    els.scroller.getBoundingClientRect().top, behavior: "instant" });
+}
+
+function scrollRawTo(line) {
+  alignTop(document.getElementById("raw-L" + (line + 1)));
+}
+
+/** The rendered block holding a file line -- or the nearest one after it. */
+function scrollDocTo(line) {
+  let best = null;
+  for (const b of els.doc.querySelectorAll("[data-src]")) {
+    const r = srcRange(b);
+    if (r.end > line) { best = b; break; }
+  }
+  if (best) alignTop(best.closest(".md-table-wrapper") || best);
+}
 
 /* ---------- saving in-place edits ---------- */
 
@@ -3758,10 +3724,13 @@ function setDirty(on) {
  * (explicit = false): quiet on success, and never opens a dialog on its own.
  * Ctrl+S (explicit = true) goes further -- it overwrites a file that changed
  * on disk, and falls back to Save As when there is no file to write to.
+ *
+ * Resolves to what happened: "saved", "clean", "unlinked", "stale", "failed"
+ * or "cancelled".
  */
 async function saveDocument(explicit) {
   const text = state.text, handle = state.handle, name = state.name || "document";
-  if (!state.dirty && !explicit) return;
+  if (!state.dirty && !explicit) return "clean";
   const done = () => {
     // Only clean if nothing newer arrived while the write was in flight.
     if (state.handle === handle && state.text === text) setDirty(false);
@@ -3773,31 +3742,31 @@ async function saveDocument(explicit) {
     let res = await writeFile(text, handle);
     if (!res.ok && res.why === "stale" && explicit) {
       // Ctrl+S on a file that moved on disk: the deliberate keypress is the
-      // confirmation, same as the section editor's second Ctrl+S.
+      // confirmation.
       adoptModified(handle, res.diskModified);
       res = await writeFile(text, handle);
     }
-    if (res.ok) { done(); if (explicit) toast("Saved " + name); return; }
+    if (res.ok) { done(); if (explicit) toast("Saved " + name); return "saved"; }
     if (res.why === "stale") {
       toast(name + " changed on disk since it was opened — not saved. Ctrl+S to overwrite it.", true);
-      return;
+      return "stale";
     }
     if (!explicit) {
       toast("Couldn't save to " + name + " — press Ctrl+S to choose where", true);
-      return;
+      return "failed";
     }
   } else if (!explicit) {
     if (!warnedUnlinked) toast("Edited in the view only — press Ctrl+S to save it to a file");
     warnedUnlinked = true;
-    return;
+    return "unlinked";
   }
 
   const alt = await saveAs();
-  if (alt.ok) { setDirty(false); toast("Saved " + state.name); return; }
-  if (alt.why !== "cancelled") {
-    toast(alt.why === "unsupported" ? "This browser can't save files from a page opened with file://"
-      : "Could not save: " + (alt.error && (alt.error.name || alt.error.message)), true);
-  }
+  if (alt.ok) { setDirty(false); toast("Saved " + state.name); return "saved"; }
+  if (alt.why === "cancelled") return "cancelled";
+  toast(alt.why === "unsupported" ? "This browser can't save files from a page opened with file://"
+    : "Could not save: " + (alt.error && (alt.error.name || alt.error.message)), true);
+  return "failed";
 }
 
 /* ---------- persistence ---------- */
@@ -3944,7 +3913,7 @@ function refreshNow() {
 
 $("#btn-refresh").addEventListener("click", refreshNow);
 $("#btn-watch").addEventListener("click", toggleWatch);
-$("#mi-edit").addEventListener("click", () => openEditor(null));
+$("#mi-edit").addEventListener("click", () => editSection(activeHeadingId()));
 $("#btn-edit").addEventListener("click", () => setEditMode(!state.editMode));
 $("#mi-export").addEventListener("click", exportHtml);
 $("#mi-print").addEventListener("click", () => window.print());
@@ -3993,6 +3962,7 @@ $("#btn-toc").addEventListener("click", () => {
   localStorage.setItem("mdv:toc", state.showToc ? "1" : "0");
 });
 
+$("#chk-source").addEventListener("change", (e) => setSourceView(e.target.checked));
 $("#chk-raw").addEventListener("change", (e) => {
   state.rawHtml = e.target.checked;
   localStorage.setItem("mdv:rawHtml", state.rawHtml ? "1" : "0");
@@ -4181,6 +4151,11 @@ window.addEventListener("keydown", (e) => {
   }
   // Ctrl+E toggles editing in place. The section-in-a-window editor stays on
   // the menu and the contents pencils.
+  if (mod && e.key === "\\" && (state.editMode || state.editScope)) {
+    e.preventDefault();
+    setSplit(!state.split);
+    return;
+  }
   if (mod && e.key.toLowerCase() === "e" && state.text) {
     e.preventDefault();
     setEditMode(!state.editMode);
@@ -4191,11 +4166,6 @@ window.addEventListener("keydown", (e) => {
     window.print();
     return;
   }
-  if (mod && e.key.toLowerCase() === "s" && editorOpen()) {
-    e.preventDefault();
-    saveEditor();
-    return;
-  }
   if (mod && e.key.toLowerCase() === "s" && state.text) {
     e.preventDefault();
     // A commit with a file behind it is already saving itself; Ctrl+S is
@@ -4203,8 +4173,9 @@ window.addEventListener("keydown", (e) => {
     if (!commitInline() || !state.handle) saveDocument(true);
     return;
   }
-  if (e.key === "Escape" && state.editMode && !inlineEd.ta && !document.querySelector(".pop:not([hidden])")) {
-    setEditMode(false);
+  if (e.key === "Escape" && (state.editMode || state.editScope) && !inlineEd.ta &&
+      !document.querySelector(".pop:not([hidden])")) {
+    if (state.editScope) endSectionEdit(); else setEditMode(false);
     return;
   }
 
@@ -4243,12 +4214,14 @@ window.addEventListener("keydown", (e) => {
 // Smooth-scroll TOC clicks without letting the hash pile up in history.
 els.tocList.addEventListener("click", (e) => {
   const pencil = e.target.closest(".toc-edit");
-  if (pencil) { e.preventDefault(); openEditor(pencil.dataset.edit); return; }
+  if (pencil) { e.preventDefault(); editSection(pencil.dataset.edit); return; }
 
   const a = e.target.closest("a");
   if (!a) return;
   e.preventDefault();
-  const target = document.getElementById(a.dataset.id);
+  const h = state.sourceView && (state.headings || []).find((x) => x.id === a.dataset.id);
+  const target = h && typeof h.line === "number" ? document.getElementById("raw-L" + (h.line + 1))
+    : document.getElementById(a.dataset.id);
   if (target) {
     target.scrollIntoView({ behavior: "smooth", block: "start" });
     history.replaceState(null, "", "#" + a.dataset.id);
@@ -4285,7 +4258,9 @@ setLogoMode(logoMode);
 
 // Convert markdown tables to interactive v3 data tables with toggle menu
 function convertMarkdownTablesToDataTables() {
-  const tables = els.doc.querySelectorAll('table');
+  // Markdown tables only (table() stamps data-cols). A <table> written as raw
+  // HTML is usually layout -- an image grid, a contributor list -- not data.
+  const tables = els.doc.querySelectorAll('table[data-cols]');
   tables.forEach((mdTable, idx) => {
     // Skip if already converted
     if (mdTable.classList.contains('md-table-source')) return;
