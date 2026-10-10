@@ -39,6 +39,11 @@ try {
     document.documentElement.style.setProperty("--doc-weight", "600");
     document.documentElement.style.setProperty("--doc-strong", "800");
   }
+  // Panel widths, so a resized sidebar doesn't open at the default and jump.
+  var tw = localStorage.getItem("mdv:tocWidth");
+  if (tw) document.documentElement.style.setProperty("--toc-w", tw);
+  var sw = localStorage.getItem("mdv:splitWidth");
+  if (sw) document.documentElement.style.setProperty("--split-w", sw);
 } catch (e) {}
 </script>
 
@@ -498,10 +503,18 @@ body.editing #doc [data-src]:hover {
 #shell { position: fixed; inset: 46px 0 0 0; display: flex; }
 
 #toc {
-  width: 268px; flex: none; overflow: auto; padding: 14px 4px 40px 14px;
+  width: var(--toc-w, 268px); flex: none; overflow: auto; padding: 14px 4px 40px 14px;
   border-right: 1px solid var(--border); background: var(--bg-raised);
 }
 body.no-toc #toc { display: none; }
+/* Drag the sidebar's edge to resize it. A transparent strip straddling the
+   border, so the layout doesn't change -- it lights up on hover. */
+#toc-handle {
+  flex: 0 0 7px; margin: 0 -4px 0 -3px; position: relative; z-index: 2;
+  cursor: col-resize; background: transparent;
+}
+#toc-handle:hover, #toc-handle.dragging { background: var(--accent); opacity: .55; }
+body.no-toc #toc-handle, body.blank #toc-handle { display: none; }
 #toc .toc-head {
   font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
   color: var(--fg-faint); font-weight: 700; margin: 0 0 8px;
@@ -581,8 +594,9 @@ body.split:not(.blank) #split-handle {
   display: block; flex: 0 0 5px; cursor: col-resize;
   background: var(--border); border-left: 2px solid var(--bg-raised); border-right: 2px solid var(--bg-raised);
 }
-body.split:not(.blank) #split-handle:hover, body.split-dragging #split-handle { background: var(--accent); }
-body.split-dragging { cursor: col-resize; user-select: none; }
+body.split:not(.blank) #split-handle:hover, #split-handle.dragging { background: var(--accent); }
+/* While any divider is being dragged: no text selection, one cursor everywhere. */
+body.resizing { cursor: col-resize; user-select: none; }
 #source-pane header {
   flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px;
   border-bottom: 1px solid var(--border); font-size: 12px; color: var(--fg-muted);
@@ -1059,7 +1073,7 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
 @media print {
   :root { color-scheme: light; }
   body { overflow: visible; background: #fff; }
-  #bar, #tabs, #toc, #drop, #toast, #empty, #sec-frame, #source-pane, #split-handle, #src-toggle { display: none !important; }
+  #bar, #tabs, #toc, #toc-handle, #drop, #toast, #empty, #sec-frame, #source-pane, #split-handle, #src-toggle { display: none !important; }
   #shell { position: static; display: block; }
   #scroller { overflow: visible; }
   #page { max-width: none; padding: 0; }
@@ -1224,6 +1238,7 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
     </div>
     <p class="toc-head">Contents</p><div id="toc-list"></div>
   </nav>
+  <div id="toc-handle" title="Drag to resize · double-click to reset"></div>
   <div id="scroller">
     <div id="page">
       <div id="empty">
@@ -3037,10 +3052,11 @@ function toggleWatch() {
 }
 
 /* --------------------------------------------------------- section edit --
-   The contents sidebar's pencil: scroll to that section, frame it in red, and
-   edit it in place -- the same click-a-block editing as edit mode (Ctrl+E),
-   confined to the one section. Clicking outside it, Esc, or the same pencil
-   again finishes.
+   The contents sidebar's pencil: a way into edit mode (Ctrl+E) that also
+   scrolls to its section and frames it in red. The whole document stays
+   editable; the frame marks where you are and follows you into whichever
+   section you click or arrow into. Esc, the Edit button, or the same pencil
+   again ends editing, frame and all.
 
    The section is tracked by file lines, not by its heading: retitling the
    heading is an ordinary edit, and it changes the id. commitInline() grows
@@ -3074,13 +3090,13 @@ function inSection(block) {
 function editSection(id) {
   if (!state.text || !id || state.sourceView) return;
   commitInline();
-  if (state.editScope && state.editScope.id === id) { endSectionEdit(); return; }
-  if (state.editMode) setEditMode(false, true);
-  const r = rangeFor(id);
-  if (!r.id) return;
-  state.editScope = { id, start: r.start, end: r.end };
-  document.body.classList.add("sec-editing");
-  markSection();
+  // The same pencil again: done editing.
+  if (state.editScope && state.editScope.id === id) { setEditMode(false); return; }
+  if (!frameSection(id)) return;
+  // A pencil is a way into edit mode, not a mode of its own: the Edit button
+  // lights up, and the whole document is editable -- the frame marks where
+  // you are, and follows you to whichever section you click into.
+  if (!state.editMode) setEditMode(true, true);
   updateSourcePane();
   const target = document.getElementById(id);
   if (target) {
@@ -3090,6 +3106,25 @@ function editSection(id) {
   const h = (state.headings || []).find((x) => x.id === id);
   toast("Editing “" + (h ? h.text.replace(/[*_`~]/g, "") : "section") +
     "” — click any part to change it. Esc to finish.");
+}
+
+/** Frame a section (by heading id). Returns false if there's no such section. */
+function frameSection(id) {
+  const r = rangeFor(id);
+  if (!r.id) return false;
+  state.editScope = { id, start: r.start, end: r.end };
+  document.body.classList.add("sec-editing");
+  markSection();
+  return true;
+}
+
+/** Move the frame to the section holding a block: the nearest heading above
+ *  it (so the smallest section that contains it). Nothing above: no frame. */
+function frameSectionOf(block) {
+  const line = srcRange(block).start;
+  let h = null;
+  for (const x of state.headings || []) if (typeof x.line === "number" && x.line <= line) h = x;
+  if (h) frameSection(h.id); else endSectionEdit(true);
 }
 
 function endSectionEdit(quiet) {
@@ -3272,7 +3307,7 @@ const inlineEd = {
 function setEditMode(on, quiet) {
   if (on && (!state.text || state.sourceView)) return;
   if (!on) commitInline();
-  if (on) endSectionEdit(true);   // the whole document supersedes one section
+  if (!on) endSectionEdit(true);   // the section frame belongs to edit mode
   state.editMode = on;
   document.body.classList.toggle("editing", on);
   $("#btn-edit").setAttribute("aria-pressed", String(on));
@@ -3404,7 +3439,6 @@ function onInlineKey(e) {
       : inlineEd.hidden.querySelector("[data-src]"));
     const target = blocks[here + (e.key === "ArrowUp" ? -1 : 1)];
     if (!target) return;
-    if (!state.editMode && state.editScope && !inSection(target)) return;   // stays inside the frame
     e.preventDefault();
     let line = Number(target.dataset.src.split("-")[0]);
     const moved = commitInline();
@@ -3412,6 +3446,7 @@ function onInlineKey(e) {
     const el = [...els.doc.querySelectorAll("[data-src]")]
       .find((b) => Number(b.dataset.src.split("-")[0]) >= line);
     if (!el) return;
+    if (state.editScope && !inSection(el)) frameSectionOf(el);
     openInline(el, e.key === "ArrowUp" ? undefined : 0);
     inlineEd.ta.scrollIntoView({ block: "nearest" });
   }
@@ -3420,17 +3455,9 @@ function onInlineKey(e) {
 // Capture phase: in edit mode a click on a link must not navigate, and that
 // has to be stopped before the link's own handling sees it.
 els.doc.addEventListener("click", (e) => {
-  const scoped = !state.editMode && !!state.editScope;
-  if ((!state.editMode && !scoped) || !state.text) return;
+  if (!state.editMode || !state.text) return;
   if (inlineEd.ta && inlineEd.ta.contains(e.target)) return;
   if (e.target.closest(".code-copy, .md-table-menu, .md-table-interactive, details.frontmatter > summary")) return;
-  // Section edit: a click outside the frame finishes, and then does whatever
-  // it normally would -- a link outside the section still navigates. (The
-  // blur that closed an open block may have re-rendered; see below.)
-  if (scoped) {
-    const here = els.doc.contains(e.target) ? e.target : document.elementFromPoint(e.clientX, e.clientY);
-    if (!inSection(here && here.closest("[data-src]"))) { endSectionEdit(); return; }
-  }
   if (e.target.closest("a")) e.preventDefault();
   // Close the previous editor first. Its blur usually has already, but not
   // always (a click that never moved focus), and two open at once would each
@@ -3442,7 +3469,8 @@ els.doc.addEventListener("click", (e) => {
   if (!els.doc.contains(target)) target = document.elementFromPoint(e.clientX, e.clientY);
   const block = target && target.closest("[data-src]");
   if (!block || !els.doc.contains(block)) return;
-  if (scoped && !inSection(block)) return;
+  // The section frame follows you into whichever section you click.
+  if (state.editScope && !inSection(block)) frameSectionOf(block);
   e.preventDefault();
   const src = splitLines(state.text).slice(...block.dataset.src.split("-").map(Number)).join("\n");
   openInline(block, caretFromPoint(block, e.clientX, e.clientY, src));
@@ -3603,28 +3631,53 @@ els.doc.addEventListener("mouseleave", (e) => {
 });
 els.scroller.addEventListener("scroll", () => { if (!srcHover && !inlineEd.ta) queueSourcePane(); }, { passive: true });
 
-// Drag the divider. Width is a percentage of the window, so it survives resizes.
-$("#split-handle").addEventListener("mousedown", (e) => {
-  e.preventDefault();
-  document.body.classList.add("split-dragging");
-  const move = (ev) => {
-    const shell = $("#shell").getBoundingClientRect();
-    const px = Math.min(Math.max(shell.right - ev.clientX, 260), shell.width - 360);
-    document.documentElement.style.setProperty("--split-w", (px / window.innerWidth * 100).toFixed(1) + "vw");
-  };
-  const up = () => {
-    document.body.classList.remove("split-dragging");
-    window.removeEventListener("mousemove", move);
-    window.removeEventListener("mouseup", up);
-    try { localStorage.setItem("mdv:splitWidth", document.documentElement.style.getPropertyValue("--split-w")); } catch (_) { }
-  };
-  window.addEventListener("mousemove", move);
-  window.addEventListener("mouseup", up);
-});
-{
-  const w = localStorage.getItem("mdv:splitWidth");
-  if (w) document.documentElement.style.setProperty("--split-w", w);
+/**
+ * Make a divider draggable. Each pointer move hands its x to onMove, which
+ * sets a width variable; onDone runs once on release, to persist it. Shared by
+ * the contents sidebar's edge and the split view's divider.
+ */
+function dragDivider(handle, onMove, onDone) {
+  handle.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    document.body.classList.add("resizing");
+    handle.classList.add("dragging");
+    const move = (ev) => onMove(ev.clientX);
+    const up = () => {
+      document.body.classList.remove("resizing");
+      handle.classList.remove("dragging");
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      onDone();
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  });
 }
+
+const rootStyle = document.documentElement.style;
+const storeVar = (key, name) => { try { localStorage.setItem(key, rootStyle.getPropertyValue(name)); } catch (_) { } };
+// (Saved widths are applied by the pre-paint script in <head>.)
+
+// Split view: width as a share of the window, so it survives resizes.
+dragDivider($("#split-handle"), (x) => {
+  const shell = $("#shell").getBoundingClientRect();
+  const px = Math.min(Math.max(shell.right - x, 260), shell.width - 360);
+  rootStyle.setProperty("--split-w", (px / window.innerWidth * 100).toFixed(1) + "vw");
+}, () => storeVar("mdv:splitWidth", "--split-w"));
+
+// Contents sidebar: pixels, since its contents (heading text) don't grow with
+// the window. Bounded so the document always keeps a usable column.
+const TOC_DEFAULT = 268;
+dragDivider($("#toc-handle"), (x) => {
+  const left = $("#toc").getBoundingClientRect().left;
+  const px = Math.min(Math.max(x - left, 160), Math.min(640, window.innerWidth * 0.5));
+  rootStyle.setProperty("--toc-w", Math.round(px) + "px");
+}, () => storeVar("mdv:tocWidth", "--toc-w"));
+$("#toc-handle").addEventListener("dblclick", () => {
+  rootStyle.setProperty("--toc-w", TOC_DEFAULT + "px");
+  try { localStorage.removeItem("mdv:tocWidth"); } catch (_) { }
+});
 
 /* ----------------------------------------------------------- source view --
    The ⋮ menu's "View Markdown source": the whole file as its Markdown, in
@@ -4175,7 +4228,7 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key === "Escape" && (state.editMode || state.editScope) && !inlineEd.ta &&
       !document.querySelector(".pop:not([hidden])")) {
-    if (state.editScope) endSectionEdit(); else setEditMode(false);
+    setEditMode(false);
     return;
   }
 
