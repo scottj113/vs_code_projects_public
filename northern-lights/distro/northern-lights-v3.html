@@ -2099,6 +2099,7 @@ function render() {
   if (!state.text) {
     document.body.classList.add("blank");
     els.name.textContent = "No document";
+    document.title = "Northern Lights MD Viewer";
     els.meta.textContent = "";
     state.headings = [];
     for (const id of ["mi-export", "mi-print", "mi-edit"]) $("#" + id).disabled = true;
@@ -2124,6 +2125,7 @@ function render() {
 
   const words = els.doc.textContent.trim().split(/\s+/).filter(Boolean).length;
   els.name.textContent = state.name || "Pasted markdown";
+  document.title = state.name || "Pasted markdown";
   updatePathPanel();
   els.meta.textContent = words.toLocaleString() + " words · ~" + Math.max(1, Math.round(words / 220)) + " min";
 
