@@ -839,6 +839,13 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
 /* The spot an undo or redo just changed, briefly. */
 #doc .undo-flash { box-shadow: 0 0 0 3px color-mix(in srgb, #ff9a3c 70%, transparent); border-radius: 4px; transition: box-shadow .4s; }
 
+/* Connect folder: one sentence and a button. */
+#pop-folder { width: 330px; max-width: 85vw; }
+#pop-folder .folder-text { margin: 0 0 10px; font-size: 13px; line-height: 1.5; color: var(--fg); }
+#pop-folder .folder-hint { display: block; margin-top: 6px; font-size: 12px; color: var(--fg-faint); }
+/* The document on screen isn't linked to its file: this is the fix. */
+#btn-folder.needs { border-color: var(--accent); color: var(--accent); }
+
 /* Markdown fixes panel */
 #pop-fix { width: 440px; max-width: 80vw; }
 #pop-fix hr { border: 0; border-top: 1px solid var(--border); margin: 10px 0 8px; }
@@ -1281,8 +1288,16 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
     </div>
   </div>
 
-  <button type="button" class="btn" id="btn-folder" aria-pressed="false" hidden
-          title="Connect your project folder: relinks open documents for saving and live reload, and loads relative images">&#128193; <span id="folder-label">Connect folder</span></button>
+  <!-- Connect folder: opens an explainer first -- the button alone is
+       meaningless to anyone who hasn't hit the problem it solves. -->
+  <div class="pop-wrap">
+    <button type="button" class="btn" id="btn-folder" aria-pressed="false" hidden
+            aria-haspopup="true" aria-expanded="false">&#128193; <span id="folder-label">Connect folder</span></button>
+    <div class="pop" id="pop-folder" hidden>
+      <p class="folder-text" id="folder-status"></p>
+      <div class="pop-row"><button type="button" class="btn" id="folder-pick">Choose folder&hellip;</button></div>
+    </div>
+  </div>
 
   <!-- File-sync pill. Refresh is a repeated action so it stays one click;
        Watch is a set-once preference that doubles as the state indicator. -->
@@ -2728,13 +2743,13 @@ const SKIP_DIR = /^(?:\.|node_modules$|bower_components$|dist$|build$|out$|targe
 const LIB_MAX = 500;
 const LIB_DEPTH = 8;
 
-async function collectMarkdown(dirHandle, dir, out, depth) {
-  if (out.length >= LIB_MAX || depth > LIB_DEPTH) return out;
+async function collectMarkdown(dirHandle, dir, out, depth, max = LIB_MAX) {
+  if (out.length >= max || depth > LIB_DEPTH) return out;
   for await (const entry of dirHandle.values()) {
-    if (out.length >= LIB_MAX) break;
+    if (out.length >= max) break;
     if (entry.kind === "directory") {
       if (SKIP_DIR.test(entry.name)) continue;
-      await collectMarkdown(entry, dir ? dir + "/" + entry.name : entry.name, out, depth + 1);
+      await collectMarkdown(entry, dir ? dir + "/" + entry.name : entry.name, out, depth + 1, max);
     } else if (MD_RE.test(entry.name)) {
       out.push({ name: entry.name, dir: dir, handle: entry, file: null });
     }
@@ -3983,15 +3998,28 @@ const folderAssets = new Map();   // folder-relative path -> object URL
 function updateFolderButton() {
   const btn = $("#btn-folder");
   btn.hidden = !canPickDir || !state.text;
+  const unlinked = !!state.text && !state.handle;
   $("#folder-label").textContent = state.folder ? state.folder.name : "Connect folder";
   btn.setAttribute("aria-pressed", String(!!state.folder));
-  btn.title = state.folder
-    ? "Connected to “" + state.folder.name + "” — click to connect a different folder"
-    : "Connect your project folder: relinks open documents for saving and live reload, and loads relative images";
+  btn.classList.toggle("needs", unlinked);
+  btn.title = unlinked
+    ? "Not linked to its file — every save will ask where. Click to fix that"
+    : state.folder ? "Connected to “" + state.folder.name + "” — click for details"
+    : "Connect your projects folder so edits save straight to your files";
+
+  // The panel: one sentence, then the button.
+  const here = state.folder && unlinked ? " This file isn't in it — pick the folder it's in." : "";
+  const line = $("#folder-status");
+  if (state.folder) line.textContent = "Connected to “" + state.folder.name + "” — edits save straight to your files." + here;
+  else line.innerHTML = "Pick your project folder so <strong>“autosave”</strong> works. " +
+    "Otherwise every save asks you where the file is." +
+    "<span class=\"folder-hint\">Tip: pick the folder above all your projects to cover them all.</span>";
+  $("#folder-pick").innerHTML = state.folder ? "Choose a different folder&hellip;" : "Choose folder&hellip;";
 }
 
 async function folderFiles() {
-  if (!folderIndex) folderIndex = await collectMarkdown(state.folder, "", [], 0);
+  // A connected root may hold many projects; it only needs listing, not showing.
+  if (!folderIndex) folderIndex = await collectMarkdown(state.folder, "", [], 0, 5000);
   return folderIndex;
 }
 
@@ -4128,7 +4156,9 @@ async function resolveFolderImages(t) {
   }
 }
 
-$("#btn-folder").addEventListener("click", async () => {
+$("#btn-folder").addEventListener("click", updateFolderButton);   // fresh status as it opens
+$("#folder-pick").addEventListener("click", async () => {
+  closePops();
   const opts = { id: "nl-folder", mode: "readwrite" };
   // Open beside the document when we have its handle (a file handle as
   // startIn opens its folder).
@@ -4881,7 +4911,7 @@ async function saveDocument(explicit) {
       return "failed";
     }
   } else if (!explicit) {
-    if (!warnedUnlinked) toast("Edited in the view only — press Ctrl+S to save it to a file");
+    if (!warnedUnlinked) toast("Not linked to its file yet — 📁 Connect folder to save straight to disk (or Ctrl+S)");
     warnedUnlinked = true;
     return "unlinked";
   }
@@ -5120,7 +5150,7 @@ for (const btn of $("#seg-bumpers").querySelectorAll("button")) {
 /* ---------- popovers ---------- */
 
 const POPS = [["#btn-display", "#pop-display"], ["#btn-more", "#pop-more"],
-              ["#doc-name", "#pop-path"], ["#btn-fix", "#pop-fix"]];
+              ["#doc-name", "#pop-path"], ["#btn-fix", "#pop-fix"], ["#btn-folder", "#pop-folder"]];
 
 function closePops(except) {
   for (const [btn, pop] of POPS) {

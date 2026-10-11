@@ -57,7 +57,8 @@ scrollbar — and unlike the browser's own find, it looks inside collapsed secti
 can't damage formatting. Each replace saves to the file and can be undone like any edit.
 
 **Every file you open is a tab,** and the tabs survive a refresh and come back the next
-day. Click **📁 Connect folder**, pick your project folder once, and every tab is linked
+day. Click **📁 Connect folder** (it explains what it's for, and turns orange when the
+document you're on isn't linked), pick your project folder once, and every tab is linked
 to its file again — saving straight to disk, Watch working, relative images loading.
 
 The first time an edit is saved, the browser asks once whether this page may edit the
