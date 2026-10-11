@@ -92,6 +92,7 @@ Complete feature inventory with status, timeline, and metadata.
 | Connect folder | sync | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | 📁 toolbar button: pick the project folder once per session (read/write). Relinks open tabs to their files — by VS Code path, else folder + name, else a unique name; never a guess — restoring save/refresh/watch; unsaved edits kept. Documents opened later link themselves. Relative images (Markdown or raw <img>) load from the folder; exports keep the original paths |
 | Interactive Mode on every Markdown table | tables | ✓ | 100% | 7/31 | — | v3.0 | | 2 | high | Feature | Per-table toggle: click a header to sort, per-column filters (AND/OR), hide/show columns, Reset, CSV and JSON export of the current view. Markdown tables only — raw HTML tables are left as layout |
 | Embedded images not displayed | render | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 3 | low | Decision | base64 data: images (Markdown or raw <img>, any type) show "🖼 Embedded image not shown: <alt>" instead of the image; data: in srcset/poster dropped. Source view shows the file as written |
+| Markdown fixer | edit | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 2 | high | Quality | 🩹 badge appears only when a document has fixable breakage: #heading with no space, unclosed code fence, table with no blank line before it, divider row with the wrong column count, -item list markers, [text] (url). One by one with a before/after (Fix / Skip), or Fix all; Hurry mode (remembered) fixes everything unattended. Saves like any edit; Undo. Skips code, front matter, comments; off in source view |
 | Tabs remembered across sessions | state | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | Tab text saved to localStorage (2M-char budget); restored tabs show in italics as saved copies until the file is opened again (file handles can't survive a refresh on file://) |
 
 ## Legend: Feature Type Codes
@@ -146,7 +147,7 @@ Potential future enhancements (not committed). All must stay single-file and off
 - Chart from a table — small inline-SVG bar/line chart, kept as static SVG in exports.
 
 ### Quality
-- Optional lint tab — broken internal links, unclosed code fences, skipped heading levels, ragged tables. Only shows when opened.
+- Lint report — the things the fixer can't safely fix: broken internal links, skipped heading levels. Report only, shown on request.
 - Math rendering (`$...$`, `$$...$$`) — costs ~300 KB vendored KaTeX; opt-in or skip.
 
 ### Earlier ideas

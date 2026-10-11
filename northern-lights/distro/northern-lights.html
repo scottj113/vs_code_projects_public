@@ -836,6 +836,21 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
   border-radius: 10px; box-shadow: var(--shadow);
 }
 .pop[hidden] { display: none; }
+
+/* Markdown fixes panel */
+#pop-fix { width: 440px; max-width: 80vw; }
+#pop-fix hr { border: 0; border-top: 1px solid var(--border); margin: 10px 0 8px; }
+#fix-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+#fix-before, #fix-after {
+  margin: 0 0 4px; padding: 5px 8px; border-radius: 5px; white-space: pre-wrap; overflow-wrap: anywhere;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+#fix-before { background: color-mix(in srgb, #d9534f 12%, var(--bg)); }
+#fix-after  { background: color-mix(in srgb, #2e9e5b 14%, var(--bg)); margin-bottom: 9px; }
+#fix-card[hidden], #fix-done[hidden], #fix-note[hidden] { display: none; }
+#fix-done { margin: 2px 0 6px; font-size: 13px; color: var(--fg-muted); }
+#fix-note { margin: 8px 0 4px; font-size: 12px; color: var(--fg-muted); line-height: 1.45; }
+#fix-of { font-weight: 400; letter-spacing: 0; text-transform: none; opacity: .8; margin-left: 4px; }
 .pop-head {
   margin: 13px 0 6px; font-size: 10.5px; font-weight: 700;
   letter-spacing: .07em; text-transform: uppercase; color: var(--fg-faint);
@@ -1234,6 +1249,30 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
 
   <button type="button" class="btn" id="btn-edit" aria-pressed="false" hidden
           title="Edit in place: click any block to edit its Markdown (Ctrl+E)">&#9998; Edit</button>
+
+  <!-- Markdown fixes: shown only when the document has some. -->
+  <div class="pop-wrap">
+    <button type="button" class="btn" id="btn-fix" hidden aria-haspopup="true" aria-expanded="false">&#129657; <span id="fix-count"></span></button>
+    <div class="pop" id="pop-fix" hidden>
+      <p class="pop-head">Markdown fixes <span id="fix-of"></span></p>
+      <div id="fix-card">
+        <div id="fix-title"></div>
+        <pre id="fix-before"></pre>
+        <pre id="fix-after"></pre>
+        <div class="pop-row">
+          <button type="button" class="btn" id="fix-one">Fix</button>
+          <button type="button" class="btn" id="fix-skip">Skip</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn" id="fix-all" title="Fix every issue at once">Fix all</button>
+        </div>
+      </div>
+      <p id="fix-done" hidden>No issues left.</p>
+      <p id="fix-note" hidden></p>
+      <button type="button" class="btn" id="fix-undo" hidden>Undo last fix</button>
+      <hr>
+      <label class="pop-check"><input type="checkbox" id="chk-fix-hurry"> Hurry mode <span class="hint">fix everything automatically</span></label>
+    </div>
+  </div>
 
   <button type="button" class="btn" id="btn-folder" aria-pressed="false" hidden
           title="Connect your project folder: relinks open documents for saving and live reload, and loads relative images">&#128193; <span id="folder-label">Connect folder</span></button>
@@ -2462,6 +2501,7 @@ function render() {
     els.name.classList.remove("dirty");
     $("#btn-edit").hidden = true;
     updateFolderButton();
+    refreshFixer();
     if (state.editMode) setEditMode(false);
     if (find.open) closeFind();
     state.editScope = null;
@@ -2550,6 +2590,7 @@ function render() {
   refreshFind();
   updateFolderButton();
   folderAfterRender();
+  refreshFixer();
 }
 
 function buildToc(headings) {
@@ -3856,6 +3897,7 @@ function setSourceView(on) {
   placeSrcToggle();
   if (keep !== null) on ? scrollRawTo(keep) : scrollDocTo(keep);
   refreshFind();   // the other view's text
+  refreshFixer();   // off in source view
   if (state.text) toast(on ? "Showing the Markdown source — read-only" : "Showing the rendered page");
 }
 
@@ -4087,6 +4129,226 @@ $("#btn-folder").addEventListener("click", async () => {
     if (e && e.name === "AbortError") return;
     toast("Couldn't open that folder: " + (e && (e.message || e.name)), true);
   }
+});
+
+/* ------------------------------------------------------------------ fixer --
+   Markdown fixes: mistakes that clearly render wrong, where the intent is
+   obvious. Unobtrusive -- a 🩹 badge in the toolbar appears only when the
+   document has some, and nothing opens on its own.
+
+   One by one (the default): the badge's panel shows each issue with a
+   before/after, Fix or Skip. After a fix it says so and leaves checking to
+   you -- refresh, or open the file in another viewer. Hurry mode (remembered)
+   fixes everything as soon as it's found, unattended; Fix all does it once.
+   Either way a fix is an ordinary edit, saved to the file, and the last one
+   can be undone.
+
+   Never touches code blocks, front matter or HTML comments, and leaves style
+   alone (heading jumps, spacing) -- only breakage.
+   -------------------------------------------------------------------------- */
+
+const fixer = {
+  issues: [], idx: 0,
+  skipped: new Set(),     // signatures skipped in this document
+  key: null,              // the document they belong to
+  undo: null,             // { before, after } of the last fix
+  paused: null,           // text after an undo: hurry mode leaves it alone
+  pending: false,
+  note: "",
+};
+state.fixHurry = localStorage.getItem("mdv:fixHurry") === "1";
+
+const fixSig = (i) => i.kind + "|" + i.before.join("\n");
+
+/** Strip `code spans` to same-length filler, so rules can't match inside them. */
+const maskCode = (l) => l.replace(/(`+)[^`]*?\1/g, (s) => "\u0000".repeat(s.length));
+
+function lintMarkdown(text) {
+  const lines = splitLines(text);
+  const skip = new Array(lines.length).fill(false);
+
+  // Front matter, fenced code, multi-line HTML comments: hands off.
+  if (/^---\s*$/.test(lines[0] || "")) {
+    let j = 1;
+    while (j < lines.length && !/^---\s*$/.test(lines[j])) j++;
+    if (j < lines.length) for (let k = 0; k <= j; k++) skip[k] = true;
+  }
+  let fence = null, fenceAt = -1, inComment = false;
+  for (let n = 0; n < lines.length; n++) {
+    const l = lines[n];
+    if (fence) {
+      skip[n] = true;
+      const c = l.match(/^ {0,3}(`{3,}|~{3,})\s*$/);
+      if (c && c[1][0] === fence[0] && c[1].length >= fence.length) fence = null;
+      continue;
+    }
+    if (inComment) { skip[n] = true; if (l.includes("-->")) inComment = false; continue; }
+    if (skip[n]) continue;
+    const o = l.match(/^ {0,3}(`{3,}|~{3,})/);
+    if (o) { fence = o[1]; fenceAt = n; skip[n] = true; continue; }
+    if (/^ {0,3}<!--/.test(l) && !l.includes("-->")) { inComment = true; skip[n] = true; }
+  }
+
+  const issues = [];
+  const add = (kind, line, title, start, end, after) =>
+    issues.push({ kind, line, title, start, end, after, before: lines.slice(start, end) });
+
+  const isList = (l) => /^\s*(?:[-*+]|\d{1,9}[.)])\s+\S/.test(l || "");
+  const isSep = (l) => !!l && l.includes("|") && /-/.test(l) &&
+    /^ {0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/.test(l);
+
+  for (let n = 0; n < lines.length; n++) {
+    if (skip[n]) continue;
+    const l = lines[n];
+
+    let m = l.match(/^( {0,3})(#{1,6})([^#\s].*)$/);
+    if (m) add("heading", n, "Heading needs a space after the #", n, n + 1, [m[1] + m[2] + " " + m[3]]);
+
+    m = l.match(/^(\s*)([-+]|\d{1,9}[.)])(\p{L}.*)$/u);
+    if (m && (isList(lines[n - 1]) || isList(lines[n + 1]))) {
+      add("list", n, "List item needs a space after its marker", n, n + 1, [m[1] + m[2] + " " + m[3]]);
+    }
+
+    if (l.includes("|") && !skip[n + 1] && isSep(lines[n + 1])) {
+      const head = splitRow(l), spec = splitRow(lines[n + 1]);
+      if (spec.length !== head.length) {
+        const cells = head.map((_, j) => spec[j] || "---");
+        const lead = /^\s*\|/.test(lines[n + 1]), trail = /\|\s*$/.test(lines[n + 1]);
+        add("table", n + 1, "Table's divider row has " + spec.length + " column" + (spec.length === 1 ? "" : "s") +
+          ", its header " + head.length + " — the table won't render", n + 1, n + 2,
+          [(lead ? "| " : "") + cells.join(" | ") + (trail ? " |" : "")]);
+      }
+      const prev = lines[n - 1];
+      if (n > 0 && !skip[n - 1] && prev.trim() && !prev.includes("|") && !/^ {0,3}(?:#|>|[-*+]\s|\d+[.)]\s)/.test(prev)) {
+        add("table-gap", n, "Table needs a blank line before it, or it runs into the paragraph above", n, n, [""]);
+      }
+    }
+
+    const masked = maskCode(l);
+    const re = /(\[[^\]\n]+\])( +)(\((?:https?:\/\/|mailto:|\.{0,2}\/|#)[^)\s]*\))/g;
+    let out = "", last = 0, any = false;
+    for (const mm of masked.matchAll(re)) {
+      any = true;
+      const gap = mm.index + mm[1].length;
+      out += l.slice(last, gap);
+      last = gap + mm[2].length;
+    }
+    if (any) add("link", n, "A space between ] and ( stops the link working", n, n + 1, [out + l.slice(last)]);
+  }
+
+  if (fence) {
+    const at = lines.length && lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+    add("fence", fenceAt, "Code block opened here is never closed — everything after it shows as code", at, at, [fence]);
+  }
+  return issues.sort((a, b) => a.line - b.line);
+}
+
+function applyFixTo(text, issue) {
+  const lines = splitLines(text);
+  lines.splice(issue.start, issue.end - issue.start, ...issue.after);
+  return lines.join(eolOf(text));
+}
+
+/** Re-check after every render; keeps the badge honest, runs hurry mode. */
+function refreshFixer() {
+  const key = (state.tabs[state.tabIndex] || {}).key || null;
+  if (key !== fixer.key) { fixer.key = key; fixer.skipped.clear(); fixer.idx = 0; fixer.note = ""; }
+  const all = state.text && !state.sourceView ? lintMarkdown(state.text) : [];
+  fixer.issues = state.fixHurry ? all : all.filter((i) => !fixer.skipped.has(fixSig(i)));
+  if (state.fixHurry && all.length && state.text !== fixer.paused && !fixer.pending) {
+    // After this render, not inside it: a fix renders again.
+    fixer.pending = true;
+    setTimeout(() => { fixer.pending = false; if (state.fixHurry) fixAll(true); }, 0);
+  }
+  paintFixer();
+}
+
+const fixLine = (t) => (t === "" ? "⏎ (blank line)" : t.length > 90 ? t.slice(0, 89) + "…" : t);
+
+function paintFixer() {
+  const n = fixer.issues.length, pop = $("#pop-fix");
+  $("#btn-fix").hidden = !n && pop.hidden;
+  $("#fix-count").textContent = n || "";
+  $("#btn-fix").title = n ? n + " Markdown issue" + (n === 1 ? "" : "s") + " — click to review" : "Markdown fixes";
+  if (fixer.idx >= n) fixer.idx = 0;
+  const i = fixer.issues[fixer.idx];
+  $("#fix-card").hidden = !i;
+  $("#fix-of").textContent = n ? (fixer.idx + 1) + " of " + n : "";
+  $("#fix-done").hidden = !!n;
+  if (i) {
+    $("#fix-title").textContent = "Line " + (i.line + 1) + " · " + i.title;
+    const lines = splitLines(state.text);
+    let before = i.before, after = i.after;
+    if (i.start === i.end) {   // an insertion: show it between its neighbours
+      const ctx = [lines[i.start - 1], lines[i.start]].filter((x) => x !== undefined);
+      before = ctx;
+      after = i.start > 0 ? [ctx[0], ...i.after, ...ctx.slice(1)] : [...i.after, ...ctx];
+    }
+    $("#fix-before").textContent = before.map((t) => "− " + fixLine(t)).join("\n");
+    $("#fix-after").textContent = after.map((t) => "+ " + fixLine(t)).join("\n");
+  }
+  $("#fix-note").textContent = fixer.note;
+  $("#fix-note").hidden = !fixer.note;
+  $("#fix-undo").hidden = !(fixer.undo && fixer.undo.after === state.text);
+  $("#chk-fix-hurry").checked = state.fixHurry;
+}
+
+function fixOne() {
+  const i = fixer.issues[fixer.idx];
+  if (!i) return;
+  commitInline();
+  const before = state.text;
+  const after = applyFixTo(before, i);
+  fixer.undo = { before, after };
+  fixer.note = "Fixed line " + (i.line + 1) + ". Check it reads right — refresh, or open the file in another viewer.";
+  applyFindEdit(after, null);   // render() re-checks, and the next issue moves up
+}
+
+function skipOne() {
+  const i = fixer.issues[fixer.idx];
+  if (!i) return;
+  fixer.skipped.add(fixSig(i));
+  fixer.note = "";
+  refreshFixer();
+}
+
+/** Fix everything: repeatedly, since one fix can shift or change another. */
+function fixAll(auto) {
+  commitInline();
+  const before = state.text;
+  let text = before, count = 0;
+  for (let guard = 0; guard < 500; guard++) {
+    const left = lintMarkdown(text).filter((i) => auto || !fixer.skipped.has(fixSig(i)));
+    if (!left.length) break;
+    text = applyFixTo(text, left[0]);
+    count++;
+  }
+  if (!count) return;
+  fixer.undo = { before, after: text };
+  fixer.note = (auto ? "Hurry mode fixed " : "Fixed ") + count + " issue" + (count === 1 ? "" : "s") +
+    ". Check the document reads right — refresh, or open it in another viewer.";
+  applyFindEdit(text, null);
+  if (auto) toast("Hurry mode: fixed " + count + " Markdown issue" + (count === 1 ? "" : "s") + " — 🩹 to undo");
+}
+
+function undoFix() {
+  const u = fixer.undo;
+  if (!u || state.text !== u.after) return;
+  fixer.undo = null;
+  fixer.paused = u.before;   // or hurry mode would redo it straight away
+  fixer.note = "Undone.";
+  applyFindEdit(u.before, null);
+}
+
+$("#fix-one").addEventListener("click", fixOne);
+$("#fix-skip").addEventListener("click", skipOne);
+$("#fix-all").addEventListener("click", () => fixAll(false));
+$("#fix-undo").addEventListener("click", undoFix);
+$("#chk-fix-hurry").addEventListener("change", (e) => {
+  state.fixHurry = e.target.checked;
+  localStorage.setItem("mdv:fixHurry", state.fixHurry ? "1" : "0");
+  fixer.paused = null;
+  refreshFixer();
 });
 
 /* ------------------------------------------------------------------ find --
@@ -4784,7 +5046,7 @@ for (const btn of $("#seg-bumpers").querySelectorAll("button")) {
 /* ---------- popovers ---------- */
 
 const POPS = [["#btn-display", "#pop-display"], ["#btn-more", "#pop-more"],
-              ["#doc-name", "#pop-path"]];
+              ["#doc-name", "#pop-path"], ["#btn-fix", "#pop-fix"]];
 
 function closePops(except) {
   for (const [btn, pop] of POPS) {
@@ -4806,7 +5068,7 @@ for (const [btn, pop] of POPS) {
   $(pop).addEventListener("click", (e) => e.stopPropagation());
 }
 
-document.addEventListener("click", () => closePops());
+document.addEventListener("click", () => { closePops(); paintFixer(); });
 window.addEventListener("keydown", (e) => { if (e.key === "Escape") closePops(); });
 
 // Opening the path panel pre-selects the text, so Ctrl+C works immediately
