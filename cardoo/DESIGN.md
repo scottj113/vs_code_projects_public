@@ -143,8 +143,8 @@ Currently cards have `id` and `text`. To add properties (e.g., priority, tags, d
 
 Cardoo follows the same deployment model as [Northern Lights](../northern-lights/), a mature single-file Markdown viewer with:
 
-- **60 features** shipped in ~9 days
-- **4,700 lines** of well-organized code
+- **66 features**, with editing, tabs and find & replace added since v1
+- **~6,100 lines** in one file
 - **Zero dependencies** (vendored Mermaid library only)
 - **12 contrast-validated color palettes**
 - **Full file I/O** (read/edit/save to disk)

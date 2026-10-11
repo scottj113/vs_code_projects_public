@@ -4,12 +4,17 @@ Open any markdown file in VS Code as a live preview in the viewer with one keyst
 
 ## What It Does
 
-Press **Ctrl+M then Down** to open the current file in the Northern Lights MD Viewer. The viewer is **read-only**—edit in VS Code, then refresh to see changes:
+Press **Ctrl+M then Down** to open the current file in the Northern Lights MD Viewer.
 
-1. **Ctrl+M Down** → File opens in viewer
-2. **Edit in VS Code** (your text editor)
-3. **Ctrl+R** (or click Refresh) → See your changes
-4. **Optional:** Click **Watch** for auto-refresh as you save
+1. **Ctrl+M Down** → the file opens in the viewer
+2. Click **📁 Connect folder** and pick your project folder (once per opened page)
+3. Now either:
+   - **Edit in VS Code** and turn on **Watch** — the viewer follows every save, or
+   - **Edit in the viewer** (✎ Edit / Ctrl+E) — each edit saves straight back to the file
+
+The viewer can't save or watch until step 2: the browser never tells a page where a file
+lives, so it needs you to point it at the folder. Without connecting, Ctrl+S in the viewer
+opens Save As with the file's path already copied for you to paste.
 
 ## Prerequisites
 
@@ -55,7 +60,8 @@ The task is defined in `.vscode/tasks.json` in this repo. To use it:
 If you prefer not to use the PowerShell task:
 - **Open the viewer** (`northern-lights.html`) in your browser
 - **Drag your markdown file** onto the viewer
-- **Edit in VS Code**, then click **Refresh** (Ctrl+R) to see changes
+- Edit in VS Code with **Watch** on, or edit right in the viewer — a dropped file is linked
+  to disk already, no folder needed
 
 ## How It Works
 
@@ -74,10 +80,8 @@ The bootstrap data is embedded *inline*, not in a separate `.js` file, so it wor
 1. Open a markdown file in VS Code
 2. Press **Ctrl+M** then **Down** 
 3. Viewer opens in your browser with the file displayed
-4. **A popup explains the workflow** — dismiss it or follow along
-5. Edit the file in VS Code as normal
-6. Click **Refresh** (Ctrl+R) in the viewer to see your changes
-7. **Optional:** Click **Watch** to enable auto-refresh (it'll ask you to pick the file once)
+4. Click **📁 Connect folder** and pick the project folder
+5. Edit in VS Code with **Watch** on — or edit in the viewer, which saves to the same file
 
 ## Using From Other Folders
 
@@ -101,10 +105,12 @@ To use this from a different project or folder:
 - Check that your markdown file is saved (unsaved files cannot be read)
 - Try drag-and-drop to test if the viewer works in general
 
-**Watch/auto-refresh doesn't work:**
-- The viewer needs to re-read the file, which requires file permission
-- Click **Enable live reload** (if shown) or **Watch**, then select the file in the picker
-- Once selected, auto-refresh will work for future changes
+**Watch / saving doesn't work:**
+- The viewer needs a live link to the file: click **📁 Connect folder** and pick the folder
+  the file is in (or a folder above it)
+- The link lasts until the page is refreshed or closed — Ctrl+M Down opens a new page, so
+  connect once per opened page
+- Chromium only (Chrome, Edge)
 
 ## Keyboard Shortcuts (From VS Code)
 
@@ -112,10 +118,10 @@ To use this from a different project or folder:
 |-----|--------|
 | `Ctrl+M Down` | Open current file in viewer |
 | `Ctrl+R` | Refresh (reload file from disk) |
+| `Ctrl+E` | Edit mode — click a block to edit it in place |
+| `Ctrl+S` | Save now |
 
-For editing, drag-and-drop the file instead—then you get `Ctrl+E` (edit section) and `Ctrl+S` (save).
-
-See [HOW_TO.md](HOW_TO.md) for all keyboard shortcuts.
+See the [viewer README](distro/README.md#keyboard) for every shortcut.
 
 ## Technical Details
 
@@ -138,11 +144,10 @@ The script:
 The viewer itself:
 - Runs entirely in your browser
 - Never sends data to any server
-- Only requests Mermaid (if you use diagrams) from unpkg.com
-- Everything else is local
+- Makes no network requests of its own — Mermaid is bundled in `vendor/`
+  (images your Markdown links to on the web are fetched like any web page's)
 
 ## Need Help?
 
-- Check [HOW_TO.md](HOW_TO.md) for general viewer usage
-- See [README.md](distro/README.md) for features and capabilities
+- See the [viewer README](distro/README.md) for features, usage and shortcuts
 - If the PowerShell script fails, check your terminal for error messages

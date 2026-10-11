@@ -50,7 +50,7 @@ Complete feature inventory with status, timeline, and metadata.
 | **LIVE RELOAD** | | | | | | | | | |
 | Refresh file (Ctrl+R) | sync | ✓ | 100% | 7/28 | 7/28 | v1.0 | v1.0 | 1 | critical | Workflow | Re-read file from disk on demand |
 | Watch mode (auto-refresh) | sync | ✓ | 100% | 7/28 | 7/28 | v1.0 | v1.0 | 1 | critical | Workflow | Auto-reload whenever file changes |
-| Enable live reload button | sync | ✓ | 100% | 7/28 | 7/28 | v1.0 | v1.0 | 2 | high | UX | Arm live reload after opening without it |
+| Enable live reload button | sync | ✓ | 100% | 7/28 | 7/28 | v1.0 | v1.0 | 2 | high | UX | Arm live reload after opening without it. Superseded in v3.0 by Connect folder; the button is gone |
 | **EXPORT** | | | | | | | | | |
 | Standalone HTML export | export | ✓ | 100% | 7/29 | 7/29 | v1.0 | v1.0 | 1 | critical | Feature | Single self-contained .html file with all styles inlined |
 | PDF export (Ctrl+P) | export | ✓ | 100% | 7/29 | 7/29 | v1.0 | v1.0 | 1 | critical | Feature | Clean PDF printing with proper formatting |
@@ -90,6 +90,8 @@ Complete feature inventory with status, timeline, and metadata.
 | Find and replace (Ctrl+H) | edit | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | Works on the Markdown source, never the rendered text. Turns edit mode on and opens the Markdown pane showing the exact occurrence; its block is outlined. Replace / All (Ctrl+Alt+Enter), $1 with regex; each replace saves to the file; Undo for the last one. Off in source view |
 | ALL-CAPS headings | appearance | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 3 | medium | Style | Aa menu or bare H: headings shown in capitals with a touch of tracking. Display only (the file keeps its casing); remembered, applied before first paint, kept in standalone export |
 | Connect folder | sync | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | 📁 toolbar button: pick the project folder once per session (read/write). Relinks open tabs to their files — by VS Code path, else folder + name, else a unique name; never a guess — restoring save/refresh/watch; unsaved edits kept. Documents opened later link themselves. Relative images (Markdown or raw <img>) load from the folder; exports keep the original paths |
+| Interactive Mode on every Markdown table | tables | ✓ | 100% | 7/31 | — | v3.0 | | 2 | high | Feature | Per-table toggle: click a header to sort, per-column filters (AND/OR), hide/show columns, Reset, CSV and JSON export of the current view. Markdown tables only — raw HTML tables are left as layout |
+| Embedded images not displayed | render | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 3 | low | Decision | base64 data: images (Markdown or raw <img>, any type) show "🖼 Embedded image not shown: <alt>" instead of the image; data: in srcset/poster dropped. Source view shows the file as written |
 | Tabs remembered across sessions | state | ✓ | 100% | 10/10 | 10/10 | v3.0 | | 1 | high | Workflow | Tab text saved to localStorage (2M-char budget); restored tabs show in italics as saved copies until the file is opened again (file handles can't survive a refresh on file://) |
 
 ## Legend: Feature Type Codes
@@ -116,13 +118,11 @@ Complete feature inventory with status, timeline, and metadata.
 
 ## Summary Stats
 
-- **Total Features:** 60
-- **Status Breakdown:** 60 ✓ | 0 🔄 | 0 → | 0 ○
-- **Completion:** 100%
-- **v1.0 Features:** 54 (7/24–7/31)
-- **v2.0 Features:** 6 (table enhancements + logo modes, 7/31–8/1)
-- **Development Timeline:** ~9 days (7/24–8/1)
-- **Architecture:** Single-file HTML application (~3,500 LOC)
+- **Total Features:** 66, all shipped (✓)
+- **v1.0:** 46 rows (7/24–7/31) — some since reworked in v3.0
+- **v2.0:** 6 (table enhancements + logo modes, 7/31–8/1)
+- **v3.0:** 13 so far (data layer, raw HTML, tabs, editing, find & replace, connect folder; to 10/10)
+- **Architecture:** Single-file HTML application (~6,100 lines, ~270 KB)
 - **Dependencies:** Mermaid (vendored, MIT licensed)
 - **Installation:** None required — bookmark the HTML file
 
@@ -132,7 +132,6 @@ Potential future enhancements (not committed). All must stay single-file and off
 
 ### Recommended next
 - **GitHub-style callouts** — render `> [!NOTE]`, `[!TIP]`, `[!WARNING]`, `[!IMPORTANT]` as colored boxes instead of plain blockquotes. Small.
-- **Markdown tables as datasets** — give every ordinary GFM table the v3 sort and CSV/JSON export, not just `<script data-id>` tables.
 
 ### Reading & navigation
 - Collapsible sections — click a heading to fold it; "collapse all to H2" for skimming.

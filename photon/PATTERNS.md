@@ -112,7 +112,7 @@ ignore toasts. Tune thresholds to a session's worth of work: Cardoo uses 0–10 
 21+, which reaches yellow after ~15 minutes of steady editing.
 
 **Litmus test for whether an app needs one:** *if this data vanished right now, would the
-user be upset and lose real time?* Not app size. Northern Lights (4,700 lines) has none —
+user be upset and lose real time?* Not app size. Northern Lights (6,000+ lines) has none —
 wipe its storage and you reload the `.md` you still have. Cardoo (a few hundred lines)
 can't ship without one — a card is often the only record a thought ever existed.
 

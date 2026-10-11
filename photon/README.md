@@ -78,11 +78,12 @@ That rule is the whole value. A pattern file you have to second-guess is worse t
 
 Two working apps, deliberately different in scale, to show the patterns carry both:
 
-- **[Cardoo](../cardoo/)** — ~250 lines. Kanban board: drag & drop, card details with
+- **[Cardoo](../cardoo/)** — ~1,500 lines. Kanban board: drag & drop, card details with
   highlights, four themes, export/import, staleness meter.
-- **[Northern Lights MD Viewer](../northern-lights/)** — ~4,700 lines, 60 features.
+- **[Northern Lights MD Viewer](../northern-lights/)** — ~6,100 lines, 66 features.
   Markdown viewer and editor: full GFM parser, syntax highlighting, Mermaid diagrams,
-  twelve contrast-validated palettes, section editing that writes back to disk, live
+  twelve contrast-validated palettes, click-to-edit in place that saves back to disk
+  touching only the edited lines, tabs that survive a refresh, find and replace, live
   reload, folder browsing, standalone HTML and PDF export.
 
 The gap between them is the useful part: same patterns, no build step appearing anywhere in
