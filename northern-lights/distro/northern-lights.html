@@ -645,9 +645,6 @@ body.resizing { cursor: col-resize; user-select: none; }
   cursor: pointer;
 }
 #src-toggle[hidden] { display: none; }
-#src-toggle .ico { font: 700 12px/1 ui-monospace, Consolas, monospace; }
-#src-toggle:hover { background: var(--accent-soft); }
-#src-toggle[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
 /* Source view (⋮ menu): the whole file as Markdown, instead of the rendered page. */
 #raw-view { display: none; }
 body.source-view #doc, body.source-view #sec-frame, body.source-view #src-toggle { display: none !important; }
@@ -836,6 +833,11 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
   border-radius: 10px; box-shadow: var(--shadow);
 }
 .pop[hidden] { display: none; }
+
+/* Undo / redo: dimmed when there's nothing to step to. */
+#undo-pill button:disabled { opacity: .35; cursor: default; }
+/* The spot an undo or redo just changed, briefly. */
+#doc .undo-flash { box-shadow: 0 0 0 3px color-mix(in srgb, #ff9a3c 70%, transparent); border-radius: 4px; transition: box-shadow .4s; }
 
 /* Markdown fixes panel */
 #pop-fix { width: 440px; max-width: 80vw; }
@@ -1250,6 +1252,12 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
   <button type="button" class="btn" id="btn-edit" aria-pressed="false" hidden
           title="Edit in place: click any block to edit its Markdown (Ctrl+E)">&#9998; Edit</button>
 
+  <!-- Undo history: block edits, replaces and fixes, one step at a time. -->
+  <div class="pill" id="undo-pill" hidden>
+    <button type="button" id="btn-undo" disabled aria-label="Undo">&#8630;</button>
+    <button type="button" id="btn-redo" disabled aria-label="Redo">&#8631;</button>
+  </div>
+
   <!-- Markdown fixes: shown only when the document has some. -->
   <div class="pop-wrap">
     <button type="button" class="btn" id="btn-fix" hidden aria-haspopup="true" aria-expanded="false">&#129657; <span id="fix-count"></span></button>
@@ -1268,7 +1276,6 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
       </div>
       <p id="fix-done" hidden>No issues left.</p>
       <p id="fix-note" hidden></p>
-      <button type="button" class="btn" id="fix-undo" hidden>Undo last fix</button>
       <hr>
       <label class="pop-check"><input type="checkbox" id="chk-fix-hurry"> Hurry mode <span class="hint">fix everything automatically</span></label>
     </div>
@@ -1366,7 +1373,6 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
       <input type="text" id="replace-input" placeholder="Replace" spellcheck="false" autocomplete="off" aria-label="Replace with">
       <button type="button" class="txt" id="replace-one" title="Replace this one and go to the next (Enter)">Replace</button>
       <button type="button" class="txt" id="replace-all" title="Replace all (Ctrl+Alt+Enter)">All</button>
-      <button type="button" class="txt" id="find-undo" title="Undo the last replace" hidden>Undo</button>
     </div>
   </div>
 </div>
@@ -2502,6 +2508,7 @@ function render() {
     $("#btn-edit").hidden = true;
     updateFolderButton();
     refreshFixer();
+    paintUndo();
     if (state.editMode) setEditMode(false);
     if (find.open) closeFind();
     state.editScope = null;
@@ -2591,6 +2598,7 @@ function render() {
   updateFolderButton();
   folderAfterRender();
   refreshFixer();
+  paintUndo();
 }
 
 function buildToc(headings) {
@@ -3576,10 +3584,12 @@ function commitInline(cancel) {
     return null;
   }
   const linesBefore = splitLines(state.text).length;
+  const textBefore = state.text;
   state.text = spliceSection(state.text, { start, end }, value);
   // A section being edited grows or shrinks with the blocks edited inside it.
   if (state.editScope) state.editScope.end += splitLines(state.text).length - linesBefore;
   state.dirty = true;
+  recordEdit("edit", textBefore, state.text);
   const y = els.scroller.scrollTop;
   render();
   els.scroller.scrollTo({ top: y, behavior: "instant" });
@@ -4131,6 +4141,101 @@ $("#btn-folder").addEventListener("click", async () => {
   }
 });
 
+/* ---------------------------------------------------------------- history --
+   Undo / redo for the document, one change at a time: a block or section
+   edit (applied when the block loses focus), a replace, a fix. Typing inside
+   an open block is the browser's own Ctrl+Z; this picks up from there.
+
+   The last 100 changes per tab (Word's default depth), in memory -- a reload
+   starts fresh. Steps share the text they hold (one step's "after" is the
+   next one's "before"), so 100 steps on a 20 KB file is a few MB; a budget
+   drops the oldest early on very large files. Each step
+   restores the whole text it recorded and saves, so it's only offered while
+   the document is exactly as the history left it: a change from outside
+   (a reload from disk, another load) clears it rather than risk stepping
+   back over someone else's work.
+   -------------------------------------------------------------------------- */
+
+const HISTORY_MAX = 100;
+const HISTORY_BUDGET = 40e6;   // characters held across a tab's steps (~80 MB worst case)
+const histories = new Map();   // tab key -> { undo: [], redo: [] }
+
+function historyFor() {
+  const key = (state.tabs[state.tabIndex] || {}).key;
+  if (!key) return null;
+  if (!histories.has(key)) histories.set(key, { undo: [], redo: [] });
+  return histories.get(key);
+}
+
+/** The first line two versions differ on -- where to point after a step. */
+function firstChangedLine(a, b) {
+  const x = splitLines(a), y = splitLines(b);
+  let i = 0;
+  while (i < x.length && i < y.length && x[i] === y[i]) i++;
+  return i;
+}
+
+function recordEdit(label, before, after) {
+  const h = historyFor();
+  if (!h || before === after) return;
+  h.undo.push({ label, before, after, line: firstChangedLine(before, after) });
+  if (h.undo.length > HISTORY_MAX) h.undo.shift();
+  // Each step holds one distinct text (its "before"; "after" is the next
+  // step's). On a huge file, keep fewer rather than run away with memory.
+  let held = h.undo.reduce((n, e) => n + e.before.length, 0);
+  while (h.undo.length > 1 && held > HISTORY_BUDGET) held -= h.undo.shift().before.length;
+  h.redo = [];
+}
+
+/** Drop the history if the document moved on without it. */
+function historyValid(h) {
+  const u = h.undo[h.undo.length - 1], r = h.redo[h.redo.length - 1];
+  if ((u && u.after !== state.text) || (r && r.before !== state.text)) { h.undo = []; h.redo = []; }
+  return h;
+}
+
+const STEP_NAMES = { edit: "block edit", replace: "replace", fix: "fix" };
+
+function paintUndo() {
+  const pill = $("#undo-pill");
+  pill.hidden = !state.text || state.sourceView;
+  const h = state.text ? historyFor() : null;
+  if (h) historyValid(h);
+  const u = h && h.undo[h.undo.length - 1], r = h && h.redo[h.redo.length - 1];
+  $("#btn-undo").disabled = !u;
+  $("#btn-redo").disabled = !r;
+  $("#btn-undo").title = u ? "Undo " + STEP_NAMES[u.label] + " at line " + (u.line + 1) + " (Ctrl+Z)" +
+    (h.undo.length > 1 ? " — " + h.undo.length + " steps back available" : "") : "Nothing to undo — the last " + HISTORY_MAX + " changes can be undone";
+  $("#btn-redo").title = r ? "Redo " + STEP_NAMES[r.label] + " at line " + (r.line + 1) + " (Ctrl+Y)" : "Nothing to redo";
+}
+
+function stepHistory(back) {
+  if (state.sourceView) return;
+  commitInline();   // a block still open is the newest change
+  const h = historyFor();
+  if (!h) return;
+  historyValid(h);
+  const e = back ? h.undo.pop() : h.redo.pop();
+  if (!e) { paintUndo(); return; }
+  (back ? h.redo : h.undo).push(e);
+  const text = back ? e.before : e.after;
+  fixer.paused = text;   // hurry mode mustn't redo an undone fix
+  applyFindEdit(text, null);
+  // Show where it happened.
+  const b = typeof blockForLine === "function" ? blockForLine(e.line) : null;
+  if (b) {
+    b.scrollIntoView({ block: "center", behavior: "instant" });
+    b.classList.add("undo-flash");
+    setTimeout(() => b.classList.remove("undo-flash"), 1200);
+  }
+  toast((back ? "Undid " : "Redid ") + STEP_NAMES[e.label] + " at line " + (e.line + 1));
+}
+const undoEdit = () => stepHistory(true);
+const redoEdit = () => stepHistory(false);
+
+$("#btn-undo").addEventListener("click", undoEdit);
+$("#btn-redo").addEventListener("click", redoEdit);
+
 /* ------------------------------------------------------------------ fixer --
    Markdown fixes: mistakes that clearly render wrong, where the intent is
    obvious. Unobtrusive -- a 🩹 badge in the toolbar appears only when the
@@ -4151,7 +4256,6 @@ const fixer = {
   issues: [], idx: 0,
   skipped: new Set(),     // signatures skipped in this document
   key: null,              // the document they belong to
-  undo: null,             // { before, after } of the last fix
   paused: null,           // text after an undo: hurry mode leaves it alone
   pending: false,
   note: "",
@@ -4289,7 +4393,6 @@ function paintFixer() {
   }
   $("#fix-note").textContent = fixer.note;
   $("#fix-note").hidden = !fixer.note;
-  $("#fix-undo").hidden = !(fixer.undo && fixer.undo.after === state.text);
   $("#chk-fix-hurry").checked = state.fixHurry;
 }
 
@@ -4299,9 +4402,8 @@ function fixOne() {
   commitInline();
   const before = state.text;
   const after = applyFixTo(before, i);
-  fixer.undo = { before, after };
   fixer.note = "Fixed line " + (i.line + 1) + ". Check it reads right — refresh, or open the file in another viewer.";
-  applyFindEdit(after, null);   // render() re-checks, and the next issue moves up
+  applyFindEdit(after, "fix");   // render() re-checks, and the next issue moves up
 }
 
 function skipOne() {
@@ -4324,26 +4426,15 @@ function fixAll(auto) {
     count++;
   }
   if (!count) return;
-  fixer.undo = { before, after: text };
   fixer.note = (auto ? "Hurry mode fixed " : "Fixed ") + count + " issue" + (count === 1 ? "" : "s") +
     ". Check the document reads right — refresh, or open it in another viewer.";
-  applyFindEdit(text, null);
-  if (auto) toast("Hurry mode: fixed " + count + " Markdown issue" + (count === 1 ? "" : "s") + " — 🩹 to undo");
-}
-
-function undoFix() {
-  const u = fixer.undo;
-  if (!u || state.text !== u.after) return;
-  fixer.undo = null;
-  fixer.paused = u.before;   // or hurry mode would redo it straight away
-  fixer.note = "Undone.";
-  applyFindEdit(u.before, null);
+  applyFindEdit(text, "fix");
+  if (auto) toast("Hurry mode: fixed " + count + " Markdown issue" + (count === 1 ? "" : "s") + " — ↶ to undo");
 }
 
 $("#fix-one").addEventListener("click", fixOne);
 $("#fix-skip").addEventListener("click", skipOne);
 $("#fix-all").addEventListener("click", () => fixAll(false));
-$("#fix-undo").addEventListener("click", undoFix);
 $("#chk-fix-hurry").addEventListener("change", (e) => {
   state.fixHurry = e.target.checked;
   localStorage.setItem("mdv:fixHurry", state.fixHurry ? "1" : "0");
@@ -4378,7 +4469,6 @@ const find = {
   matchCase: false, wholeWord: false, regex: false, error: "",
   hits: [], cur: -1,          // rendered matches (<mark>s), and the current one
   src: [], srcCur: -1,        // replace mode: occurrences in the Markdown source
-  undo: null,                 // { before, after } of the last replace
   openedPane: false,          // replace opened the Markdown pane, so closing it closes the pane
   timer: null,
 };
@@ -4577,7 +4667,6 @@ function paintFind() {
     : (cur + 1) + " of " + (n >= FIND_MAX ? FIND_MAX + "+" : n);
   count.title = find.replaceOpen ? "Occurrences in the Markdown source" : "Matches on the page";
   $("#find-input").classList.toggle("none", !!find.query && (!n || !!find.error));
-  $("#find-undo").hidden = !(find.undo && find.undo.after === state.text);
   $("#replace-one").disabled = $("#replace-all").disabled = !find.src.length;
 
   const box = $("#find-ticks");
@@ -4657,7 +4746,7 @@ function replaceOne() {
   const o = find.src[find.srcCur];
   if (!o) return;
   const before = state.text;
-  applyFindEdit(before.slice(0, o.start) + replacementFor(o.text) + before.slice(o.end), before);
+  applyFindEdit(before.slice(0, o.start) + replacementFor(o.text) + before.slice(o.end), "replace");
   toast("Replaced 1");
 }
 
@@ -4669,30 +4758,16 @@ function replaceAll() {
   let n = 0;
   const after = before.replace(re, (m) => { if (!m) return m; n++; return replacementFor(m); });
   if (!n) return;
-  applyFindEdit(after, before);
+  applyFindEdit(after, "replace");
   toast("Replaced " + n + (n === 1 ? " occurrence" : " occurrences"));
-}
-
-function undoReplace() {
-  const u = find.undo;
-  if (!u) return;
-  if (state.text !== u.after) {
-    find.undo = null;
-    paintFind();
-    toast("The document changed since — that replace can't be undone", true);
-    return;
-  }
-  find.undo = null;
-  applyFindEdit(u.before, null);
-  toast("Replace undone");
 }
 
 /** A replace is an ordinary edit: new text in, re-render, save to the file.
  *  render() re-runs the search in place, so the next occurrence moves up. */
-function applyFindEdit(text, undoFrom) {
+function applyFindEdit(text, label) {
+  if (label) recordEdit(label, state.text, text);
   state.text = text;
   state.dirty = true;
-  if (undoFrom !== null) find.undo = { before: undoFrom, after: text };
   if (state.editScope) {
     const r = rangeFor(state.editScope.id);
     if (r.id) Object.assign(state.editScope, { start: r.start, end: r.end });
@@ -4745,7 +4820,6 @@ $("#find-toggle").addEventListener("click", () => {
 });
 $("#replace-one").addEventListener("click", replaceOne);
 $("#replace-all").addEventListener("click", replaceAll);
-$("#find-undo").addEventListener("click", undoReplace);
 for (const [id, key] of [["find-case", "matchCase"], ["find-word", "wholeWord"], ["find-regex", "regex"]]) {
   $("#" + id).addEventListener("click", (e) => {
     find[key] = !find[key];
@@ -5212,6 +5286,14 @@ window.addEventListener("keydown", (e) => {
   }
   // Ctrl+E toggles editing in place. The section-in-a-window editor stays on
   // the menu and the contents pencils.
+  // Undo / redo the document's history -- but never inside a text box, where
+  // Ctrl+Z is the browser's own keystroke undo (an open block, find, replace).
+  if (mod && /^[zy]$/i.test(e.key) && state.text &&
+      !/^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || "")) {
+    e.preventDefault();
+    if (e.key.toLowerCase() === "y" || e.shiftKey) redoEdit(); else undoEdit();
+    return;
+  }
   // Ctrl+F: our find, which can see what the browser's can't (collapsed
   // <details>, the Markdown in source view) and skips what it shouldn't.
   if (mod && e.key.toLowerCase() === "f" && state.text) {

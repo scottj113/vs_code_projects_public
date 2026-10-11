@@ -54,7 +54,7 @@ block you're editing opens a read-only pane with its source, line numbers and al
 **Find, and replace.** `Ctrl+F` highlights every match, with a count and ticks beside the
 scrollbar — and unlike the browser's own find, it looks inside collapsed sections.
 `Ctrl+H` replaces, and it works on the Markdown source, never the rendered text, so it
-can't damage formatting. Each replace saves to the file; the last one can be undone.
+can't damage formatting. Each replace saves to the file and can be undone like any edit.
 
 **Every file you open is a tab,** and the tabs survive a refresh and come back the next
 day. Click **📁 Connect folder**, pick your project folder once, and every tab is linked
@@ -232,6 +232,9 @@ italics), and one **Connect folder** relinks them all. A browser restriction, no
 - **Edit in place** — `Ctrl+E`, then click a block to edit its Markdown where it sits.
   Click away (or `Ctrl+Enter`) to apply and save, `Esc` to cancel, `↑`/`↓` at the edges
   to walk into the next block.
+- **Undo / redo** — **↶ / ↷** in the toolbar (`Ctrl+Z` / `Ctrl+Y` outside a text box) step
+  back through your last 100 changes: each applied block edit, replace or fix is one step,
+  saved as it happens. Typing inside an open block has the browser's own `Ctrl+Z`.
 - **Section edit** — the pencil on a contents entry turns on edit mode and frames that
   section in red.
 - **Markdown pane** — while editing, **‹/› Markdown** on the editable block (or
@@ -281,6 +284,7 @@ italics), and one **Connect folder** relinks them all. A browser restriction, no
 | `Ctrl+R` | Re-read the file from disk |
 | `Ctrl+E` | Edit mode on / off |
 | `Ctrl+Enter` | Apply the block you're editing |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / redo the last change (up to 100; outside a text box) |
 | `Ctrl+S` | Save now (overwrites a file changed on disk, or asks where to save) |
 | `Ctrl+\` | Markdown pane on / off (while editing) |
 | `Ctrl+F` / `Ctrl+H` | Find / find and replace |
