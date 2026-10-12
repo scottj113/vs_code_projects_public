@@ -495,6 +495,8 @@ body.has-tabs #shell { top: 76px; }
 }
 #tabs .tab:hover .tab-x, #tabs .tab.active .tab-x, #tabs .tab-x:focus-visible { opacity: 1; }
 #tabs .tab-x:hover { color: var(--fg); background: var(--border); }
+#tabs .tab.dragging { background: var(--accent-soft); color: var(--fg); opacity: .85; }
+body.tab-dragging, body.tab-dragging #tabs .tab { cursor: grabbing; }
 
 /* ---------- edit in place ---------- */
 /* A ring drawn with box-shadow, not a border, so hovering never shifts layout. */
@@ -5240,6 +5242,60 @@ els.tabs.addEventListener("keydown", (e) => {
   e.preventDefault();
   activateTab(Number(t.dataset.i));
 });
+// Drag a tab sideways to reorder it. Pointer events, not HTML drag and drop:
+// the window's own drop handler treats any native drag as files arriving.
+// The tab moves in the DOM as it is dragged; the new order is read back from
+// the DOM on release and saved, so it survives a refresh.
+let tabDrag = null;
+els.tabs.addEventListener("pointerdown", (e) => {
+  const t = e.target.closest(".tab");
+  if (e.button !== 0 || !t || e.target.closest(".tab-x")) return;
+  tabDrag = { el: t, id: e.pointerId, x0: e.clientX, moving: false };
+});
+els.tabs.addEventListener("pointermove", (e) => {
+  const d = tabDrag;
+  if (!d || e.pointerId !== d.id) return;
+  if (!d.moving) {
+    if (Math.abs(e.clientX - d.x0) < 5) return;   // a click, so far
+    d.moving = true;
+    els.tabs.setPointerCapture(d.id);
+    d.el.classList.add("dragging");
+    document.body.classList.add("tab-dragging");
+  }
+  // Slot the tab before the first other tab whose middle is right of the pointer.
+  const others = Array.from(els.tabs.querySelectorAll(".tab")).filter((o) => o !== d.el);
+  const next = others.find((o) => { const r = o.getBoundingClientRect(); return e.clientX < r.left + r.width / 2; });
+  if (next ? d.el.nextElementSibling !== next : d.el !== els.tabs.lastElementChild) {
+    els.tabs.insertBefore(d.el, next || null);
+  }
+  // Nudge an overflowing row along when the pointer nears either end.
+  const box = els.tabs.getBoundingClientRect();
+  if (e.clientX < box.left + 24) els.tabs.scrollLeft -= 12;
+  else if (e.clientX > box.right - 24) els.tabs.scrollLeft += 12;
+});
+function endTabDrag(e) {
+  const d = tabDrag;
+  if (!d || e.pointerId !== d.id) return;
+  tabDrag = null;
+  if (!d.moving) return;
+  d.el.classList.remove("dragging");
+  document.body.classList.remove("tab-dragging");
+  // The click that follows a drag is not a request to switch tabs.
+  const eat = (c) => c.stopImmediatePropagation();
+  els.tabs.addEventListener("click", eat, { capture: true, once: true });
+  setTimeout(() => els.tabs.removeEventListener("click", eat, { capture: true }), 0);
+  // A render mid-drag (a watched file reloading) rebuilds the row; drop the move.
+  if (!d.el.isConnected) { renderTabs(); return; }
+  const order = Array.from(els.tabs.querySelectorAll(".tab")).map((o) => Number(o.dataset.i));
+  if (order.length !== state.tabs.length || order.every((v, n) => v === n)) { renderTabs(); return; }
+  const active = state.tabs[state.tabIndex];
+  state.tabs = order.map((i) => state.tabs[i]);
+  state.tabIndex = state.tabs.indexOf(active);
+  renderTabs();
+  persist();
+}
+els.tabs.addEventListener("pointerup", endTabDrag);
+els.tabs.addEventListener("pointercancel", endTabDrag);
 // Middle-click closes, as in browsers and editors. The mousedown is cancelled
 // too, or Windows starts its autoscroll cursor instead.
 els.tabs.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });
