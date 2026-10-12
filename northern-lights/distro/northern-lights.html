@@ -535,6 +535,22 @@ body.no-toc #toc { display: none; }
 }
 #toc-handle:hover, #toc-handle.dragging { background: var(--accent); opacity: .55; }
 body.no-toc #toc-handle, body.blank #toc-handle { display: none; }
+/* Hide / show the sidebar. Hide is pinned to the sidebar's top-right corner
+   (sticky, so it stays put as the list scrolls); show floats at the top-left
+   of the page only while the sidebar is closed. */
+.toc-toggle {
+  appearance: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: 1px solid transparent; border-radius: 5px;
+  background: none; color: var(--fg-faint); cursor: pointer;
+}
+.toc-toggle:hover { color: var(--accent); background: var(--accent-soft); border-color: var(--border-strong); }
+.toc-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#toc-close { position: sticky; top: -6px; float: right; margin: -6px 4px 0 0; z-index: 1; }
+#toc-open {
+  display: none; position: absolute; top: 10px; left: 10px; z-index: 5;
+  background: var(--bg-raised); border-color: var(--border);
+}
+body.no-toc:not(.blank) #toc-open { display: inline-flex; }
 #toc .toc-head {
   font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
   color: var(--fg-faint); font-weight: 700; margin: 0 0 8px;
@@ -1173,7 +1189,7 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
 @media print {
   :root { color-scheme: light; }
   body { overflow: visible; background: #fff; }
-  #bar, #tabs, #toc, #toc-handle, #drop, #toast, #empty, #sec-frame, #source-pane, #split-handle, #src-toggle,
+  #bar, #tabs, #toc, #toc-handle, #toc-open, #drop, #toast, #empty, #sec-frame, #source-pane, #split-handle, #src-toggle,
   #find-bar, #find-ticks { display: none !important; }
   #doc mark.find-hit, #raw-view mark.find-hit { background: none !important; outline: none !important; color: inherit !important; }
   #shell { position: static; display: block; }
@@ -1241,9 +1257,6 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
     <path d="M2 16 Q 8 10, 14 14 T 30 8" stroke="#ffff66" stroke-width="2" fill="none" filter="url(#glow-bar)" stroke-linecap="round"/>
     <path d="M2 11 Q 8 6, 14 9 T 30 3" stroke="#66ffff" stroke-width="2" fill="none" filter="url(#glow-bar)" stroke-linecap="round"/>
   </svg>
-  <!-- Sits leftmost, next to the sidebar it toggles, rather than across the
-       window from it. -->
-  <button type="button" class="btn icon" id="btn-toc" title="Toggle contents sidebar" aria-pressed="true">&#9776;</button>
   <div class="pop-wrap">
     <button type="button" class="name" id="doc-name" aria-haspopup="true" aria-expanded="false">No document</button>
     <div class="pop pop-left" id="pop-path" hidden>
@@ -1397,6 +1410,8 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
 
 <div id="shell">
   <nav id="toc">
+    <!-- Closes the sidebar from its own corner; #toc-open brings it back. -->
+    <button type="button" class="toc-toggle" id="toc-close" title="Hide sidebar" aria-label="Hide sidebar"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/><path d="M11 6 9 8l2 2"/></svg></button>
     <div id="docs" hidden>
       <p class="toc-head">Documents <span id="docs-count"></span></p>
       <div id="docs-list"></div>
@@ -1404,6 +1419,7 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
     <p class="toc-head">Contents</p><div id="toc-list"></div>
   </nav>
   <div id="toc-handle" title="Drag to resize · double-click to reset"></div>
+  <button type="button" class="toc-toggle" id="toc-open" title="Show sidebar" aria-label="Show sidebar"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/><path d="M9 6l2 2-2 2"/></svg></button>
   <div id="scroller">
     <div id="page">
       <div id="empty">
@@ -5122,12 +5138,17 @@ for (const [id, key] of [["#seg-mode", "mode"], ["#seg-family", "family"], ["#se
   });
 }
 
-$("#btn-toc").addEventListener("click", () => {
-  state.showToc = !state.showToc;
-  document.body.classList.toggle("no-toc", !state.showToc);
-  $("#btn-toc").setAttribute("aria-pressed", String(state.showToc));
-  localStorage.setItem("mdv:toc", state.showToc ? "1" : "0");
-});
+function setToc(on) {
+  state.showToc = on;
+  document.body.classList.toggle("no-toc", !on);
+  localStorage.setItem("mdv:toc", on ? "1" : "0");
+  // Hand focus across, or a keyboard user is left on a button that just vanished.
+  if (document.activeElement && document.activeElement.classList.contains("toc-toggle")) {
+    $(on ? "#toc-close" : "#toc-open").focus();
+  }
+}
+$("#toc-close").addEventListener("click", () => setToc(false));
+$("#toc-open").addEventListener("click", () => setToc(true));
 
 $("#chk-source").addEventListener("change", (e) => setSourceView(e.target.checked));
 $("#chk-raw").addEventListener("change", (e) => {
@@ -6045,7 +6066,6 @@ function initTableInteractivity() {
 applyTheme();
 applyDocStyle();
 document.body.classList.toggle("no-toc", !state.showToc);
-$("#btn-toc").setAttribute("aria-pressed", String(state.showToc));
 $("#chk-raw").checked = state.rawHtml;
 for (const btn of $("#seg-bumpers").querySelectorAll("button")) {
   if (Number(btn.dataset.v) === state.bumpers) {
