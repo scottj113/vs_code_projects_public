@@ -269,7 +269,10 @@ italics), and one **Connect folder** relinks them all. A browser restriction, no
   your chosen text size; printing always reverts to clean 11pt on white.
 - **Refresh / Watch** (Chromium browsers) — `↻` re-reads the file from disk in one
   click. **Watch** flips to a pulsing **Live** dot and auto-reloads whenever the file
-  changes (held off while you have unsaved edits open).
+  changes (held off while you have unsaved edits open). It's on by default and
+  remembered: once on, every document goes live as soon as its file is reachable.
+  A dimmed Watch means the document isn't linked to its file yet; click it to connect
+  your projects folder (once per session), the same link autosave uses.
 
 ## Keyboard
 

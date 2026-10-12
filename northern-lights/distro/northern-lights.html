@@ -825,6 +825,10 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
   border: 1.5px solid var(--fg-faint); background: transparent;
 }
 #btn-watch[aria-pressed="true"] { color: var(--accent); font-weight: 650; }
+/* Not linked to its file: still clickable (it fetches the file), just quiet. */
+#btn-watch.unlinked { opacity: .55; }
+#btn-watch.unlinked:hover { opacity: 1; }
+#btn-watch.unlinked .dot { border-style: dashed; }
 #btn-watch[aria-pressed="true"] .dot {
   border-color: var(--accent); background: var(--accent);
   animation: watch-pulse 1.9s ease-in-out infinite;
@@ -2955,7 +2959,7 @@ async function loadFiles(fileList, handlePromises) {
     render();
     persist();
     const extra = images.length ? " (+" + images.length + " image" + (images.length > 1 ? "s" : "") + ")" : "";
-    toast("Loaded " + doc.name + extra + (handle ? " — live reload ready" : ""));
+    toast("Loaded " + doc.name + extra + (state.watchTimer ? " — live" : handle ? " — live reload ready" : ""));
   } catch (err) {
     toast("Could not read " + doc.name + ": " + err.message, true);
   }
@@ -3184,9 +3188,11 @@ async function openViaPicker(startWatching) {
     state.handle = handle;
     state.dirAnchor = handle;
     await reloadFromHandle(true);
+    if (startWatching) setWatchPref(true);
     updateSync();
-    if (startWatching) toggleWatch();
-    else toast("Loaded " + state.name + " — Refresh and Watch are ready");
+    updateFolderButton();
+    toast((startWatching ? "Linked " : "Loaded ") + state.name +
+      (state.watchTimer ? " — live, reloads when it changes" : " — Refresh and Watch are ready"));
   } catch (err) {
     if (err && err.name === "AbortError") return;
     // Previously this fell through to the plain file input in silence, so a
@@ -3202,7 +3208,19 @@ async function reloadFromHandle(force) {
   if (!state.handle) return false;
   // A reload re-renders from disk: it would tear down an open in-place editor
   // and replace edits that haven't reached the file yet.
-  if (!force && (inlineEd.ta || state.dirty)) return false;
+  if (!force && (inlineEd.ta || state.dirty)) {
+    // Edits in progress here are never reloaded over -- but if another editor
+    // changed the file meanwhile, say so (once per change) rather than leave
+    // it to a refused save later.
+    try {
+      const f = await state.handle.getFile();
+      if (f.lastModified !== state.lastModified && f.lastModified !== state.warnedModified) {
+        state.warnedModified = f.lastModified;
+        toast(state.name + " was changed in another editor. Ctrl+S keeps your version · ↻ loads that one", true);
+      }
+    } catch (_) { /* file gone or unreadable: the save will say so */ }
+    return false;
+  }
   try {
     const file = await state.handle.getFile();
     if (!force && file.lastModified === state.lastModified) return false;
@@ -3236,36 +3254,89 @@ function updateSync() {
   if (!relevant) return;
 
   const has = !!state.handle;
+  if (has && state.watchPref) startWatching();
+  else if (state.watchTimer) { clearInterval(state.watchTimer); state.watchTimer = null; }
   const watching = !!state.watchTimer;
   const refresh = $("#btn-refresh");
   const watch = $("#btn-watch");
 
   refresh.hidden = !has;
-  watch.hidden = !has;
+  // Always shown, so the feature can't vanish on you. Unlinked, it is dimmed
+  // and a click goes and gets the file (see toggleWatch).
+  watch.hidden = false;
+  watch.classList.toggle("unlinked", !has);
 
   watch.setAttribute("aria-pressed", String(watching));
   $("#watch-label").textContent = watching ? "Live" : "Watch";
   refresh.title = "Re-read " + state.name + " from disk now (Ctrl+R)";
-  watch.title = watching
+  watch.title = !has
+    ? "Can't watch yet: this document isn't linked to its file.\n" +
+      (state.folder ? "Click to look for it in “" + state.folder.name + "” again."
+        : "Click to connect your projects folder — once per browser session — and every tab goes live.")
+    : watching
     ? "Live: auto-reloading when " + state.name + " changes on disk. Click to stop."
     : "Watch " + state.name + " and reload automatically when it changes";
+}
+
+/* Watch is a preference, not a per-document switch. Once on, it follows
+   whatever is on screen -- tab switches, new files, the next session --
+   whenever that document's file can be reached. Starting and stopping the
+   poll is left to updateSync, which every load and render already calls. */
+state.watchPref = localStorage.getItem("mdv:watch") !== "0";
+
+function setWatchPref(on) {
+  state.watchPref = on;
+  try { localStorage.setItem("mdv:watch", on ? "1" : "0"); } catch (_) { /* quota */ }
+}
+
+function startWatching() {
+  if (state.watchTimer) return;
+  // The poll reads state.handle each time, so it follows tab switches as is.
+  state.watchTimer = setInterval(() => {
+    reloadFromHandle(false).then((changed) => { if (changed) toast("Reloaded — file changed on disk"); });
+  }, 1000);
 }
 
 function stopWatching() {
   if (state.watchTimer) clearInterval(state.watchTimer);
   state.watchTimer = null;
-  updateSync();
+  updateSync();   // restarts it for the next document if Watch is on
 }
 
-function toggleWatch() {
-  if (state.watchTimer) { stopWatching(); toast("Watching off"); return; }
-  if (!state.handle) { toast("Open the file with the Open button first", true); return; }
-  state.watchTimer = setInterval(() => {
-    reloadFromHandle(false).then((changed) => { if (changed) toast("Reloaded — file changed on disk"); })
-      .catch(() => { stopWatching(); toast("Lost access to the file; watching stopped", true); });
-  }, 1000);
+async function toggleWatch() {
+  if (!state.handle) { await linkCurrent(); return; }
+  setWatchPref(!state.watchTimer);
   updateSync();
-  toast("Watching " + state.name + " for changes");
+  toast(state.watchTimer ? "Live — reloads whenever " + state.name + " changes on disk" : "Watching off");
+}
+
+/**
+ * A dimmed Watch, clicked: link the document on screen to its file the same
+ * way saving does -- through the connected folder -- rather than asking for
+ * the file. No folder yet: the same one-time pick as Connect folder.
+ */
+async function linkCurrent() {
+  setWatchPref(true);   // the click says "I want this live"
+  if (!state.folder) {
+    if (!canPickDir) { openViaPicker(true); return; }
+    $("#folder-pick").click();   // still inside this click, so the picker may open
+    return;
+  }
+  const t = state.tabs[state.tabIndex];
+  if (!t) return;
+  folderIndex = null;   // files may have been added since the folder was scanned
+  let ok = false;
+  try { ok = await linkToFolder(t, true); } catch (_) { /* unreadable; reported below */ }
+  if (t !== state.tabs[state.tabIndex]) return;
+  if (ok && state.handle) {
+    render(); updateSync(); persist();
+    toast("Linked " + state.name + " — live");
+    return;
+  }
+  updateFolderButton();
+  toast(t.folderMiss
+    ? "“" + state.folder.name + "” has " + t.folderMiss + " files named " + state.name + " and none match this one exactly — Ctrl+O to open the right one"
+    : state.name + " isn't in “" + state.folder.name + "” — connect the folder it's in (📁)", true);
 }
 
 /* --------------------------------------------------------- section edit --
@@ -4030,7 +4101,12 @@ function updateFolderButton() {
     : "Connect your projects folder so edits save straight to your files";
 
   // The panel: one sentence, then the button.
-  const here = state.folder && unlinked ? " This file isn't in it — pick the folder it's in." : "";
+  const cur = state.tabs[state.tabIndex];
+  const many = cur && cur.folderMiss;
+  const here = !state.folder || !unlinked ? ""
+    : many ? " It has " + many + " files named “" + state.name + "”, so it can't tell which one this is" +
+      " — open the right one with Ctrl+O."
+    : " This file isn't in it — pick the folder it's in.";
   const line = $("#folder-status");
   if (state.folder) line.textContent = "Connected to “" + state.folder.name + "” — edits save straight to your files." + here;
   else line.innerHTML = "Pick your project folder so <strong>“autosave”</strong> works. " +
@@ -4057,7 +4133,8 @@ async function locateInFolder(doc) {
     } catch (_) { return null; }
   }
   if (!doc.name) return null;
-  let found = (await folderFiles()).filter((e) => e.name.toLowerCase() === doc.name.toLowerCase());
+  const named = (await folderFiles()).filter((e) => e.name.toLowerCase() === doc.name.toLowerCase());
+  let found = named;
   if (doc.path) {
     // A real path: the file must sit where it says, relative to the folder
     // (whose own name has to appear in that path). No fallback guessing.
@@ -4070,14 +4147,34 @@ async function locateInFolder(doc) {
     const narrowed = found.filter((e) => e.dir.toLowerCase().endsWith(doc.dir.toLowerCase()));
     if (narrowed.length) found = narrowed;
   }
+  // Name and place didn't settle it (several README.md, or a path from another
+  // machine): the file whose contents match the tab's text exactly is this one.
+  if (found.length !== 1 && doc.text) {
+    const same = await sameText(found.length > 1 ? found : named, doc.text);
+    if (same) return { handle: same.handle, dir: same.dir };
+  }
+  if (found.length > 1) return { many: found.length };   // ambiguous: say so, don't guess
   return found.length === 1 ? { handle: found[0].handle, dir: found[0].dir } : null;
+}
+
+/** The one candidate whose file text equals `text` (line endings ignored), or null. */
+async function sameText(cands, text) {
+  const norm = (s) => s.replace(/\r\n?/g, "\n");
+  const want = norm(text);
+  const hits = [];
+  for (const e of cands.slice(0, 25)) {   // a cap, so a huge tree can't stall linking
+    try { if (norm(await (await e.handle.getFile()).text()) === want) hits.push(e); } catch (_) { /* unreadable */ }
+  }
+  return hits.length === 1 ? hits[0] : null;
 }
 
 /** Give a tab (or the document on screen, active = true) its live file back. */
 async function linkToFolder(t, active) {
-  const doc = active ? { handle: state.handle, name: state.name, path: state.path, dir: state.dir } : t;
+  const doc = active ? { handle: state.handle, name: state.name, path: state.path, dir: state.dir, text: state.text } : t;
   const hit = await locateInFolder(doc);
-  if (!hit) { t.folderDir = null; return false; }
+  // Remembered so the folder panel can say why a file didn't link.
+  t.folderMiss = hit ? hit.many || 0 : 0;
+  if (!hit || !hit.handle) { t.folderDir = null; return false; }
   t.folderDir = hit.dir;
   if (doc.handle) return true;
   const file = await hit.handle.getFile();
@@ -4119,7 +4216,11 @@ async function connectFolder(handle) {
   renderTabs();
   persist();
   const n = state.tabs.length;
-  toast("Connected “" + handle.name + "”" + (n ? " — relinked " + linked + " of " + n + " open document" + (n === 1 ? "" : "s") : ""));
+  updateFolderButton();
+  // Say so when the one on screen didn't link -- otherwise Watch just stays dim.
+  const miss = state.text && !state.handle;
+  toast("Connected “" + handle.name + "”" + (n ? " — relinked " + linked + " of " + n + " open document" + (n === 1 ? "" : "s") : "") +
+    (miss ? ". This one didn't link — click the folder button to see why" : ""), miss);
 }
 
 /**
