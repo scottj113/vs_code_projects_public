@@ -3206,24 +3206,12 @@ async function openViaPicker(startWatching) {
 
 async function reloadFromHandle(force) {
   if (!state.handle) return false;
-  // A reload re-renders from disk: it would tear down an open in-place editor
-  // and replace edits that haven't reached the file yet.
-  if (!force && (inlineEd.ta || state.dirty)) {
-    // Edits in progress here are never reloaded over -- but if another editor
-    // changed the file meanwhile, say so (once per change) rather than leave
-    // it to a refused save later.
-    try {
-      const f = await state.handle.getFile();
-      if (f.lastModified !== state.lastModified && f.lastModified !== state.warnedModified) {
-        state.warnedModified = f.lastModified;
-        toast(state.name + " was changed in another editor. Ctrl+S keeps your version · ↻ loads that one", true);
-      }
-    } catch (_) { /* file gone or unreadable: the save will say so */ }
-    return false;
-  }
   try {
     const file = await state.handle.getFile();
     if (!force && file.lastModified === state.lastModified) return false;
+    // One person, one file: the latest change wins, no questions. A block
+    // open for editing here is dropped and the file's version shows instead.
+    commitInline(true);
     state.text = await file.text();
     state.dirty = false;
     state.name = file.name;
@@ -3534,8 +3522,6 @@ async function writeFile(text, handle) {
   // and a tab switch meanwhile must not redirect the write to another file.
   handle = handle || state.handle;
   if (!handle) return { ok: false, why: "no-handle" };
-  const known = handle === state.handle ? state.lastModified
-    : (state.tabs.find((t) => t.handle === handle) || {}).lastModified;
   try {
     if (typeof handle.queryPermission === "function") {
       let p = await handle.queryPermission({ mode: "readwrite" });
@@ -3547,9 +3533,7 @@ async function writeFile(text, handle) {
       }
       if (p !== "granted") return { ok: false, why: "denied" };
     }
-    const before = await handle.getFile();
-    if (before.lastModified !== known) return { ok: false, why: "stale", diskModified: before.lastModified };
-
+    // No "changed on disk since" check: a save always writes, last one wins.
     const w = await handle.createWritable();
     await w.write(text);
     await w.close();
@@ -3685,8 +3669,8 @@ function commitInline(cancel) {
   closeInline();
   if (cancel || value === original) return null;
 
-  // Reloads are held off while an edit is open, so this is a backstop: never
-  // splice into lines that are no longer the ones that were opened.
+  // A reload closes any open edit before it replaces the text, so this is a
+  // backstop: never splice into lines that are no longer the ones opened.
   if (splitLines(state.text).slice(start, end).join("\n") !== original) {
     toast("The document changed while you were editing — your edit was not applied", true);
     return null;
@@ -5000,10 +4984,11 @@ function setDirty(on) {
 /**
  * Write the document to its file. Automatic after each in-place commit
  * (explicit = false): quiet on success, and never opens a dialog on its own.
- * Ctrl+S (explicit = true) goes further -- it overwrites a file that changed
- * on disk, and falls back to Save As when there is no file to write to.
+ * Ctrl+S (explicit = true) goes further -- it falls back to Save As when
+ * there is no file to write to. Either way the write wins over whatever is
+ * on disk: one person, one file, no version checks.
  *
- * Resolves to what happened: "saved", "clean", "unlinked", "stale", "failed"
+ * Resolves to what happened: "saved", "clean", "unlinked", "failed"
  * or "cancelled".
  */
 async function saveDocument(explicit) {
@@ -5017,18 +5002,8 @@ async function saveDocument(explicit) {
   setDirty(state.dirty);   // paint the marker now; the write may take a moment
 
   if (handle) {
-    let res = await writeFile(text, handle);
-    if (!res.ok && res.why === "stale" && explicit) {
-      // Ctrl+S on a file that moved on disk: the deliberate keypress is the
-      // confirmation.
-      adoptModified(handle, res.diskModified);
-      res = await writeFile(text, handle);
-    }
+    const res = await writeFile(text, handle);
     if (res.ok) { done(); if (explicit) toast("Saved " + name); return "saved"; }
-    if (res.why === "stale") {
-      toast(name + " changed on disk since it was opened — not saved. Ctrl+S to overwrite it.", true);
-      return "stale";
-    }
     if (!explicit) {
       toast("Couldn't save to " + name + " — press Ctrl+S to choose where", true);
       return "failed";

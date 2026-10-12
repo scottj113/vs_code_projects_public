@@ -64,8 +64,8 @@ to its file again — saving straight to disk, Watch working, relative images lo
 The first time an edit is saved, the browser asks once whether this page may edit the
 file. Allow it and every save after that goes straight to disk — no dialog. With no file
 to write to (pasted text, or a file from VS Code before you connect its folder),
-`Ctrl+S` asks where to save. A file that changed on disk underneath you is reported,
-never silently overwritten.
+`Ctrl+S` asks where to save. Saves always write: the latest change wins, whether it
+was made here or in another editor.
 
 ## Markdown in, HTML out
 
@@ -269,7 +269,7 @@ italics), and one **Connect folder** relinks them all. A browser restriction, no
   your chosen text size; printing always reverts to clean 11pt on white.
 - **Refresh / Watch** (Chromium browsers) — `↻` re-reads the file from disk in one
   click. **Watch** flips to a pulsing **Live** dot and auto-reloads whenever the file
-  changes (held off while you have unsaved edits open). It's on by default and
+  changes, even mid-edit here: the latest change wins. It's on by default and
   remembered: once on, every document goes live as soon as its file is reachable.
   A dimmed Watch means the document isn't linked to its file yet; click it to connect
   your projects folder (once per session), the same link autosave uses.
@@ -289,7 +289,7 @@ italics), and one **Connect folder** relinks them all. A browser restriction, no
 | `Ctrl+E` | Edit mode on / off |
 | `Ctrl+Enter` | Apply the block you're editing |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / redo the last change (up to 100; outside a text box) |
-| `Ctrl+S` | Save now (overwrites a file changed on disk, or asks where to save) |
+| `Ctrl+S` | Save now (or asks where to save, when not linked to a file) |
 | `Ctrl+\` | Markdown pane on / off (while editing) |
 | `Ctrl+F` / `Ctrl+H` | Find / find and replace |
 | `Enter` / `Shift+Enter`, `F3` | Next / previous match |
