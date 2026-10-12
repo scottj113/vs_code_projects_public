@@ -663,7 +663,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   cursor: pointer;
 }
 #src-toggle[hidden] { display: none; }
-/* Source view (⋮ menu): the whole file as Markdown, instead of the rendered page. */
+/* Source view (toolbar </> Markdown): the whole file as Markdown, instead of the rendered page. */
 #raw-view { display: none; }
 body.source-view #doc, body.source-view #sec-frame, body.source-view #src-toggle { display: none !important; }
 body.source-view:not(.blank) #raw-view {
@@ -1271,6 +1271,8 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
   <span class="meta" id="doc-meta"></span>
   <span class="spacer"></span>
 
+  <button type="button" class="btn" id="btn-source" aria-pressed="false" hidden
+          title="View the Markdown source (read-only) · click again for the rendered page">&lt;/&gt; Markdown</button>
   <button type="button" class="btn" id="btn-edit" aria-pressed="false" hidden
           title="Edit in place: click any block to edit its Markdown (Ctrl+E)">&#9998; Edit</button>
 
@@ -1364,7 +1366,6 @@ body.has-tabs #toast { top: 92px; }   /* clear of the tab row, same gap as witho
     <button type="button" class="btn icon" id="btn-more" title="More actions"
             aria-haspopup="true" aria-expanded="false">&#8942;</button>
     <div class="pop pop-menu" id="pop-more" hidden>
-      <label class="pop-check"><input type="checkbox" id="chk-source"> View Markdown source <span class="hint">read-only</span></label>
       <label class="pop-check"><input type="checkbox" id="chk-raw"> Allow raw HTML <span class="hint">sanitized</span></label>
       <p class="pop-head">Bumper lanes</p>
       <div class="seg" id="seg-bumpers" role="group">
@@ -2539,6 +2540,7 @@ function render() {
     els.name.textContent = "No document";
     els.name.classList.remove("dirty");
     $("#btn-edit").hidden = true;
+    $("#btn-source").hidden = true;
     updateFolderButton();
     refreshFixer();
     paintUndo();
@@ -2602,7 +2604,9 @@ function render() {
   const words = els.doc.textContent.trim().split(/\s+/).filter(Boolean).length;
   els.name.textContent = state.name || "Pasted markdown";
   els.name.classList.toggle("dirty", state.dirty);
-  $("#btn-edit").hidden = state.sourceView;
+  $("#btn-edit").hidden = false;
+  $("#btn-edit").disabled = state.sourceView;
+  $("#btn-source").hidden = false;
   document.title = state.name || "Pasted markdown";
   updatePathPanel();
   els.meta.textContent = words.toLocaleString() + " words · ~" + Math.max(1, Math.round(words / 220)) + " min";
@@ -3907,7 +3911,7 @@ $("#toc-handle").addEventListener("dblclick", () => {
 });
 
 /* ----------------------------------------------------------- source view --
-   The ⋮ menu's "View Markdown source": the whole file as its Markdown, in
+   The toolbar's </> Markdown toggle: the whole file as its Markdown, in
    place of the rendered page. Read-only, and deliberately separate from
    editing -- turning it on applies and saves anything mid-edit, then closes
    edit mode, section edit and the split pane, and none of them can be opened
@@ -3921,7 +3925,7 @@ state.sourceView = false;
 
 function setSourceView(on) {
   on = !!on;
-  $("#chk-source").checked = on;
+  $("#btn-source").setAttribute("aria-pressed", String(on));
   if (on === state.sourceView) return;
   // Keep your place: the line at the top of the screen in one view is where
   // the other opens.
@@ -3935,7 +3939,7 @@ function setSourceView(on) {
   }
   state.sourceView = on;
   document.body.classList.toggle("source-view", on);
-  $("#btn-edit").hidden = on || !state.text;
+  $("#btn-edit").disabled = on;   // greyed, not hidden: it comes back when source view ends
   paintRawView();
   placeSrcToggle();
   if (keep !== null) on ? scrollRawTo(keep) : scrollDocTo(keep);
@@ -5150,7 +5154,7 @@ function setToc(on) {
 $("#toc-close").addEventListener("click", () => setToc(false));
 $("#toc-open").addEventListener("click", () => setToc(true));
 
-$("#chk-source").addEventListener("change", (e) => setSourceView(e.target.checked));
+$("#btn-source").addEventListener("click", () => setSourceView(!state.sourceView));
 $("#chk-raw").addEventListener("change", (e) => {
   state.rawHtml = e.target.checked;
   localStorage.setItem("mdv:rawHtml", state.rawHtml ? "1" : "0");

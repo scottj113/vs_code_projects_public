@@ -240,7 +240,7 @@ italics), and one **Connect folder** relinks them all. A browser restriction, no
   section in red.
 - **Markdown pane** — while editing, **‹/› Markdown** on the editable block (or
   `Ctrl+\`) shows its source, read-only, with the file's line numbers.
-- **View Markdown source** — **⋮** menu: the whole file as Markdown instead of the
+- **View Markdown source** — **</> Markdown** in the toolbar: the whole file as Markdown instead of the
   rendered page. Read-only; editing is off while it shows.
 - **Find and replace** — `Ctrl+F` / `Ctrl+H`, with match case, whole word and regex.
 - **Connect folder** — one pick relinks your tabs, enables saving and Watch, and loads
