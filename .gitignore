@@ -7,3 +7,8 @@ desktop.ini
 $RECYCLE.BIN/
 
 # Per-project ignores live in each project's own .gitignore.
+
+# Northern Lights lives in its own repo (Documents
+orthern-lights); this
+# folder is a junction to it, kept out of this repo.
+northern-lights
